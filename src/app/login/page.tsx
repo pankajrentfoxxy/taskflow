@@ -39,14 +39,14 @@ export default function LoginPage() {
         <form onSubmit={submit} className="card p-6 space-y-4">
           <div>
             <span className="label">Email</span>
-            <input className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <input suppressHydrationWarning className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </div>
           <div>
             <span className="label">Password</span>
-            <input className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            <input suppressHydrationWarning className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
           </div>
           {err && <div className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{err}</div>}
-          <button className="btn-primary w-full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+          <button suppressHydrationWarning className="btn-primary w-full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
         </form>
         <div className="card mt-4 p-4 text-xs text-gray-500 leading-relaxed">
           <div className="font-semibold text-gray-700 mb-1">Demo logins (password: password123)</div>
