@@ -12,17 +12,31 @@ function AdminInner() {
   const [teamOpen, setTeamOpen] = useState(false);
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'MEMBER', teamId: '' });
   const [teamForm, setTeamForm] = useState({ name: '', managerId: '' });
+  const [types, setTypes] = useState<any[]>([]);
+  const [typeForm, setTypeForm] = useState({ teamId: '', name: '', alias: '' });
   const [err, setErr] = useState('');
 
   const load = () => {
-    api('/api/users').then((d) => setUsers(d.users));
-    api('/api/teams').then((d) => setTeams(d.teams));
+    api('/api/users').then((d) => setUsers(d.users)).catch(() => {});
+    api('/api/teams').then((d) => setTeams(d.teams)).catch(() => {});
+    api('/api/task-types?manage=1').then((d) => setTypes(d.types)).catch(() => setTypes([]));
   };
   useEffect(() => { load(); }, []);
 
-  if (me && me.role !== 'ADMIN') {
-    return <div className="card p-8 text-center text-gray-400">Admin access only.</div>;
+  const isAdmin = me?.role === 'ADMIN';
+  const isHead = me?.role === 'MANAGER';
+  if (me && !isAdmin && !isHead && me.role !== 'CEO') {
+    return <div className="card p-8 text-center text-gray-400">Admin or Team Head access only.</div>;
   }
+
+  const createType = async () => {
+    setErr('');
+    try {
+      const teamId = isAdmin || me?.role === 'CEO' ? Number(typeForm.teamId) : me?.team_id;
+      await api('/api/task-types', { method: 'POST', body: JSON.stringify({ teamId, name: typeForm.name, alias: typeForm.alias }) });
+      setTypeForm({ teamId: '', name: '', alias: '' }); load();
+    } catch (e: any) { setErr(e.message); }
+  };
 
   const createUser = async () => {
     setErr('');
@@ -54,6 +68,55 @@ function AdminInner() {
       <h1 className="text-xl font-bold mb-4">Admin</h1>
       {err && <div className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-3">{err}</div>}
 
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="font-bold text-sm">Task Types — category & alias per team</h2>
+      </div>
+      <div className="card overflow-x-auto mb-3">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs text-gray-400 uppercase border-b border-gray-100">
+              <th className="px-4 py-2.5">Team</th><th className="px-2 py-2.5">Task type</th><th className="px-2 py-2.5">Alias (unit)</th><th className="px-2 py-2.5">Used</th><th className="px-2 py-2.5">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {types.map((tt) => (
+              <tr key={tt.id} className="border-b border-gray-50 last:border-0">
+                <td className="px-4 py-2 text-xs text-gray-500">{tt.team_name}</td>
+                <td className="px-2 py-2 font-medium">{tt.name}</td>
+                <td className="px-2 py-2">{tt.alias}</td>
+                <td className="px-2 py-2 text-xs text-gray-400">{tt.used_count} task{tt.used_count === 1 ? '' : 's'}</td>
+                <td className="px-2 py-2">
+                  <button className={`pill ${tt.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'}`}
+                    onClick={() => api('/api/task-types', { method: 'PATCH', body: JSON.stringify({ id: tt.id, isActive: !tt.is_active }) }).then(load).catch((e) => setErr(e.message))}>
+                    {tt.is_active ? 'Active' : 'Inactive'}
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {types.length === 0 && <tr><td className="px-4 py-4 text-gray-400" colSpan={5}>No task types yet.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <div className="card p-4 mb-6">
+        <div className="grid sm:grid-cols-4 gap-2">
+          {(isAdmin || me?.role === 'CEO') ? (
+            <select className="input" value={typeForm.teamId} onChange={(e) => setTypeForm({ ...typeForm, teamId: e.target.value })}>
+              <option value="">Team…</option>
+              {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          ) : (
+            <div className="input bg-gray-50 text-gray-500">{me?.team || 'My team'}</div>
+          )}
+          <input className="input" placeholder="Type name (e.g. Job Role)" value={typeForm.name} onChange={(e) => setTypeForm({ ...typeForm, name: e.target.value })} />
+          <input className="input" placeholder="Alias / unit (e.g. Resume)" value={typeForm.alias} onChange={(e) => setTypeForm({ ...typeForm, alias: e.target.value })} />
+          <button className="btn-primary" onClick={createType}
+            disabled={!typeForm.name.trim() || !typeForm.alias.trim() || ((isAdmin || me?.role === 'CEO') && !typeForm.teamId)}>
+            + Add type
+          </button>
+        </div>
+      </div>
+
+      {isAdmin && (<>
       <div className="flex items-center justify-between mb-2">
         <h2 className="font-bold text-sm">Users ({users.length})</h2>
         <button className="btn-primary !py-1.5 text-xs" onClick={() => setUserOpen(true)}>+ Add user</button>
@@ -114,6 +177,8 @@ function AdminInner() {
           </div>
         ))}
       </div>
+
+      </>)}
 
       <div className="card p-4 text-xs text-gray-500 leading-relaxed">
         <div className="font-bold text-gray-700 mb-1">System settings</div>

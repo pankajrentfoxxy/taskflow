@@ -61,8 +61,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               </Link>
               {me && (
                 <div className="flex items-center gap-2">
-                  {me.role === 'ADMIN' && (
-                    <Link href="/admin" className="text-xs font-semibold text-gray-500 hover:text-brand-600 hidden sm:block">Admin</Link>
+                  {['ADMIN', 'CEO', 'MANAGER'].includes(me.role) && (
+                    <Link href="/admin" className="text-xs font-semibold text-gray-500 hover:text-brand-600">{me.role === 'ADMIN' ? 'Admin' : 'Manage'}</Link>
                   )}
                   <div className="text-right hidden sm:block">
                     <div className="text-sm font-semibold leading-tight">{me.name}</div>

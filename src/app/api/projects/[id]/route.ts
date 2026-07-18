@@ -22,10 +22,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     WHERE n.project_id = ? ORDER BY n.pinned DESC, n.id DESC
   `).all(pid);
   const tasks = db.prepare(`
-    SELECT t.*, ua.name AS assignee_name, uc.name AS creator_name,
+    SELECT t.*, ua.name AS assignee_name, uc.name AS creator_name, tt.name AS type_name, tt.alias AS type_alias,
       (SELECT COUNT(*) FROM tasks s WHERE s.parent_id = t.id) AS subtask_count,
       (SELECT COUNT(*) FROM tasks s WHERE s.parent_id = t.id AND s.status = 'DONE') AS subtask_done
     FROM tasks t
+    LEFT JOIN task_types tt ON tt.id = t.task_type_id
     LEFT JOIN users ua ON ua.id = t.assignee_id
     LEFT JOIN users uc ON uc.id = t.creator_id
     WHERE t.project_id = ? AND t.parent_id IS NULL

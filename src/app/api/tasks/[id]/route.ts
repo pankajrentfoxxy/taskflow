@@ -6,8 +6,10 @@ import { notify, managerOf, ceoIds, logActivity } from '@/lib/notify';
 function loadTask(id: number) {
   const db = getDb();
   return db.prepare(`
-    SELECT t.*, ua.name AS assignee_name, uc.name AS creator_name, tm.name AS team_name, p.name AS project_name
+    SELECT t.*, ua.name AS assignee_name, uc.name AS creator_name, tm.name AS team_name, p.name AS project_name,
+      tt.name AS type_name, tt.alias AS type_alias
     FROM tasks t
+    LEFT JOIN task_types tt ON tt.id = t.task_type_id
     LEFT JOIN users ua ON ua.id = t.assignee_id
     LEFT JOIN users uc ON uc.id = t.creator_id
     LEFT JOIN teams tm ON tm.id = t.assigned_team_id
@@ -72,6 +74,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     mustExplain: expPending && isAssignee,
     canReview: task.status === 'ESCALATED' && escalation?.explanation && escalation?.review_status === 'PENDING' && canReviewEscalation(user, task),
     canAddSubtask: !['DONE', 'CANCELLED'].includes(task.status) && !task.parent_id,
+    canProgress: task.target_count != null && !['DONE', 'CANCELLED'].includes(task.status) && (isAssignee || isBoss || isMgr) && !expPending,
     openSubtasks: openSubs,
   };
 
@@ -127,6 +130,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     case 'done': {
       if (['DONE', 'CANCELLED'].includes(task.status)) return badRequest('Task already closed');
       if (!isAssignee && !isCreator && !isBoss && !isManagerOf(user, task.assignee_id)) return forbidden();
+      if (task.target_count != null && task.delivered_count < task.target_count) {
+        const mayOverrideT = (isCreator || isBoss || isManagerOf(user, task.assignee_id)) && body.overrideReason;
+        if (!mayOverrideT) {
+          return Response.json(
+            { error: `Target not met: ${task.delivered_count}/${task.target_count} ${task.type_alias || 'units'} delivered. Update progress first (creator/Head/Admin may override with a reason).`, code: 'TARGET_NOT_MET' },
+            { status: 409 }
+          );
+        }
+        logActivity(task.id, user.id, 'DONE_OVERRIDE', { reason: body.overrideReason, delivered: task.delivered_count, target: task.target_count });
+      }
       const openSubs = (db.prepare("SELECT COUNT(*) AS c FROM tasks WHERE parent_id = ? AND status NOT IN ('DONE','CANCELLED')").get(task.id) as any).c;
       if (openSubs > 0) {
         const mayOverride = (isCreator || isBoss) && body.overrideReason;
@@ -195,6 +208,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (!isAssignee && !isBoss) return forbidden();
       db.prepare('UPDATE tasks SET blocked_reason = NULL, updated_at = ? WHERE id = ?').run(t, task.id);
       logActivity(task.id, user.id, 'UNBLOCKED', {});
+      break;
+    }
+    case 'progress': {
+      if (task.target_count == null) return badRequest('This task has no delivery target');
+      if (['DONE', 'CANCELLED'].includes(task.status)) return badRequest('Task is closed');
+      if (!isAssignee && !isBoss && !isManagerOf(user, task.assignee_id)) return forbidden();
+      let next: number;
+      if (body.increment != null) next = task.delivered_count + Math.floor(Number(body.increment));
+      else if (body.delivered != null) next = Math.floor(Number(body.delivered));
+      else return badRequest('Send delivered or increment');
+      if (Number.isNaN(next) || next < 0) return badRequest('Invalid value');
+      db.prepare('UPDATE tasks SET delivered_count = ?, updated_at = ? WHERE id = ?').run(next, t, task.id);
+      logActivity(task.id, user.id, 'PROGRESS', { from: task.delivered_count, to: next });
+      if (task.delivered_count < task.target_count && next >= task.target_count) {
+        notify(
+          [task.creator_id, managerOf(task.assignee_id)],
+          'PROGRESS',
+          `Target met: ${next}/${task.target_count} ${task.type_alias || 'units'} on "${task.title}"`,
+          'Ready to close.',
+          task.id,
+          user.id
+        );
+      }
       break;
     }
     default:

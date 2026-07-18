@@ -133,6 +133,15 @@ CREATE TABLE IF NOT EXISTS boards (
   updated_at INTEGER NOT NULL,
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS task_types (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  team_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  alias TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
   value TEXT
@@ -152,6 +161,13 @@ export function getDb(): DB {
   db.exec('PRAGMA journal_mode = WAL');
   db.exec('PRAGMA foreign_keys = ON');
   db.exec(SCHEMA);
+  // Idempotent column migrations for databases created before v1.1
+  const MIGRATIONS = [
+    'ALTER TABLE tasks ADD COLUMN task_type_id INTEGER',
+    'ALTER TABLE tasks ADD COLUMN target_count INTEGER',
+    'ALTER TABLE tasks ADD COLUMN delivered_count INTEGER NOT NULL DEFAULT 0',
+  ];
+  for (const m of MIGRATIONS) { try { db.exec(m); } catch {} }
   const userCount = (db.prepare('SELECT COUNT(*) AS c FROM users').get() as any).c;
   if (userCount === 0) seed(db);
   globalThis.__tfdb = db;

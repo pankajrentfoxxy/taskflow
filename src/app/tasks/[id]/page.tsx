@@ -28,6 +28,7 @@ function TaskDetailInner({ id }: { id: string }) {
   const [explanation, setExplanation] = useState('');
   const [propEta, setPropEta] = useState('');
   const [comment, setComment] = useState('');
+  const [deliveredVal, setDeliveredVal] = useState('');
   const [showActivity, setShowActivity] = useState(false);
   const [showEtaHistory, setShowEtaHistory] = useState(false);
 
@@ -47,7 +48,7 @@ function TaskDetailInner({ id }: { id: string }) {
       await api(`/api/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
       load();
     } catch (e: any) {
-      if (e.code === 'OPEN_SUBTASKS') {
+      if (e.code === 'OPEN_SUBTASKS' || e.code === 'TARGET_NOT_MET') {
         const reason = prompt(`${e.message}\n\nCreator/Admin override — enter a reason:`);
         if (reason) act({ ...body, overrideReason: reason });
       } else setErr(e.message);
@@ -139,6 +140,7 @@ function TaskDetailInner({ id }: { id: string }) {
               </div>
             );
           })}
+          {task.type_name && <Row label="Task type">{task.type_name} <span className="text-gray-400">(counted in {task.type_alias})</span></Row>}
           {task.acknowledged_at && <Row label="Acknowledged">{fmtDateTime(task.acknowledged_at)}</Row>}
           {task.done_at && <Row label="Done at">{fmtDateTime(task.done_at)}</Row>}
           {task.project_name && (
@@ -155,6 +157,35 @@ function TaskDetailInner({ id }: { id: string }) {
           </div>
         )}
       </div>
+
+      {/* Delivery target */}
+      {task.target_count != null && (
+        <div className={`card p-4 ${task.delivered_count >= task.target_count ? 'border-emerald-300 bg-emerald-50' : ''}`}>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-bold text-sm">
+              Delivery: {task.delivered_count}/{task.target_count} {task.type_alias}
+              {task.delivered_count >= task.target_count && <span className="ml-2 text-emerald-600">🎯 Target met</span>}
+            </h3>
+          </div>
+          <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-3">
+            <div className={`h-full rounded-full ${task.delivered_count >= task.target_count ? 'bg-emerald-500' : 'bg-brand-500'}`}
+              style={{ width: `${Math.min(100, (100 * task.delivered_count) / task.target_count)}%` }} />
+          </div>
+          {perm.canProgress && (
+            <div className="flex gap-2 items-center flex-wrap">
+              <button className="btn-primary !py-1.5 text-sm" onClick={() => act({ action: 'progress', increment: 1 })}>
+                +1 {task.type_alias}
+              </button>
+              <input type="number" min="0" className="input !w-24 !py-1.5" placeholder={String(task.delivered_count)}
+                value={deliveredVal} onChange={(e) => setDeliveredVal(e.target.value)} />
+              <button className="btn-secondary !py-1.5 text-sm" disabled={deliveredVal === ''}
+                onClick={() => { act({ action: 'progress', delivered: Number(deliveredVal) }); setDeliveredVal(''); }}>
+                Set exact
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Escalation banners */}
       {perm.mustExplain && (

@@ -48,8 +48,10 @@ export async function GET(req: Request) {
 
   const tasks = db.prepare(`
     SELECT t.*, ${SUB_COUNTS},
-      ua.name AS assignee_name, uc.name AS creator_name, tm.name AS team_name, p.name AS project_name
+      ua.name AS assignee_name, uc.name AS creator_name, tm.name AS team_name, p.name AS project_name,
+      tt.name AS type_name, tt.alias AS type_alias
     FROM tasks t
+    LEFT JOIN task_types tt ON tt.id = t.task_type_id
     LEFT JOIN users ua ON ua.id = t.assignee_id
     LEFT JOIN users uc ON uc.id = t.creator_id
     LEFT JOIN teams tm ON tm.id = t.assigned_team_id
@@ -69,7 +71,7 @@ export async function POST(req: Request) {
   const {
     title, description = '', assigneeId = null, teamId = null, priority = 'NORMAL',
     dueAt, projectId = null, parentId = null, multiple = false, lines = [],
-    attachmentIds = [], boardId = null,
+    attachmentIds = [], boardId = null, taskTypeId = null, targetCount = null,
   } = body;
 
   if (!dueAt) return badRequest('Due date is required');
@@ -87,6 +89,22 @@ export async function POST(req: Request) {
     effProject = parent.project_id;
   }
 
+  // Task type must belong to the assignee's / assigned team's catalogue
+  let effType: number | null = null;
+  let effTarget: number | null = null;
+  if (taskTypeId) {
+    const type = db.prepare('SELECT * FROM task_types WHERE id = ? AND is_active = 1').get(Number(taskTypeId)) as any;
+    if (!type) return badRequest('Task type not found or inactive');
+    const targetTeam = teamId
+      ? Number(teamId)
+      : (db.prepare('SELECT team_id FROM users WHERE id = ?').get(Number(assigneeId)) as any)?.team_id;
+    if (type.team_id !== targetTeam) return badRequest("This task type belongs to a different team than the assignee");
+    effType = type.id;
+    if (targetCount != null && Number(targetCount) > 0) effTarget = Math.floor(Number(targetCount));
+  } else if (targetCount != null) {
+    return badRequest('Pick a task type to set a target');
+  }
+
   const titles: string[] = multiple
     ? (lines as string[]).map((l) => l.trim()).filter(Boolean)
     : [String(title || '').trim()];
@@ -96,13 +114,13 @@ export async function POST(req: Request) {
   const sla = addWorkingMinutes(t, 30);
   const ins = db.prepare(`INSERT INTO tasks
     (title, description, priority, creator_id, assignee_id, assigned_team_id, project_id, parent_id, batch_id, board_id,
-     due_at, sla_deadline_at, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+     task_type_id, target_count, due_at, sla_deadline_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
   const created: number[] = [];
   for (const tt of titles) {
     const id = Number(
-      ins.run(tt, description, priority, user.id, assigneeId, teamId, effProject, parentId, batchId, boardId, dueAt, sla, t, t).lastInsertRowid
+      ins.run(tt, description, priority, user.id, assigneeId, teamId, effProject, parentId, batchId, boardId, effType, effTarget, dueAt, sla, t, t).lastInsertRowid
     );
     created.push(id);
     logActivity(id, user.id, 'CREATED', batchId ? { batchId } : {});

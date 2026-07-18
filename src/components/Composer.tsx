@@ -27,6 +27,9 @@ export default function Composer({
   const [multiple, setMultiple] = useState(false);
   const [linesText, setLinesText] = useState('');
   const [files, setFiles] = useState<File[]>([]);
+  const [taskTypes, setTaskTypes] = useState<any[]>([]);
+  const [taskTypeId, setTaskTypeId] = useState('');
+  const [targetCount, setTargetCount] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -38,6 +41,26 @@ export default function Composer({
     setTitle(presetTitle || '');
     setErr('');
   }, [open, presetTitle]);
+
+  // Task types follow the selected person's team (or the selected team)
+  useEffect(() => {
+    setTaskTypeId(''); setTargetCount('');
+    if (!assignee) { setTaskTypes([]); return; }
+    const [kind, idStr] = assignee.split(':');
+    const q = kind === 't' ? `teamId=${idStr}` : `userId=${idStr}`;
+    api(`/api/task-types?${q}`).then((d) => setTaskTypes(d.types)).catch(() => setTaskTypes([]));
+  }, [assignee]);
+
+  const selectedTeamId = (() => {
+    if (!assignee) return null;
+    const [kind, idStr] = assignee.split(':');
+    if (kind === 't') return Number(idStr);
+    return users.find((u) => u.id === Number(idStr))?.team_id ?? null;
+  })();
+  const teamMembers = assignee.startsWith('t:')
+    ? users.filter((u) => u.team_id === Number(assignee.split(':')[1]))
+    : [];
+  const selectedType = taskTypes.find((tt) => String(tt.id) === taskTypeId);
 
   const quickDue = (label: string) => {
     const d = new Date();
@@ -73,13 +96,15 @@ export default function Composer({
         parentId: presetParentId || null,
         boardId: presetBoardId || null,
         attachmentIds,
+        taskTypeId: taskTypeId ? Number(taskTypeId) : null,
+        targetCount: taskTypeId && targetCount ? Number(targetCount) : null,
         multiple,
         lines: multiple ? linesText.split('\n') : [],
       };
       const d = await api('/api/tasks', { method: 'POST', body: JSON.stringify(payload) });
       onCreated?.(d.ids);
       onClose();
-      setTitle(''); setDescription(''); setLinesText(''); setFiles([]); setMultiple(false); setDue('');
+      setTitle(''); setDescription(''); setLinesText(''); setFiles([]); setMultiple(false); setDue(''); setTaskTypeId(''); setTargetCount('');
     } catch (e: any) {
       setErr(e.message);
     } finally {
@@ -122,6 +147,39 @@ export default function Composer({
             )}
           </select>
         </div>
+        {teamMembers.length > 0 && (
+          <div className="text-xs text-gray-500 -mt-2">
+            <span className="font-semibold">Team members</span> (tap to assign a person):
+            <div className="flex flex-wrap gap-1.5 mt-1">
+              {teamMembers.map((m) => (
+                <button key={m.id} type="button" className="px-2 py-1 rounded-full bg-gray-100 hover:bg-brand-100 text-gray-700"
+                  onClick={() => setAssignee(`u:${m.id}`)}>
+                  {m.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {taskTypes.length > 0 && !presetParentId && (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <span className="label">Task type</span>
+              <select className="input" value={taskTypeId} onChange={(e) => setTaskTypeId(e.target.value)}>
+                <option value="">None</option>
+                {taskTypes.map((tt) => (
+                  <option key={tt.id} value={tt.id}>{tt.name} (counted in {tt.alias})</option>
+                ))}
+              </select>
+            </div>
+            {selectedType && (
+              <div>
+                <span className="label">Target — how many {selectedType.alias}?</span>
+                <input type="number" min="1" className="input" placeholder="e.g. 10"
+                  value={targetCount} onChange={(e) => setTargetCount(e.target.value)} />
+              </div>
+            )}
+          </div>
+        )}
         <div>
           <span className="label">Due date & time</span>
           <div className="flex gap-1.5 mb-2 flex-wrap">

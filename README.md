@@ -19,8 +19,8 @@ Open http://localhost:3000. The database is created and seeded automatically on 
 |---|---|
 | admin@company.com | Admin |
 | ceo@company.com | CEO |
-| rohan@company.com / priya@company.com / arjun@company.com | Managers (Engineering / Design / Marketing) |
-| ananya@company.com, vikram@company.com, sneha@company.com, karan@company.com, divya@company.com, rahul@company.com | Members |
+| suresh@ / meena@ / manoj@ / kavita@ / deepak@ company.com | Team Heads (Sales / Accounts / Warehouse / HR / Support) |
+| neha@, amit@ (Sales) · ravi@ (Accounts) · sunil@ (Warehouse) · pooja@ (HR) · anjali@ (Support) company.com | Members |
 
 Delete the `data/` folder to reset to fresh seed data. Change all passwords via Admin → Reset pw before real use.
 
@@ -44,6 +44,8 @@ Set a real `AUTH_SECRET` (copy `.env.example` to `.env`). Optionally point an ex
 **Subtasks & batches.** "3 tasks in one message" works both ways: the composer has a Multiple-tasks toggle (one task per line, linked as one batch), and any assignee can split a received task into subtasks. Each subtask captures its own done-timestamp; the parent shows "1 of 3 done" with a progress bar and cannot be closed while subtasks are open (creator/Admin can override with a logged reason).
 
 **Scribble.** Full-screen canvas (pen with pressure, highlighter, eraser, shapes, arrows, text, undo/redo, stylus-only mode for palm rejection). Boards save to your account. "Send as Task" exports the canvas as a PNG, attaches it, and opens the composer — assign to anyone or to yourself as a memo.
+
+**Task Types & Aliases.** Each team owns a catalogue of task types with a deliverable unit ("alias"): HR's *Job Role* is counted in *Resumes*, Sales' *Lead Follow-up* in *Calls*, Support's *Ticket Resolution* in *Tickets*. The composer shows only the types of the selected assignee's team (picking a team also lists its members). A type can carry a target ("find 10 Resumes"); the assignee logs delivered units, the creator and Head are notified when the target is met, and the ticket cannot close before the target is reached (creator/Head/Admin can override with a logged reason). Heads manage their own team's catalogue via the Manage link; Admin/CEO manage all.
 
 **Projects.** Any member can create a project and add members. All project tasks, notes, files and activity are visible to every member; a task assigned to a person is always visible to that person and the project owner.
 
