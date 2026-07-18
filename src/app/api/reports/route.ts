@@ -34,6 +34,39 @@ export async function GET(req: Request) {
     sp.push(typeFilter);
   }
 
+  // Drill-down: ?list=<metric> returns the matching tasks themselves
+  const listMetric = url.searchParams.get('list');
+  if (listMetric) {
+    const personId = url.searchParams.get('personId') ? Number(url.searchParams.get('personId')) : null;
+    let extra = '';
+    const ep: any[] = [];
+    if (personId) { extra = ' AND t.assignee_id = ?'; ep.push(personId); }
+    let cond = '';
+    const cp: any[] = [];
+    switch (listMetric) {
+      case 'total': cond = '1=1'; break;
+      case 'open': cond = "t.status NOT IN ('DONE','CANCELLED')"; break;
+      case 'overdue': cond = "t.status NOT IN ('DONE','CANCELLED') AND t.due_at < ?"; cp.push(t); break;
+      case 'no_response': cond = "t.status = 'ASSIGNED' AND t.sla_breached_at IS NOT NULL"; break;
+      case 'esc_awaiting': cond = "t.status = 'ESCALATED' AND EXISTS (SELECT 1 FROM escalations e WHERE e.task_id = t.id AND e.id = (SELECT MAX(id) FROM escalations WHERE task_id = t.id) AND e.explanation IS NULL)"; break;
+      case 'esc_pending': cond = "t.status = 'ESCALATED' AND EXISTS (SELECT 1 FROM escalations e WHERE e.task_id = t.id AND e.id = (SELECT MAX(id) FROM escalations WHERE task_id = t.id) AND e.explanation IS NOT NULL AND e.review_status = 'PENDING')"; break;
+      case 'due_week': cond = "t.status NOT IN ('DONE','CANCELLED') AND t.due_at BETWEEN ? AND ?"; cp.push(t, t + 7 * 24 * 3600 * 1000); break;
+      case 'done': cond = "t.status = 'DONE'"; break;
+      case 'escalations': cond = 't.escalated_at IS NOT NULL'; break;
+      default: return Response.json({ error: 'Unknown metric' }, { status: 400 });
+    }
+    const tasks = db.prepare(`
+      SELECT t.id, t.title, t.status, t.due_at, t.delivered_count, t.target_count, t.sla_breached_at,
+        ua.name AS assignee_name, tt.name AS type_name, tt.alias AS type_alias
+      FROM tasks t
+      LEFT JOIN users ua ON ua.id = t.assignee_id
+      LEFT JOIN task_types tt ON tt.id = t.task_type_id
+      WHERE ${scope}${extra} AND t.created_at >= ? AND ${cond}
+      ORDER BY t.due_at ASC LIMIT 200
+    `).all(...sp, ...ep, since, ...cp);
+    return Response.json({ tasks });
+  }
+
   const one = (sql: string, ...p: any[]) => (db.prepare(sql).get(...p) as any);
 
   const overdue = one(`SELECT COUNT(*) AS c FROM tasks t WHERE ${scope} AND t.status NOT IN ('DONE','CANCELLED') AND t.due_at < ? AND t.created_at >= ?`, ...sp, t, since).c;

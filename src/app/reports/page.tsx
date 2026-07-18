@@ -2,16 +2,26 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Shell, { useMe } from '@/components/Shell';
-import { api } from '@/lib/util';
+import Modal from '@/components/Modal';
+import { api, fmtDateTime, STATUS_LABEL, STATUS_COLOR } from '@/lib/util';
 
-function Stat({ label, value, tone, href }: { label: string; value: any; tone?: string; href?: string }) {
-  const inner = (
-    <div className={`card p-4 ${href ? 'hover:border-brand-500 transition' : ''}`}>
+function Stat({ label, value, tone, onClick }: { label: string; value: any; tone?: string; onClick?: () => void }) {
+  return (
+    <button type="button" onClick={onClick} disabled={!onClick}
+      className={`card p-4 text-left w-full ${onClick ? 'hover:border-brand-500 transition' : 'cursor-default'}`}>
       <div className={`text-2xl font-bold ${tone || ''}`}>{value ?? '—'}</div>
-      <div className="text-xs text-gray-500 mt-0.5">{label}</div>
-    </div>
+      <div className="text-xs text-gray-500 mt-0.5">{label}{onClick ? ' ↗' : ''}</div>
+    </button>
   );
-  return href ? <Link href={href}>{inner}</Link> : inner;
+}
+
+function Num({ value, tone, onClick }: { value: any; tone?: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick}
+      className={`underline decoration-dotted underline-offset-2 hover:text-brand-600 ${tone || ''}`}>
+      {value}
+    </button>
+  );
 }
 
 function ReportsInner() {
@@ -22,6 +32,8 @@ function ReportsInner() {
   const [types, setTypes] = useState<any[]>([]);
   const [teamId, setTeamId] = useState('');
   const [typeId, setTypeId] = useState('');
+  const [drill, setDrill] = useState<{ title: string; tasks: any[] } | null>(null);
+  const [drillLoading, setDrillLoading] = useState(false);
 
   useEffect(() => {
     const sp = new URLSearchParams({ days });
@@ -40,6 +52,19 @@ function ReportsInner() {
     if (!tid) { setTypes([]); return; }
     api(`/api/task-types?teamId=${tid}`).then((d) => setTypes(d.types)).catch(() => setTypes([]));
   }, [teamId, me]);
+
+  const openDrill = async (metric: string, title: string, extra: Record<string, any> = {}) => {
+    setDrillLoading(true);
+    setDrill({ title, tasks: [] });
+    try {
+      const sp = new URLSearchParams({ days, list: metric });
+      if (teamId) sp.set('teamId', teamId);
+      if (typeId) sp.set('taskTypeId', typeId);
+      for (const [k, v] of Object.entries(extra)) sp.set(k, String(v));
+      const d = await api(`/api/reports?${sp}`);
+      setDrill({ title, tasks: d.tasks });
+    } finally { setDrillLoading(false); }
+  };
 
   if (!data) return <div className="card h-60 animate-pulse" />;
   const s = data.summary;
@@ -61,7 +86,9 @@ function ReportsInner() {
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>
           <h1 className="text-xl font-bold">Reports</h1>
-          <p className="text-xs text-gray-500">Scope: {data.scope === 'MEMBER' ? 'your tasks' : data.scope === 'MANAGER' ? 'your team' : 'entire organization'}</p>
+          <p className="text-xs text-gray-500">
+            Scope: {data.scope === 'MEMBER' ? 'your tasks' : data.scope === 'MANAGER' ? 'your team' : 'entire organization'} · tap any number to see the tasks behind it
+          </p>
         </div>
         <div className="flex gap-2 flex-wrap">
           {me && ['ADMIN', 'CEO'].includes(me.role) && (
@@ -87,13 +114,13 @@ function ReportsInner() {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
-        <Stat label="Open tasks" value={s.open} />
-        <Stat label="Overdue" value={s.overdue} tone="text-red-600" href="/tasks?status=ESCALATED" />
-        <Stat label="No response (SLA breach)" value={s.noResponse} tone="text-red-600" href="/tasks?status=ASSIGNED" />
-        <Stat label="Escalations awaiting explanation" value={s.escalatedAwaiting} tone="text-orange-600" />
-        <Stat label="Explanations pending review" value={s.escalatedPendingReview} tone="text-amber-600" />
-        <Stat label="Due this week" value={s.dueThisWeek} />
-        <Stat label="Done" value={s.done} tone="text-emerald-600" />
+        <Stat label="Open tasks" value={s.open} onClick={() => openDrill('open', 'Open tasks')} />
+        <Stat label="Overdue" value={s.overdue} tone="text-red-600" onClick={() => openDrill('overdue', 'Overdue tasks')} />
+        <Stat label="No response (SLA breach)" value={s.noResponse} tone="text-red-600" onClick={() => openDrill('no_response', 'No response (SLA breached)')} />
+        <Stat label="Escalations awaiting explanation" value={s.escalatedAwaiting} tone="text-orange-600" onClick={() => openDrill('esc_awaiting', 'Escalations awaiting explanation')} />
+        <Stat label="Explanations pending review" value={s.escalatedPendingReview} tone="text-amber-600" onClick={() => openDrill('esc_pending', 'Explanations pending review')} />
+        <Stat label="Due this week" value={s.dueThisWeek} onClick={() => openDrill('due_week', 'Due this week')} />
+        <Stat label="Done" value={s.done} tone="text-emerald-600" onClick={() => openDrill('done', 'Done tasks')} />
         <Stat label="On-time completion" value={s.onTimePct != null ? `${s.onTimePct}%` : '—'} tone="text-emerald-600" />
         <Stat label="Avg response time" value={s.avgResponseMin != null ? `${s.avgResponseMin} min` : '—'} />
       </div>
@@ -116,27 +143,30 @@ function ReportsInner() {
                 </tr>
               </thead>
               <tbody>
-                {data.byType.map((bt: any) => (
-                  <tr key={bt.id} className="border-b border-gray-50 last:border-0">
-                    <td className="px-4 py-2.5 text-xs text-gray-500">{bt.team_name}</td>
-                    <td className="px-2 py-2.5">
-                      <div className="font-medium">{bt.name}</div>
-                      <div className="text-[11px] text-gray-400">counted in {bt.alias}</div>
-                    </td>
-                    <td className="px-2 py-2.5">{bt.total}</td>
-                    <td className="px-2 py-2.5">{bt.open}</td>
-                    <td className={`px-2 py-2.5 ${bt.overdue > 0 ? 'text-red-600 font-bold' : ''}`}>{bt.overdue}</td>
-                    <td className={`px-2 py-2.5 ${bt.no_response > 0 ? 'text-red-600 font-bold' : ''}`}>{bt.no_response}</td>
-                    <td className="px-2 py-2.5">{bt.done}</td>
-                    <td className="px-2 py-2.5">
-                      {bt.target > 0 ? (
-                        <span className={bt.delivered >= bt.target ? 'text-emerald-600 font-semibold' : ''}>
-                          {bt.delivered}/{bt.target} {bt.alias}
-                        </span>
-                      ) : '—'}
-                    </td>
-                  </tr>
-                ))}
+                {data.byType.map((bt: any) => {
+                  const x = { taskTypeId: bt.id };
+                  return (
+                    <tr key={bt.id} className="border-b border-gray-50 last:border-0">
+                      <td className="px-4 py-2.5 text-xs text-gray-500">{bt.team_name}</td>
+                      <td className="px-2 py-2.5">
+                        <div className="font-medium">{bt.name}</div>
+                        <div className="text-[11px] text-gray-400">counted in {bt.alias}</div>
+                      </td>
+                      <td className="px-2 py-2.5"><Num value={bt.total} onClick={() => openDrill('total', `${bt.name} — all tasks`, x)} /></td>
+                      <td className="px-2 py-2.5"><Num value={bt.open} onClick={() => openDrill('open', `${bt.name} — open`, x)} /></td>
+                      <td className="px-2 py-2.5"><Num value={bt.overdue} tone={bt.overdue > 0 ? 'text-red-600 font-bold' : ''} onClick={() => openDrill('overdue', `${bt.name} — overdue`, x)} /></td>
+                      <td className="px-2 py-2.5"><Num value={bt.no_response} tone={bt.no_response > 0 ? 'text-red-600 font-bold' : ''} onClick={() => openDrill('no_response', `${bt.name} — no response`, x)} /></td>
+                      <td className="px-2 py-2.5"><Num value={bt.done} onClick={() => openDrill('done', `${bt.name} — done`, x)} /></td>
+                      <td className="px-2 py-2.5">
+                        {bt.target > 0 ? (
+                          <span className={bt.delivered >= bt.target ? 'text-emerald-600 font-semibold' : ''}>
+                            {bt.delivered}/{bt.target} {bt.alias}
+                          </span>
+                        ) : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -159,25 +189,56 @@ function ReportsInner() {
               </tr>
             </thead>
             <tbody>
-              {data.people.map((p: any) => (
-                <tr key={p.id} className="border-b border-gray-50 last:border-0">
-                  <td className="px-4 py-2.5">
-                    <div className="font-medium">{p.name}</div>
-                    <div className="text-[11px] text-gray-400">{p.team_name || '—'}</div>
-                  </td>
-                  <td className="px-2 py-2.5">{p.open}</td>
-                  <td className={`px-2 py-2.5 ${p.overdue > 0 ? 'text-red-600 font-bold' : ''}`}>{p.overdue}</td>
-                  <td className={`px-2 py-2.5 ${p.no_response > 0 ? 'text-red-600 font-bold' : ''}`}>{p.no_response}</td>
-                  <td className={`px-2 py-2.5 ${p.escalations > 0 ? 'text-orange-600 font-bold' : ''}`}>{p.escalations}</td>
-                  <td className="px-2 py-2.5">{p.done}</td>
-                  <td className="px-2 py-2.5">{p.done ? `${Math.round((100 * p.done_ontime) / p.done)}%` : '—'}</td>
-                  <td className="px-2 py-2.5">{p.avg_response_min != null ? `${p.avg_response_min}m` : '—'}</td>
-                </tr>
-              ))}
+              {data.people.map((p: any) => {
+                const x = { personId: p.id };
+                return (
+                  <tr key={p.id} className="border-b border-gray-50 last:border-0">
+                    <td className="px-4 py-2.5">
+                      <div className="font-medium">{p.name}</div>
+                      <div className="text-[11px] text-gray-400">{p.team_name || '—'}</div>
+                    </td>
+                    <td className="px-2 py-2.5"><Num value={p.open} onClick={() => openDrill('open', `${p.name} — open`, x)} /></td>
+                    <td className="px-2 py-2.5"><Num value={p.overdue} tone={p.overdue > 0 ? 'text-red-600 font-bold' : ''} onClick={() => openDrill('overdue', `${p.name} — overdue`, x)} /></td>
+                    <td className="px-2 py-2.5"><Num value={p.no_response} tone={p.no_response > 0 ? 'text-red-600 font-bold' : ''} onClick={() => openDrill('no_response', `${p.name} — no response`, x)} /></td>
+                    <td className="px-2 py-2.5"><Num value={p.escalations} tone={p.escalations > 0 ? 'text-orange-600 font-bold' : ''} onClick={() => openDrill('escalations', `${p.name} — escalations`, x)} /></td>
+                    <td className="px-2 py-2.5"><Num value={p.done} onClick={() => openDrill('done', `${p.name} — done`, x)} /></td>
+                    <td className="px-2 py-2.5">{p.done ? `${Math.round((100 * p.done_ontime) / p.done)}%` : '—'}</td>
+                    <td className="px-2 py-2.5">{p.avg_response_min != null ? `${p.avg_response_min}m` : '—'}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
+
+      {/* Drill-down modal: the tasks behind a number */}
+      <Modal open={!!drill} onClose={() => setDrill(null)} title={drill?.title || ''}>
+        {drillLoading ? (
+          <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-12 bg-gray-100 rounded-lg animate-pulse" />)}</div>
+        ) : (
+          <div className="space-y-2">
+            {drill?.tasks.map((tk: any) => (
+              <Link key={tk.id} href={`/tasks/${tk.id}`} className="block border border-gray-200 rounded-lg px-3 py-2.5 hover:border-brand-500 transition"
+                onClick={() => setDrill(null)}>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-gray-400">#{tk.id}</span>
+                  <span className={`pill ${STATUS_COLOR[tk.status] || 'bg-gray-100'}`}>{STATUS_LABEL[tk.status] || tk.status}</span>
+                  {tk.sla_breached_at && tk.status === 'ASSIGNED' && <span className="pill bg-red-600 text-white">NO RESPONSE</span>}
+                </div>
+                <div className="font-medium text-sm mt-1">{tk.title}</div>
+                <div className="text-[11px] text-gray-500 mt-0.5">
+                  {tk.assignee_name || 'Unassigned'} · due {fmtDateTime(tk.due_at)}
+                  {tk.type_name && <> · {tk.type_name}{tk.target_count != null && <> ({tk.delivered_count}/{tk.target_count} {tk.type_alias})</>}</>}
+                </div>
+              </Link>
+            ))}
+            {drill && drill.tasks.length === 0 && (
+              <div className="text-center text-gray-400 py-6">No tasks in this bucket. 🎉</div>
+            )}
+          </div>
+        )}
+      </Modal>
     </>
   );
 }
