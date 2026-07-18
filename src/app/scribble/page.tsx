@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Modal from '@/components/Modal';
 import Composer from '@/components/Composer';
@@ -15,6 +16,7 @@ const Excalidraw = dynamic(
 );
 
 export default function ScribblePage() {
+  const router = useRouter();
   const sceneRef = useRef<{ elements: any[]; appState: any; files: any }>({ elements: [], appState: {}, files: {} });
   const [boards, setBoards] = useState<any[]>([]);
   const [boardId, setBoardId] = useState<number | null>(null);
@@ -193,6 +195,7 @@ export default function ScribblePage() {
       <Composer
         open={composerOpen}
         onClose={() => setComposerOpen(false)}
+        onCreated={() => router.push('/home')}
         presetAttachmentIds={attachId ? [attachId] : []}
         presetBoardId={boardId}
         presetTitle={boardName !== 'Untitled board' ? boardName : ''}
