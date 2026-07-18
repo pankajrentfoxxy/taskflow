@@ -50,9 +50,9 @@ export default function LoginPage() {
         </form>
         <div className="card mt-4 p-4 text-xs text-gray-500 leading-relaxed">
           <div className="font-semibold text-gray-700 mb-1">Demo logins (password: password123)</div>
-          admin@company.com · ceo@company.com<br />
-          Heads: suresh (Sales) · meena (Accounts) · manoj (Warehouse) · kavita (HR) · deepak (Support)<br />
-          Members: neha, amit, ravi, sunil, pooja, anjali — all @company.com
+          admin@rentfoxxy.com (CTO) · ceo@rentfoxxy.com<br />
+          Heads: suresh (Sales) · manoj (Warehouse) · deepak (Support) · meena (Accounts)<br />
+          Members: neha, amit, sunil, rekha, anjali, vikas, ravi — all @rentfoxxy.com
         </div>
       </div>
     </div>
