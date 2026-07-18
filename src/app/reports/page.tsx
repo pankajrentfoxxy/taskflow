@@ -18,10 +18,28 @@ function ReportsInner() {
   const me = useMe();
   const [days, setDays] = useState('0');
   const [data, setData] = useState<any>(null);
+  const [teams, setTeams] = useState<any[]>([]);
+  const [types, setTypes] = useState<any[]>([]);
+  const [teamId, setTeamId] = useState('');
+  const [typeId, setTypeId] = useState('');
 
   useEffect(() => {
-    api(`/api/reports?days=${days}`).then(setData);
-  }, [days]);
+    const sp = new URLSearchParams({ days });
+    if (teamId) sp.set('teamId', teamId);
+    if (typeId) sp.set('taskTypeId', typeId);
+    api(`/api/reports?${sp}`).then(setData);
+  }, [days, teamId, typeId]);
+
+  useEffect(() => {
+    if (me && ['ADMIN', 'CEO'].includes(me.role)) api('/api/teams').then((d) => setTeams(d.teams)).catch(() => {});
+  }, [me]);
+
+  useEffect(() => {
+    setTypeId('');
+    const tid = me && ['ADMIN', 'CEO'].includes(me.role) ? teamId : me?.team_id ? String(me.team_id) : '';
+    if (!tid) { setTypes([]); return; }
+    api(`/api/task-types?teamId=${tid}`).then((d) => setTypes(d.types)).catch(() => setTypes([]));
+  }, [teamId, me]);
 
   if (!data) return <div className="card h-60 animate-pulse" />;
   const s = data.summary;
@@ -45,7 +63,19 @@ function ReportsInner() {
           <h1 className="text-xl font-bold">Reports</h1>
           <p className="text-xs text-gray-500">Scope: {data.scope === 'MEMBER' ? 'your tasks' : data.scope === 'MANAGER' ? 'your team' : 'entire organization'}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {me && ['ADMIN', 'CEO'].includes(me.role) && (
+            <select className="input !w-auto" value={teamId} onChange={(e) => setTeamId(e.target.value)}>
+              <option value="">All teams</option>
+              {teams.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          )}
+          {types.length > 0 && (
+            <select className="input !w-auto" value={typeId} onChange={(e) => setTypeId(e.target.value)}>
+              <option value="">All task types</option>
+              {types.map((tt: any) => <option key={tt.id} value={tt.id}>{tt.name} ({tt.alias})</option>)}
+            </select>
+          )}
           <select className="input !w-auto" value={days} onChange={(e) => setDays(e.target.value)}>
             <option value="0">All time</option>
             <option value="7">Last 7 days</option>
@@ -67,6 +97,51 @@ function ReportsInner() {
         <Stat label="On-time completion" value={s.onTimePct != null ? `${s.onTimePct}%` : '—'} tone="text-emerald-600" />
         <Stat label="Avg response time" value={s.avgResponseMin != null ? `${s.avgResponseMin} min` : '—'} />
       </div>
+
+      {data.byType && data.byType.length > 0 && (
+        <div className="mb-6">
+          <h2 className="font-bold text-sm mb-2">By task type</h2>
+          <div className="card overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100">
+                  <th className="px-4 py-3">Team</th>
+                  <th className="px-2 py-3">Task type</th>
+                  <th className="px-2 py-3">Total</th>
+                  <th className="px-2 py-3">Open</th>
+                  <th className="px-2 py-3 text-red-600">Overdue</th>
+                  <th className="px-2 py-3">No resp.</th>
+                  <th className="px-2 py-3">Done</th>
+                  <th className="px-2 py-3">Delivered</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.byType.map((bt: any) => (
+                  <tr key={bt.id} className="border-b border-gray-50 last:border-0">
+                    <td className="px-4 py-2.5 text-xs text-gray-500">{bt.team_name}</td>
+                    <td className="px-2 py-2.5">
+                      <div className="font-medium">{bt.name}</div>
+                      <div className="text-[11px] text-gray-400">counted in {bt.alias}</div>
+                    </td>
+                    <td className="px-2 py-2.5">{bt.total}</td>
+                    <td className="px-2 py-2.5">{bt.open}</td>
+                    <td className={`px-2 py-2.5 ${bt.overdue > 0 ? 'text-red-600 font-bold' : ''}`}>{bt.overdue}</td>
+                    <td className={`px-2 py-2.5 ${bt.no_response > 0 ? 'text-red-600 font-bold' : ''}`}>{bt.no_response}</td>
+                    <td className="px-2 py-2.5">{bt.done}</td>
+                    <td className="px-2 py-2.5">
+                      {bt.target > 0 ? (
+                        <span className={bt.delivered >= bt.target ? 'text-emerald-600 font-semibold' : ''}>
+                          {bt.delivered}/{bt.target} {bt.alias}
+                        </span>
+                      ) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {data.people.length > 0 && (
         <div className="card overflow-x-auto">

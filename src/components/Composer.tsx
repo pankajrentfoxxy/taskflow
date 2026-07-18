@@ -160,7 +160,11 @@ export default function Composer({
             </div>
           </div>
         )}
-        {taskTypes.length > 0 && !presetParentId && (
+        {assignee && !presetParentId && (taskTypes.length === 0 ? (
+          <div className="text-xs text-amber-800 bg-amber-50 rounded-lg px-3 py-2">
+            This team has no task types yet. A Head/Admin can add them from the <b>Manage</b> page (e.g. HR: Job Role, counted in Resumes). The task can still be created without a type.
+          </div>
+        ) : (
           <div className="grid grid-cols-2 gap-3">
             <div>
               <span className="label">Task type</span>
@@ -179,7 +183,7 @@ export default function Composer({
               </div>
             )}
           </div>
-        )}
+        ))}
         <div>
           <span className="label">Due date & time</span>
           <div className="flex gap-1.5 mb-2 flex-wrap">

@@ -9,6 +9,8 @@ export async function GET(req: Request) {
   const db = getDb();
   const url = new URL(req.url);
   const days = Number(url.searchParams.get('days') || 0); // 0 = all time
+  const teamFilter = url.searchParams.get('teamId') ? Number(url.searchParams.get('teamId')) : null;
+  const typeFilter = url.searchParams.get('taskTypeId') ? Number(url.searchParams.get('taskTypeId')) : null;
   const t = now();
   const since = days > 0 ? t - days * 24 * 3600 * 1000 : 0;
 
@@ -21,6 +23,15 @@ export async function GET(req: Request) {
   } else if (user.role === 'MANAGER' && user.team_id) {
     scope = '(t.assignee_id IN (SELECT id FROM users WHERE team_id = ?) OR t.assigned_team_id = ?)';
     sp.push(user.team_id, user.team_id);
+  }
+  // Optional filters: team (Admin/CEO only — Heads are already team-scoped) and task type
+  if (teamFilter && ['ADMIN', 'CEO'].includes(user.role)) {
+    scope += ' AND (t.assignee_id IN (SELECT id FROM users WHERE team_id = ?) OR t.assigned_team_id = ?)';
+    sp.push(teamFilter, teamFilter);
+  }
+  if (typeFilter) {
+    scope += ' AND t.task_type_id = ?';
+    sp.push(typeFilter);
   }
 
   const one = (sql: string, ...p: any[]) => (db.prepare(sql).get(...p) as any);
@@ -66,5 +77,23 @@ export async function GET(req: Request) {
     `).all(t, since, ...sp);
   }
 
-  return Response.json({ summary, people, scope: user.role });
+  // Task-type breakdown (typed tasks only, within the same scope)
+  const byType = db.prepare(`
+    SELECT tt.id, tt.name, tt.alias, tm.name AS team_name,
+      COUNT(*) AS total,
+      SUM(CASE WHEN t.status NOT IN ('DONE','CANCELLED') THEN 1 ELSE 0 END) AS open,
+      SUM(CASE WHEN t.status NOT IN ('DONE','CANCELLED') AND t.due_at < ? THEN 1 ELSE 0 END) AS overdue,
+      SUM(CASE WHEN t.status = 'ASSIGNED' AND t.sla_breached_at IS NOT NULL THEN 1 ELSE 0 END) AS no_response,
+      SUM(CASE WHEN t.status = 'DONE' THEN 1 ELSE 0 END) AS done,
+      SUM(COALESCE(t.delivered_count, 0)) AS delivered,
+      SUM(COALESCE(t.target_count, 0)) AS target
+    FROM tasks t
+    JOIN task_types tt ON tt.id = t.task_type_id
+    JOIN teams tm ON tm.id = tt.team_id
+    WHERE ${scope} AND t.created_at >= ?
+    GROUP BY tt.id
+    ORDER BY tm.name, tt.name
+  `).all(t, ...sp, since);
+
+  return Response.json({ summary, people, byType, scope: user.role });
 }
