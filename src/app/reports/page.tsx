@@ -4,9 +4,10 @@ import Link from 'next/link';
 import Shell, { useMe } from '@/components/Shell';
 import Modal from '@/components/Modal';
 import { api, fmtDateTime, STATUS_LABEL, STATUS_COLOR } from '@/lib/util';
+import { IconInbox, IconClock, IconMute, IconAlert, IconScale, IconCalendar, IconCheckCircle, IconZap, IconActivity, IconTag, IconUsers, IconDownload } from '@/components/Icons';
 
 function Stat({ icon, chip, label, value, tone, onClick, bar }: {
-  icon: string; chip: string; label: string; value: any; tone?: string; onClick?: () => void; bar?: number | null;
+  icon: React.ReactNode; chip: string; label: string; value: any; tone?: string; onClick?: () => void; bar?: number | null;
 }) {
   return (
     <button type="button" onClick={onClick} disabled={!onClick}
@@ -15,7 +16,7 @@ function Stat({ icon, chip, label, value, tone, onClick, bar }: {
         <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-base ${chip}`}>{icon}</span>
         {onClick && <span className="text-gray-300 group-hover:text-brand-500 group-hover:translate-x-0.5 transition text-sm">→</span>}
       </div>
-      <div className={`text-[26px] font-extrabold mt-2.5 leading-none tracking-tight ${tone || 'text-gray-900'}`}>{value ?? '—'}</div>
+      <div className={`text-[24px] font-bold mt-2.5 leading-none tracking-tight tnum ${tone || 'text-gray-900'}`}>{value ?? '—'}</div>
       <div className="text-xs text-gray-500 mt-1.5 font-medium">{label}</div>
       {bar != null && (
         <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mt-2.5">
@@ -106,21 +107,18 @@ function ReportsInner() {
 
   return (
     <>
-      {/* Header band */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-gray-900 via-gray-800 to-brand-900 text-white p-5 sm:p-6 mb-5 shadow-xl shadow-gray-900/10">
-        <div className="absolute -right-12 -top-16 w-56 h-56 rounded-full bg-brand-500/20" />
-        <div className="relative flex items-end justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight">Reports</h1>
-            <p className="text-xs text-white/60 mt-1">
-              {data.scope === 'MEMBER' ? 'Your tasks' : data.scope === 'MANAGER' ? 'Your team' : 'Entire organization'} · tap any number for the tasks behind it
-            </p>
-          </div>
-          <div className={`rounded-2xl px-4 py-2.5 ${attention > 0 ? 'bg-red-500/90' : 'bg-emerald-500/90'}`}>
-            <div className="text-xl font-extrabold leading-none">{attention}</div>
-            <div className="text-[10px] font-medium text-white/80 mt-0.5">need attention</div>
-          </div>
+      {/* Header */}
+      <div className="flex items-end justify-between flex-wrap gap-4 mb-5">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
+            {data.scope === 'MEMBER' ? 'Your tasks' : data.scope === 'MANAGER' ? 'Your team' : 'Entire organization'}
+          </p>
+          <h1 className="text-[24px] font-bold tracking-tight mt-1">Reports</h1>
         </div>
+        <span className={`pill !px-3 !py-1.5 !text-xs ${attention > 0 ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-emerald-50 text-emerald-600 border border-emerald-200'}`}>
+          {attention > 0 ? <IconAlert className="w-3.5 h-3.5" /> : <IconCheckCircle className="w-3.5 h-3.5" />}
+          {attention} need{attention === 1 ? 's' : ''} attention
+        </span>
       </div>
 
       {/* Filters */}
@@ -143,28 +141,29 @@ function ReportsInner() {
           <option value="30">Last 30 days</option>
           <option value="90">Last 90 days</option>
         </select>
-        {data.people.length > 0 && <button className="btn-secondary ml-auto" onClick={exportCsv}>⬇ CSV</button>}
+        {data.people.length > 0 && <button className="btn-secondary ml-auto" onClick={exportCsv}><IconDownload className="w-4 h-4" /> CSV</button>}
       </div>
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-8">
-        <Stat icon="📋" chip="bg-brand-100 text-brand-600" label="Open tasks" value={s.open} onClick={() => openDrill('open', 'Open tasks')} />
-        <Stat icon="⏰" chip="bg-red-100 text-red-600" label="Overdue" value={s.overdue} tone={s.overdue > 0 ? 'text-red-600' : ''} onClick={() => openDrill('overdue', 'Overdue tasks')} />
-        <Stat icon="🔕" chip="bg-red-100 text-red-600" label="No response (SLA breach)" value={s.noResponse} tone={s.noResponse > 0 ? 'text-red-600' : ''} onClick={() => openDrill('no_response', 'No response (SLA breached)')} />
-        <Stat icon="🚨" chip="bg-orange-100 text-orange-600" label="Awaiting explanation" value={s.escalatedAwaiting} tone={s.escalatedAwaiting > 0 ? 'text-orange-600' : ''} onClick={() => openDrill('esc_awaiting', 'Escalations awaiting explanation')} />
-        <Stat icon="⚖️" chip="bg-amber-100 text-amber-600" label="Pending review" value={s.escalatedPendingReview} tone={s.escalatedPendingReview > 0 ? 'text-amber-600' : ''} onClick={() => openDrill('esc_pending', 'Explanations pending review')} />
-        <Stat icon="📅" chip="bg-sky-100 text-sky-600" label="Due this week" value={s.dueThisWeek} onClick={() => openDrill('due_week', 'Due this week')} />
-        <Stat icon="✅" chip="bg-emerald-100 text-emerald-600" label="Done" value={s.done} tone="text-emerald-600" onClick={() => openDrill('done', 'Done tasks')} />
-        <Stat icon="🎯" chip="bg-emerald-100 text-emerald-600" label="On-time completion" value={s.onTimePct != null ? `${s.onTimePct}%` : '—'} tone="text-emerald-600" bar={s.onTimePct} />
-        <Stat icon="⚡" chip="bg-violet-100 text-violet-600" label="Avg response time" value={s.avgResponseMin != null ? `${s.avgResponseMin}m` : '—'} />
+        <Stat icon={<IconInbox className="w-4 h-4" />} chip="bg-brand-50 text-brand-500" label="Open tasks" value={s.open} onClick={() => openDrill('open', 'Open tasks')} />
+        <Stat icon={<IconClock className="w-4 h-4" />} chip="bg-red-50 text-red-500" label="Overdue" value={s.overdue} tone={s.overdue > 0 ? 'text-red-600' : ''} onClick={() => openDrill('overdue', 'Overdue tasks')} />
+        <Stat icon={<IconMute className="w-4 h-4" />} chip="bg-red-50 text-red-500" label="No response (SLA breach)" value={s.noResponse} tone={s.noResponse > 0 ? 'text-red-600' : ''} onClick={() => openDrill('no_response', 'No response (SLA breached)')} />
+        <Stat icon={<IconAlert className="w-4 h-4" />} chip="bg-orange-50 text-orange-500" label="Awaiting explanation" value={s.escalatedAwaiting} tone={s.escalatedAwaiting > 0 ? 'text-orange-600' : ''} onClick={() => openDrill('esc_awaiting', 'Escalations awaiting explanation')} />
+        <Stat icon={<IconScale className="w-4 h-4" />} chip="bg-amber-50 text-amber-500" label="Pending review" value={s.escalatedPendingReview} tone={s.escalatedPendingReview > 0 ? 'text-amber-600' : ''} onClick={() => openDrill('esc_pending', 'Explanations pending review')} />
+        <Stat icon={<IconCalendar className="w-4 h-4" />} chip="bg-sky-50 text-sky-500" label="Due this week" value={s.dueThisWeek} onClick={() => openDrill('due_week', 'Due this week')} />
+        <Stat icon={<IconCheckCircle className="w-4 h-4" />} chip="bg-emerald-50 text-emerald-500" label="Done" value={s.done} tone="text-emerald-600" onClick={() => openDrill('done', 'Done tasks')} />
+        <Stat icon={<IconActivity className="w-4 h-4" />} chip="bg-emerald-50 text-emerald-500" label="On-time completion" value={s.onTimePct != null ? `${s.onTimePct}%` : '—'} tone="text-emerald-600" bar={s.onTimePct} />
+        <Stat icon={<IconZap className="w-4 h-4" />} chip="bg-violet-50 text-violet-500" label="Avg response time" value={s.avgResponseMin != null ? `${s.avgResponseMin}m` : '—'} />
       </div>
 
       {/* By task type */}
       {data.byType && data.byType.length > 0 && (
         <div className="mb-8">
           <div className="flex items-center gap-2.5 mb-3">
-            <span className="w-8 h-8 rounded-xl bg-brand-100 text-brand-600 flex items-center justify-center">🏷</span>
-            <h2 className="text-[15px] font-bold">By task type</h2>
+            <span className="w-6 h-6 rounded-md bg-brand-50 text-brand-500 flex items-center justify-center"><IconTag className="w-3.5 h-3.5" /></span>
+            <h2 className="text-[13px] font-semibold uppercase tracking-wide text-gray-600">By task type</h2>
+            <div className="flex-1 h-px bg-gray-200/70 ml-1" />
           </div>
           <div className="card overflow-hidden">
             <div className="overflow-x-auto">
@@ -223,8 +222,9 @@ function ReportsInner() {
       {data.people.length > 0 && (
         <div className="mb-6">
           <div className="flex items-center gap-2.5 mb-3">
-            <span className="w-8 h-8 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center">👥</span>
-            <h2 className="text-[15px] font-bold">By person</h2>
+            <span className="w-6 h-6 rounded-md bg-violet-50 text-violet-500 flex items-center justify-center"><IconUsers className="w-3.5 h-3.5" /></span>
+            <h2 className="text-[13px] font-semibold uppercase tracking-wide text-gray-600">By person</h2>
+            <div className="flex-1 h-px bg-gray-200/70 ml-1" />
           </div>
           <div className="card overflow-hidden">
             <div className="overflow-x-auto">

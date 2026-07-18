@@ -6,17 +6,31 @@ import TaskCard from '@/components/TaskCard';
 import AckModal from '@/components/AckModal';
 import Composer from '@/components/Composer';
 import { api } from '@/lib/util';
+import { IconZap, IconAlert, IconActivity, IconCalendar, IconPlus, IconPen, IconSend, IconCheckCircle } from '@/components/Icons';
 
-function Section({ icon, chip, title, tasks, extra }: {
-  icon: string; chip: string; title: string; tasks: any[]; extra?: (t: any) => React.ReactNode;
+function Metric({ icon, chip, value, label, hot }: { icon: React.ReactNode; chip: string; value: number; label: string; hot?: boolean }) {
+  return (
+    <div className={`card p-4 flex items-center gap-3 ${hot ? 'ring-1 ring-red-200' : ''}`}>
+      <span className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${chip}`}>{icon}</span>
+      <div className="min-w-0">
+        <div className={`text-xl font-bold leading-none tnum ${hot ? 'text-red-600' : 'text-gray-900'}`}>{value}</div>
+        <div className="text-[11px] text-gray-400 font-medium mt-1 truncate">{label}</div>
+      </div>
+    </div>
+  );
+}
+
+function Section({ accent, icon, title, tasks, extra }: {
+  accent: string; icon: React.ReactNode; title: string; tasks: any[]; extra?: (t: any) => React.ReactNode;
 }) {
   if (!tasks.length) return null;
   return (
-    <section className="mb-7">
-      <div className="flex items-center gap-2.5 mb-3">
-        <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-base ${chip}`}>{icon}</span>
-        <h2 className="text-[15px] font-bold">{title}</h2>
-        <span className="ml-auto text-[11px] font-bold text-gray-400 bg-gray-100 rounded-full px-2.5 py-1">{tasks.length}</span>
+    <section className="mb-8">
+      <div className="flex items-center gap-2 mb-3">
+        <span className={`w-6 h-6 rounded-md flex items-center justify-center ${accent}`}>{icon}</span>
+        <h2 className="text-[13px] font-semibold uppercase tracking-wide text-gray-600">{title}</h2>
+        <span className="text-[11px] font-bold text-gray-400 tnum">{tasks.length}</span>
+        <div className="flex-1 h-px bg-gray-200/70 ml-1" />
       </div>
       <div className="space-y-2.5">
         {tasks.map((t) => (
@@ -62,51 +76,41 @@ function HomeInner() {
   const doneRecent = mine.filter((t) => t.status === 'DONE').slice(0, 5);
   const createdOpen = created.filter((t) => !['DONE', 'CANCELLED'].includes(t.status) && t.assignee_id !== me?.id);
 
-  const heroChips = [
-    { v: needsAck.length, l: 'need response', hot: needsAck.length > 0 },
-    { v: escalated.length, l: 'escalated', hot: escalated.length > 0 },
-    { v: inProgress.length, l: 'in progress', hot: false },
-    { v: dueToday.length, l: 'due today', hot: dueToday.length > 0 },
-  ];
-
   return (
     <>
-      {/* Hero */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-600 via-brand-500 to-violet-500 text-white p-5 sm:p-7 mb-7 shadow-xl shadow-brand-600/20">
-        <div className="absolute -right-10 -top-14 w-52 h-52 rounded-full bg-white/10" />
-        <div className="absolute right-16 -bottom-20 w-40 h-40 rounded-full bg-white/[0.07]" />
-        <div className="relative">
-          <p className="text-white/70 text-xs font-medium tracking-wide uppercase">{clock?.date ?? ' '}</p>
-          <h1 className="text-2xl sm:text-[28px] font-extrabold mt-1 tracking-tight">
-            {clock?.greeting ?? 'Hello'}{me ? `, ${me.name.split(' ')[0]}` : ''} 👋
+      {/* Header */}
+      <div className="flex items-end justify-between flex-wrap gap-4 mb-6">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">{clock?.date ?? ' '}</p>
+          <h1 className="text-[24px] font-bold tracking-tight mt-1">
+            {clock?.greeting ?? 'Hello'}{me ? `, ${me.name.split(' ')[0]}` : ''}
           </h1>
-          <div className="flex gap-2 mt-5 flex-wrap">
-            {heroChips.map((c) => (
-              <div key={c.l} className={`rounded-2xl px-3.5 py-2 backdrop-blur-sm ${c.hot ? 'bg-white text-brand-700' : 'bg-white/15 text-white'}`}>
-                <span className="text-lg font-extrabold leading-none">{c.v}</span>
-                <span className={`ml-1.5 text-[11px] font-medium ${c.hot ? 'text-brand-500' : 'text-white/70'}`}>{c.l}</span>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-2.5 mt-5">
-            <button className="btn bg-white text-brand-700 hover:bg-brand-50 shadow-md" onClick={() => setComposerOpen(true)}>
-              ＋ New task
-            </button>
-            <Link href="/scribble" className="btn bg-white/15 text-white border border-white/25 hover:bg-white/25">
-              ✏️ Scribble
-            </Link>
-          </div>
+        </div>
+        <div className="flex gap-2">
+          <Link href="/scribble" className="btn-secondary">
+            <IconPen className="w-4 h-4" /> Scribble
+          </Link>
+          <button className="btn-primary" onClick={() => setComposerOpen(true)}>
+            <IconPlus className="w-4 h-4" /> New task
+          </button>
         </div>
       </div>
 
-      {/* Needs acknowledgment — highest urgency */}
+      {/* Focus metrics */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+        <Metric icon={<IconZap className="w-[18px] h-[18px]" />} chip="bg-red-50 text-red-500" value={needsAck.length} label="Need response" hot={needsAck.length > 0} />
+        <Metric icon={<IconAlert className="w-[18px] h-[18px]" />} chip="bg-orange-50 text-orange-500" value={escalated.length} label="Escalated" hot={escalated.length > 0} />
+        <Metric icon={<IconActivity className="w-[18px] h-[18px]" />} chip="bg-brand-50 text-brand-500" value={inProgress.length} label="In progress" />
+        <Metric icon={<IconCalendar className="w-[18px] h-[18px]" />} chip="bg-sky-50 text-sky-500" value={dueToday.length} label="Due today" />
+      </div>
+
       {needsAck.length > 0 && (
         <Section
-          icon="⚡" chip="bg-red-100 text-red-600"
-          title="Needs your response — 30-min SLA" tasks={needsAck}
+          accent="bg-red-50 text-red-500" icon={<IconZap className="w-3.5 h-3.5" />}
+          title="Needs your response · 30-min SLA" tasks={needsAck}
           extra={(t) => (
             <button
-              className="absolute right-3 bottom-3 btn-primary !py-1.5 !px-3 text-xs"
+              className="absolute right-3 bottom-3 btn-primary !py-1.5 !px-3 !text-xs"
               onClick={(e) => { e.preventDefault(); setAckTask(t); }}>
               Acknowledge + ETA
             </button>
@@ -114,20 +118,22 @@ function HomeInner() {
         />
       )}
 
-      <Section icon="🚨" chip="bg-red-100 text-red-600" title="Escalated — explanation required" tasks={escalated} />
-      <Section icon="📅" chip="bg-orange-100 text-orange-600" title="Due today" tasks={dueToday} />
-      <Section icon="🔄" chip="bg-brand-100 text-brand-600" title="In progress" tasks={inProgress.filter((t) => !dueToday.includes(t))} />
-      <Section icon="📤" chip="bg-violet-100 text-violet-600" title="Assigned by me (open)" tasks={createdOpen} />
-      <Section icon="✅" chip="bg-emerald-100 text-emerald-600" title="Recently done" tasks={doneRecent} />
+      <Section accent="bg-red-50 text-red-500" icon={<IconAlert className="w-3.5 h-3.5" />} title="Escalated · explanation required" tasks={escalated} />
+      <Section accent="bg-orange-50 text-orange-500" icon={<IconCalendar className="w-3.5 h-3.5" />} title="Due today" tasks={dueToday} />
+      <Section accent="bg-brand-50 text-brand-500" icon={<IconActivity className="w-3.5 h-3.5" />} title="In progress" tasks={inProgress.filter((t) => !dueToday.includes(t))} />
+      <Section accent="bg-violet-50 text-violet-500" icon={<IconSend className="w-3.5 h-3.5" />} title="Assigned by me · open" tasks={createdOpen} />
+      <Section accent="bg-emerald-50 text-emerald-500" icon={<IconCheckCircle className="w-3.5 h-3.5" />} title="Recently done" tasks={doneRecent} />
 
       {mine.length === 0 && created.length === 0 && (
-        <div className="card p-12 text-center">
-          <div className="text-5xl mb-3">🎉</div>
-          <div className="font-bold text-gray-700">All clear!</div>
-          <p className="text-sm text-gray-400 mt-1 mb-5">No tasks on your plate. Create one or sketch it out on the board.</p>
+        <div className="card p-14 text-center">
+          <span className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-500 flex items-center justify-center mx-auto mb-4">
+            <IconCheckCircle className="w-7 h-7" />
+          </span>
+          <div className="font-bold text-gray-800">All clear</div>
+          <p className="text-[13px] text-gray-400 mt-1 mb-6">Nothing on your plate. Create a task or sketch one on the board.</p>
           <div className="flex gap-2.5 justify-center">
-            <button className="btn-primary" onClick={() => setComposerOpen(true)}>＋ New task</button>
-            <Link href="/scribble" className="btn-secondary">✏️ Open Scribble</Link>
+            <button className="btn-primary" onClick={() => setComposerOpen(true)}><IconPlus className="w-4 h-4" /> New task</button>
+            <Link href="/scribble" className="btn-secondary"><IconPen className="w-4 h-4" /> Open Scribble</Link>
           </div>
         </div>
       )}
