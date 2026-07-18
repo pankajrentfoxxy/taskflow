@@ -12,6 +12,7 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
+    "@excalidraw/excalidraw": "0.18.1",
     "bcryptjs": "^2.4.3",
     "next": "^15.3.3",
     "react": "^19.1.0",
