@@ -4,6 +4,7 @@ import projectRoutes from "./routes/project.routes.js";
 import teamRoutes from "./routes/team.routes.js";
 import taskStatusRoutes from "./routes/taskStatus.routes.js";
 import taskTypeRoutes from "./routes/taskType.routes.js";
+import scribbleRoutes from "./routes/scribble.routes.js";
 
 const router = express.Router();
 
@@ -13,7 +14,10 @@ const defaultRoutes = [
   { path: "/teams", route: teamRoutes },
   { path: "/task-statuses", route: taskStatusRoutes },
   { path: "/task-types", route: taskTypeRoutes },
-];defaultRoutes.forEach((route) => {
+  { path: "/scribble", route: scribbleRoutes },
+];
+
+defaultRoutes.forEach((route) => {
   router.use(route.path, route.route);
 });
 

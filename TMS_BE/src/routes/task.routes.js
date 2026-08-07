@@ -43,6 +43,16 @@ const taskBodyFields = {
   due_date: Joi.number().integer().positive().allow(null),
   priority: Joi.string().valid(...TASK_PRIORITIES),
   timeline: timelineSchema,
+  scribble: Joi.alternatives()
+    .try(
+      Joi.object({
+        elements: Joi.array().required(),
+        appState: Joi.object().unknown(true),
+        files: Joi.object().unknown(true),
+      }),
+      Joi.valid(null),
+    )
+    .optional(),
 };
 
 const listTasksSchema = {
@@ -84,6 +94,7 @@ const updateTaskSchema = {
     due_date: taskBodyFields.due_date,
     priority: taskBodyFields.priority,
     timeline: taskBodyFields.timeline,
+    scribble: taskBodyFields.scribble,
   }).min(1),
 };
 

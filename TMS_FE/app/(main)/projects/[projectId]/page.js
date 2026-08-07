@@ -6,6 +6,7 @@ import { apiGet } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { CreateTaskDialog } from "@/components/create-task-dialog";
+import { PersonalScribbleButton } from "@/components/personal-scribble-dialog";
 import { ProjectPageSkeleton } from "@/components/project-page-skeleton";
 import { ProjectTasksBoard } from "@/components/project-tasks-board";
 
@@ -148,7 +149,10 @@ export default function ProjectPage() {
               </p>
             )}
           </div>
-          <Button onClick={() => setCreateOpen(true)}>Add task</Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <PersonalScribbleButton token={token} />
+            <Button onClick={() => setCreateOpen(true)}>Add task</Button>
+          </div>
         </div>
 
         <div className="space-y-3">

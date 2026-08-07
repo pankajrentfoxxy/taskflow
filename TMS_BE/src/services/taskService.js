@@ -68,6 +68,7 @@ const toPublicTask = (task, { includeNestedSubtasks = true } = {}) => ({
   due_date: task.due_date,
   priority: task.priority,
   timeline: normalizeTimelineValue(task.timeline),
+  scribble: task.scribble ?? null,
   created_by: task.created_by,
   created_at: task.created_at,
   updated_at: task.updated_at,
@@ -109,6 +110,23 @@ const defaultIncludes = [
   assigneesInclude,
   creatorInclude,
 ];
+
+function normalizeScribblePayload(scribble) {
+  if (scribble == null) {
+    return null;
+  }
+
+  const elements = Array.isArray(scribble.elements) ? scribble.elements : [];
+  if (elements.length === 0) {
+    return null;
+  }
+
+  return {
+    elements,
+    appState: scribble.appState ?? { viewBackgroundColor: "#ffffff" },
+    files: scribble.files ?? {},
+  };
+}
 
 function normalizeAssigneeIds(assigneeIds) {
   if (assigneeIds == null) {
@@ -496,6 +514,9 @@ export async function updateTask(userId, projectId, taskId, payload) {
     ...(payload.priority !== undefined ? { priority: payload.priority } : {}),
     ...(payload.timeline !== undefined
       ? { timeline: buildTimelinePayload(payload.timeline, userId) }
+      : {}),
+    ...(payload.scribble !== undefined
+      ? { scribble: normalizeScribblePayload(payload.scribble) }
       : {}),
     updated_at: now(),
   });
