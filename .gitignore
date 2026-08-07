@@ -1,15 +1,33 @@
-# Dependencies
+# Dependencies (all folders)
 node_modules/
+**/node_modules/
 
 # Next.js
 .next/
+**/.next/
 out/
 next-env.d.ts
 
-# Environment
+# Environment files (never commit secrets)
 .env
 .env.*
+**/.env
+**/.env.*
 !.env.example
+!**/.env.example
+
+# TMS Backend
+TMS_BE/node_modules/
+TMS_BE/.env
+TMS_BE/.env.*
+TMS_BE/uploads/*
+!TMS_BE/uploads/.gitkeep
+
+# TMS Frontend
+TMS_FE/node_modules/
+TMS_FE/.env
+TMS_FE/.env.*
+TMS_FE/.next/
 
 # Logs & debug
 *.log
@@ -20,10 +38,6 @@ npm-debug.log*
 Thumbs.db
 .idea/
 .vscode/
-
-# Backend uploads (keep folder, ignore files)
-TMS_BE/uploads/*
-!TMS_BE/uploads/.gitkeep
 
 # Build / cache
 .turbo
