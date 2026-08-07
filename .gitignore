@@ -33,3 +33,8 @@ data/
 .eslintcache
 *.tsbuildinfo
 .vercel
+
+# SQL dumps / local migrations
+tms.sql
+tms_migrate.sql
+*.sql.bak
