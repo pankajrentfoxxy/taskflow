@@ -46,6 +46,11 @@ export default (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: { start_date: null, end_date: null },
       },
+      scribble: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: null,
+      },
       created_by: {
         type: DataTypes.INTEGER,
         allowNull: false,

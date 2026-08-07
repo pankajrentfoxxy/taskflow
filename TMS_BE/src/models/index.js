@@ -14,6 +14,7 @@ import defineCommentReaction from "./CommentReaction.js";
 import defineTeam from "./Team.js";
 import defineTeamMember from "./TeamMember.js";
 import defineTaskAssignee from "./TaskAssignee.js";
+import defineScribble from "./Scribble.js";
 
 const Authentication = defineAuthentication(sequelize, DataTypes);
 const Role = defineRole(sequelize, DataTypes);
@@ -27,6 +28,7 @@ const Task = defineTask(sequelize, DataTypes);
 const Comment = defineComment(sequelize, DataTypes);
 const CommentReaction = defineCommentReaction(sequelize, DataTypes);
 const TaskAssignee = defineTaskAssignee(sequelize, DataTypes);
+const Scribble = defineScribble(sequelize, DataTypes);
 const Team = defineTeam(sequelize, DataTypes);
 const TeamMember = defineTeamMember(sequelize, DataTypes);
 
@@ -200,6 +202,13 @@ Team.belongsToMany(Authentication, {
   as: "memberUsers",
 });
 
+Authentication.hasMany(Scribble, {
+  foreignKey: "user_id",
+  as: "scribbles",
+  onDelete: "CASCADE",
+});
+Scribble.belongsTo(Authentication, { foreignKey: "user_id", as: "author" });
+
 const db = {
   sequelize,
   Role,
@@ -214,6 +223,7 @@ const db = {
   TaskAssignee,
   Comment,
   CommentReaction,
+  Scribble,
   Team,
   TeamMember,
 };
@@ -232,6 +242,7 @@ export {
   TaskAssignee,
   Comment,
   CommentReaction,
+  Scribble,
   Team,
   TeamMember,
   db,

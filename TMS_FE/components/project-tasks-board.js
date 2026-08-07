@@ -19,6 +19,7 @@ import {
   TimelinePresetPicker,
 } from "@/components/date-preset-picker";
 import { TaskCommentsPopover } from "@/components/task-comments-popover";
+import { DrawCell } from "@/components/task-draw-dialog";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -37,7 +38,7 @@ import {
 const PRIORITIES = TASK_PRIORITIES;
 
 const ROW_GRID =
-  "grid grid-cols-[minmax(220px,2fr)_72px_88px_96px_112px_72px_120px] items-center gap-3 px-3";
+  "grid grid-cols-[minmax(220px,2fr)_72px_88px_96px_112px_72px_120px_48px] items-center gap-3 px-3";
 
 const STATUS_STYLES = {
   "to do": {
@@ -499,6 +500,15 @@ function EditableTaskRow({
         timeline={task.timeline}
         onChange={(value) => patchTask({ timeline: value })}
       />
+
+      <DrawCell
+        projectId={projectId}
+        taskId={task.task_id}
+        taskName={task.name}
+        token={token}
+        scribble={task.scribble}
+        onSaved={onUpdated}
+      />
     </TaskRowShell>
   );
 }
@@ -656,6 +666,8 @@ function DraftTaskRow({
           timeline={draft.timeline}
           onChange={(value) => onDraftChange({ ...draft, timeline: value })}
         />
+
+        <DrawCell disabled />
       </TaskRowShell>
 
       <div className="flex items-center justify-end gap-2 px-3 py-2">
@@ -851,7 +863,7 @@ function StatusGroup({
 
       {!collapsed ? (
         <div className="overflow-x-auto">
-          <div className="min-w-[760px]">
+          <div className="min-w-[820px]">
             <div
               className={cn(
                 ROW_GRID,
@@ -865,6 +877,7 @@ function StatusGroup({
               <span className="text-center">Status</span>
               <span className="text-center">Comments</span>
               <span className="text-center">Timeline</span>
+              <span className="text-center">Scribble</span>
             </div>
 
             {tasks.length === 0 && !draft ? (

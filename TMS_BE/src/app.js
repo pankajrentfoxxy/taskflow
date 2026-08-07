@@ -92,28 +92,6 @@ app.use(errorHandler);
     await db.Role.sync();
     await db.Authentication.sync();
     await db.Project.sync();
-    try {
-      await db.sequelize.query(`
-        DO $$
-        BEGIN
-          IF NOT EXISTS (
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name = 'project_members' AND column_name = 'created_by'
-          ) THEN
-            ALTER TABLE project_members ADD COLUMN created_by INTEGER;
-          END IF;
-        END $$;
-      `);
-      await db.sequelize.query(`
-        UPDATE project_members pm
-        SET created_by = p.created_by
-        FROM projects p
-        WHERE pm.project_id = p.project_id
-          AND pm.created_by IS NULL;
-      `);
-    } catch (_) {
-      // ignore migration errors in environments where backfill is not needed
-    }
     await db.ProjectMember.sync({ alter: true });
     await db.Team.sync();
     await db.TeamMember.sync();
@@ -121,60 +99,11 @@ app.use(errorHandler);
     await db.ErrorLog.sync();
     await db.TaskStatus.sync();
     await db.TaskType.sync();
-    try {
-      await db.sequelize.query(`
-        DO $$
-        BEGIN
-          IF EXISTS (
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name = 'tasks' AND column_name = 'title'
-          ) AND NOT EXISTS (
-            SELECT 1 FROM information_schema.columns
-            WHERE table_name = 'tasks' AND column_name = 'name'
-          ) THEN
-            ALTER TABLE tasks RENAME COLUMN title TO name;
-          END IF;
-        END $$;
-      `);
-    } catch (_) {
-      // ignore migration errors in environments where rename is not needed
-    }
     await db.TaskAssignee.sync({ alter: true });
-    try {
-      await db.sequelize.query(`
-        UPDATE tasks
-        SET timeline = '{"start_date": null, "end_date": null}'::jsonb
-        WHERE jsonb_typeof(timeline) = 'array';
-      `);
-    } catch (_) {
-      // ignore migration errors when timeline is already object-shaped
-    }
-    try {
-      await db.sequelize.query(`
-        INSERT INTO task_assignees (task_id, user_id, created_by, created_at, updated_at)
-        SELECT t.task_id, t.assignee_id, t.created_by, t.created_at, t.updated_at
-        FROM tasks t
-        WHERE t.assignee_id IS NOT NULL
-          AND NOT EXISTS (
-            SELECT 1
-            FROM task_assignees ta
-            WHERE ta.task_id = t.task_id
-              AND ta.user_id = t.assignee_id
-          );
-      `);
-    } catch (_) {
-      // ignore migration errors when legacy assignee_id column is already removed
-    }
     await db.Task.sync({ alter: true });
-    try {
-      await db.sequelize.query(`
-        ALTER TABLE tasks DROP COLUMN IF EXISTS assignee_id;
-      `);
-    } catch (_) {
-      // ignore migration errors when legacy assignee_id column is already removed
-    }
     await db.Comment.sync();
     await db.CommentReaction.sync();
+    await db.Scribble.sync({ alter: true });
     console.log("✅ Database connected");
   } catch (err) {
     console.error("❌ Unable to connect to the database:", err);
