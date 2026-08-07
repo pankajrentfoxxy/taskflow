@@ -22,8 +22,5 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
         run: |
-          ssh -o StrictHostKeyChecking=no "${VPS_USER}@${VPS_HOST}" << 'EOF'
-          set -euo pipefail
-          cd /var/www/taskflow
-          DEPLOY_BRANCH=task-management-flow-v2 bash scripts/deploy.sh
-          EOF
+          ssh -o StrictHostKeyChecking=no "${VPS_USER}@${VPS_HOST}" \
+            "set -euo pipefail && cd /var/www/taskflow && DEPLOY_BRANCH=task-management-flow-v2 bash scripts/deploy.sh"
