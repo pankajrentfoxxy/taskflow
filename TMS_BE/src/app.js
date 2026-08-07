@@ -139,7 +139,8 @@ app.use(errorHandler);
     } catch (_) {
       // ignore migration errors in environments where rename is not needed
     }
-    await db.TaskAssignee.sync({ alter: true });
+    // tasks must exist before task_assignees (FK) and comments
+    await db.Task.sync({ alter: true });
     try {
       await db.sequelize.query(`
         UPDATE tasks
@@ -149,6 +150,7 @@ app.use(errorHandler);
     } catch (_) {
       // ignore migration errors when timeline is already object-shaped
     }
+    await db.TaskAssignee.sync({ alter: true });
     try {
       await db.sequelize.query(`
         INSERT INTO task_assignees (task_id, user_id, created_by, created_at, updated_at)
@@ -165,7 +167,6 @@ app.use(errorHandler);
     } catch (_) {
       // ignore migration errors when legacy assignee_id column is already removed
     }
-    await db.Task.sync({ alter: true });
     try {
       await db.sequelize.query(`
         ALTER TABLE tasks DROP COLUMN IF EXISTS assignee_id;

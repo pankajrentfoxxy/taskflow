@@ -39,8 +39,20 @@ Thumbs.db
 .idea/
 .vscode/
 
+# Backend uploads (keep folder, ignore files)
+TMS_BE/uploads/*
+!TMS_BE/uploads/.gitkeep
+
+# Local/runtime data
+data/
+
 # Build / cache
 .turbo
 .eslintcache
 *.tsbuildinfo
 .vercel
+
+# SQL dumps / local migrations
+tms.sql
+tms_migrate.sql
+*.sql.bak
