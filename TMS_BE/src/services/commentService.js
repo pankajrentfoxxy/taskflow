@@ -82,7 +82,7 @@ async function loadReactionsByCommentId(commentIds) {
 
 async function assertTaskAccess(userId, projectId, taskId) {
   const task = await Task.findOne({
-    where: { task_id: taskId, project_id: projectId },
+    where: { task_id: taskId, project_id: projectId, deleted: false },
   });
 
   if (!task) {

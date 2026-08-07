@@ -45,6 +45,7 @@ export async function logActivity({
   action,
   entityType = null,
   entityId = null,
+  taskId = null,
   description = null,
   req = null,
   statusCode = null,
@@ -52,12 +53,16 @@ export async function logActivity({
 }) {
   const requestPath = req ? getRequestPath(req) : null;
   const entity = req ? deriveEntity(req) : { entity_type: entityType, entity_id: entityId };
+  const resolvedTaskId =
+    taskId ??
+    (req?.params?.taskId != null ? Number(req.params.taskId) : null);
 
   return ActivityLog.create({
     user_id: userId,
     action: action || (req ? deriveAction(req) : "unknown"),
     entity_type: entityType ?? entity.entity_type,
     entity_id: entityId ?? entity.entity_id,
+    task_id: resolvedTaskId,
     description,
     method: req?.method || null,
     path: requestPath,

@@ -9,9 +9,11 @@ import {
   Flag,
   MessageSquare,
   Plus,
+  Trash2,
+  Eye,
   UserRound,
 } from "lucide-react";
-import { apiGet, apiPatch, apiPost } from "@/lib/api";
+import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
 import { Avatar, AvatarFallback, AvatarGroup } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +21,7 @@ import {
   TimelinePresetPicker,
 } from "@/components/date-preset-picker";
 import { TaskCommentsPopover } from "@/components/task-comments-popover";
+import { TaskDetailDialog } from "@/components/task-detail-dialog";
 import { DrawCell } from "@/components/task-draw-dialog";
 import {
   DropdownMenu,
@@ -367,8 +370,10 @@ function TaskRowShell({
 function EditableTaskRow({
   task,
   projectId,
+  projectName,
   token,
   statuses,
+  taskTypes,
   members,
   isSubtask = false,
   onAddSubtask,
@@ -376,9 +381,12 @@ function EditableTaskRow({
   expanded = false,
   onToggleExpand,
   onUpdated,
+  onDeleted,
 }) {
   const [name, setName] = useState(task.name);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
   const showExpandControl = !isSubtask && subtaskCount > 0;
 
   useEffect(() => {
@@ -410,9 +418,50 @@ function EditableTaskRow({
     await patchTask({ name: trimmed });
   }
 
+  async function handleDelete() {
+    if (!token || deleting || saving) return;
+
+    const confirmed = window.confirm(
+      `Delete "${task.name}"? This task will be removed from the board.`,
+    );
+    if (!confirmed) return;
+
+    setDeleting(true);
+    try {
+      await apiDelete(`/projects/${projectId}/tasks/${task.task_id}`, {
+        token,
+      });
+      onDeleted?.(task.task_id);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
-    <TaskRowShell saving={saving} isSubtask={isSubtask}>
+    <TaskRowShell saving={saving || deleting} isSubtask={isSubtask}>
       <div className="flex min-w-0 items-center gap-1">
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={deleting || saving || !token}
+          className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-all group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+          aria-label={`Delete ${task.name}`}
+          title="Delete task"
+        >
+          <Trash2 className="size-3.5" />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setDetailOpen(true)}
+          disabled={!token || deleting || saving}
+          className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-all group-hover:opacity-100 hover:bg-muted hover:text-foreground disabled:opacity-40"
+          aria-label={`View ${task.name}`}
+          title="View task details"
+        >
+          <Eye className="size-3.5" />
+        </button>
+
         {showExpandControl ? (
           <button
             type="button"
@@ -508,6 +557,20 @@ function EditableTaskRow({
         token={token}
         scribble={task.scribble}
         onSaved={onUpdated}
+      />
+
+      <TaskDetailDialog
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        projectId={projectId}
+        projectName={projectName}
+        taskId={task.task_id}
+        task={task}
+        token={token}
+        statuses={statuses}
+        taskTypes={taskTypes}
+        members={members}
+        onUpdated={onUpdated}
       />
     </TaskRowShell>
   );
@@ -699,11 +762,13 @@ function DraftTaskRow({
 function TaskWithSubtasks({
   task,
   projectId,
+  projectName,
   token,
   statuses,
   taskTypes,
   members,
   onUpdated,
+  onDeleted,
 }) {
   const [expanded, setExpanded] = useState(false);
   const [subtasks, setSubtasks] = useState([]);
@@ -758,6 +823,12 @@ function TaskWithSubtasks({
     onUpdated?.(task);
   }
 
+  function handleSubtaskDeleted(subtaskId) {
+    setSubtasks((current) =>
+      current.filter((item) => item.task_id !== subtaskId),
+    );
+  }
+
   const subtaskCount = subtasks.length;
 
   return (
@@ -765,14 +836,17 @@ function TaskWithSubtasks({
       <EditableTaskRow
         task={task}
         projectId={projectId}
+        projectName={projectName}
         token={token}
         statuses={statuses}
+        taskTypes={taskTypes}
         members={members}
         onAddSubtask={handleAddSubtask}
         subtaskCount={subtaskCount}
         expanded={expanded}
         onToggleExpand={handleToggleExpand}
         onUpdated={onUpdated}
+        onDeleted={onDeleted}
       />
 
       {expanded
@@ -781,11 +855,14 @@ function TaskWithSubtasks({
               key={subtask.task_id}
               task={subtask}
               projectId={projectId}
+              projectName={projectName}
               token={token}
               statuses={statuses}
+              taskTypes={taskTypes}
               members={members}
               isSubtask
               onUpdated={handleSubtaskUpdated}
+              onDeleted={handleSubtaskDeleted}
             />
           ))
         : null}
@@ -828,12 +905,14 @@ function StatusGroup({
   status,
   tasks,
   projectId,
+  projectName,
   token,
   statuses,
   taskTypes,
   members,
   onTaskCreated,
   onTaskUpdated,
+  onTaskDeleted,
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [draft, setDraft] = useState(null);
@@ -890,11 +969,13 @@ function StatusGroup({
                   key={task.task_id}
                   task={task}
                   projectId={projectId}
+                  projectName={projectName}
                   token={token}
                   statuses={statuses}
                   taskTypes={taskTypes}
                   members={members}
                   onUpdated={onTaskUpdated}
+                  onDeleted={onTaskDeleted}
                 />
               ))
             )}
@@ -935,12 +1016,14 @@ function StatusGroup({
 export function ProjectTasksBoard({
   columns,
   projectId,
+  projectName,
   token,
   statuses,
   taskTypes,
   members,
   onTaskCreated,
   onTaskUpdated,
+  onTaskDeleted,
 }) {
   return (
     <div className="flex w-full flex-col gap-3">
@@ -950,12 +1033,14 @@ export function ProjectTasksBoard({
           status={status}
           tasks={tasks}
           projectId={projectId}
+          projectName={projectName}
           token={token}
           statuses={statuses}
           taskTypes={taskTypes}
           members={members}
           onTaskCreated={onTaskCreated}
           onTaskUpdated={onTaskUpdated}
+          onTaskDeleted={onTaskDeleted}
         />
       ))}
     </div>

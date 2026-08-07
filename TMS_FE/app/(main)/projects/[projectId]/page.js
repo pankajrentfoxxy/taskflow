@@ -57,6 +57,10 @@ export default function ProjectPage() {
     );
   }
 
+  function handleTaskDeleted(taskId) {
+    setTasks((prev) => prev.filter((item) => item.task_id !== taskId));
+  }
+
   useEffect(() => {
     if (!token || !params.projectId) {
       setLoading(false);
@@ -164,12 +168,14 @@ export default function ProjectPage() {
             <ProjectTasksBoard
               columns={tasksByStatus}
               projectId={params.projectId}
+              projectName={project.name}
               token={token}
               statuses={statuses}
               taskTypes={taskTypes}
               members={projectMembers}
               onTaskCreated={handleTaskCreated}
               onTaskUpdated={handleTaskUpdated}
+              onTaskDeleted={handleTaskDeleted}
             />
           )}
         </div>

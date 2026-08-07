@@ -1,12 +1,15 @@
 import httpStatus from "http-status";
+import bcrypt from "bcryptjs";
 import { Op } from "sequelize";
 import {
   Project,
   ProjectMember,
   Authentication,
+  Role,
   sequelize,
 } from "../models/index.js";
 import ApiError from "../utils/ApiError.js";
+import { getRoleByName } from "../config/roles.js";
 
 const now = () => Date.now();
 
@@ -33,7 +36,7 @@ const toPublicProject = (project) => ({
 const memberUserInclude = {
   model: Authentication,
   as: "user",
-  attributes: ["user_id", "email", "full_name"],
+  attributes: ["user_id", "email", "full_name", "phone_number"],
 };
 
 const memberAddedByInclude = {
@@ -54,6 +57,7 @@ const toPublicMember = (member) => ({
         user_id: member.user.user_id,
         email: member.user.email,
         full_name: member.user.full_name,
+        phone_number: member.user.phone_number,
       }
     : undefined,
   added_by: member.addedBy
@@ -66,7 +70,9 @@ const toPublicMember = (member) => ({
 });
 
 async function getProjectRecord(projectId) {
-  const project = await Project.findByPk(projectId);
+  const project = await Project.findOne({
+    where: { project_id: projectId, deleted: false },
+  });
   if (!project) {
     throw new ApiError(httpStatus.NOT_FOUND, "Project not found");
   }
@@ -96,6 +102,60 @@ async function assertProjectAccess(userId, projectId, { requireCreator = false }
   }
 
   return project;
+}
+
+async function resolveDefaultMemberRoleId() {
+  const configuredRole = getRoleByName("team_member");
+  if (configuredRole?.id) {
+    const role = await Role.findByPk(configuredRole.id);
+    if (role) return role.role_id;
+  }
+
+  const role = await Role.findOne({ where: { slug: "team_member" } });
+  if (role) return role.role_id;
+
+  throw new ApiError(
+    httpStatus.INTERNAL_SERVER_ERROR,
+    "Default member role is not configured",
+  );
+}
+
+async function resolveOrCreateMemberUser(payload, transaction) {
+  if (payload.user_id) {
+    const user = await Authentication.findByPk(payload.user_id, { transaction });
+    if (!user) {
+      throw new ApiError(httpStatus.NOT_FOUND, "User not found");
+    }
+    return user;
+  }
+
+  const email = payload.email.trim().toLowerCase();
+  const existing = await Authentication.findOne({
+    where: { email },
+    transaction,
+  });
+  if (existing) {
+    throw new ApiError(httpStatus.CONFLICT, "Email already registered");
+  }
+
+  const roleId = await resolveDefaultMemberRoleId();
+  const passwordHash = await bcrypt.hash(payload.password, 10);
+  const phoneDigits = String(payload.phone_number || "").replace(/\D/g, "");
+
+  return Authentication.create(
+    {
+      email,
+      full_name: payload.full_name.trim(),
+      phone_number: phoneDigits || null,
+      password_hash: passwordHash,
+      role_id: roleId,
+      is_active: true,
+      is_blocked: false,
+      created_at: now(),
+      updated_at: now(),
+    },
+    { transaction },
+  );
 }
 
 export async function createProject(userId, payload) {
@@ -147,7 +207,10 @@ export async function listProjects(userId) {
     : { created_by: userId };
 
   const projects = await Project.findAll({
-    where: accessFilter,
+    where: {
+      deleted: false,
+      ...accessFilter,
+    },
     include: [
       {
         model: Authentication,
@@ -164,7 +227,8 @@ export async function listProjects(userId) {
 export async function getProjectById(userId, projectId) {
   await assertProjectAccess(userId, projectId);
 
-  const project = await Project.findByPk(projectId, {
+  const project = await Project.findOne({
+    where: { project_id: projectId, deleted: false },
     include: [
       {
         model: Authentication,
@@ -178,6 +242,10 @@ export async function getProjectById(userId, projectId) {
       },
     ],
   });
+
+  if (!project) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Project not found");
+  }
 
   return toPublicProject(project);
 }
@@ -204,13 +272,7 @@ export async function deleteProject(userId, projectId) {
     requireCreator: true,
   });
 
-  await sequelize.transaction(async (transaction) => {
-    await ProjectMember.destroy({
-      where: { project_id: projectId },
-      transaction,
-    });
-    await project.destroy({ transaction });
-  });
+  await project.update({ deleted: true, updated_at: now() });
 
   return { message: "Project deleted" };
 }
@@ -230,25 +292,31 @@ export async function listProjectMembers(userId, projectId) {
 export async function addProjectMember(userId, projectId, payload) {
   await assertProjectAccess(userId, projectId, { requireCreator: true });
 
-  const targetUser = await Authentication.findByPk(payload.user_id);
-  if (!targetUser) {
-    throw new ApiError(httpStatus.NOT_FOUND, "User not found");
-  }
+  const member = await sequelize.transaction(async (transaction) => {
+    const targetUser = await resolveOrCreateMemberUser(payload, transaction);
 
-  const existing = await ProjectMember.findOne({
-    where: { project_id: projectId, user_id: payload.user_id },
-  });
+    const existing = await ProjectMember.findOne({
+      where: { project_id: projectId, user_id: targetUser.user_id },
+      transaction,
+    });
 
-  if (existing) {
-    throw new ApiError(httpStatus.CONFLICT, "User is already a member of this project");
-  }
+    if (existing) {
+      throw new ApiError(
+        httpStatus.CONFLICT,
+        "User is already a member of this project",
+      );
+    }
 
-  const member = await ProjectMember.create({
-    project_id: projectId,
-    user_id: payload.user_id,
-    created_by: userId,
-    created_at: now(),
-    updated_at: now(),
+    return ProjectMember.create(
+      {
+        project_id: projectId,
+        user_id: targetUser.user_id,
+        created_by: userId,
+        created_at: now(),
+        updated_at: now(),
+      },
+      { transaction },
+    );
   });
 
   const fullMember = await ProjectMember.findByPk(member.project_member_id, {

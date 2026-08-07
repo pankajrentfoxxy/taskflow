@@ -47,9 +47,17 @@ const updateProjectSchema = {
 
 const addMemberSchema = {
   params: projectIdParam,
-  body: Joi.object({
-    user_id: Joi.number().integer().positive().required(),
-  }),
+  body: Joi.alternatives().try(
+    Joi.object({
+      user_id: Joi.number().integer().positive().required(),
+    }),
+    Joi.object({
+      full_name: Joi.string().trim().min(1).max(255).required(),
+      email: Joi.string().email().required(),
+      phone_number: Joi.string().trim().min(5).max(20).required(),
+      password: Joi.string().min(6).max(100).required(),
+    }),
+  ),
 };
 
 const updateMemberSchema = {

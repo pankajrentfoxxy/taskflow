@@ -16,10 +16,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-function getUserLabel(user) {
-  return user?.full_name || user?.email || `User #${user?.user_id}`;
-}
-
 export function RenameProjectDialog({
   open,
   onOpenChange,
@@ -118,83 +114,48 @@ export function AddProjectMembersDialog({
   token,
   onMembersChanged,
 }) {
-  const [members, setMembers] = useState([]);
-  const [candidates, setCandidates] = useState([]);
-  const [selectedUserId, setSelectedUserId] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!open || !token || !project) {
-      return;
-    }
-
-    let cancelled = false;
-
-    async function loadData() {
-      setLoading(true);
+    if (open) {
+      setFullName("");
+      setEmail("");
+      setPhoneNumber("");
+      setPassword("");
       setError("");
-      setSelectedUserId("");
-
-      try {
-        const teamsData = await apiGet("/teams", { token });
-        const teams = teamsData.teams || [];
-        const memberResponses = await Promise.all(
-          teams.map((team) =>
-            apiGet(`/teams/${team.team_id}/members`, { token }).catch(() => ({
-              members: [],
-            })),
-          ),
-        );
-
-        const projectMembersData = await apiGet(
-          `/projects/${project.project_id}/members`,
-          { token },
-        );
-
-        if (cancelled) return;
-
-        const existingUserIds = new Set(
-          (projectMembersData.members || []).map((member) => member.user_id),
-        );
-        const usersById = new Map();
-
-        for (const response of memberResponses) {
-          for (const member of response.members || []) {
-            if (member.user && !existingUserIds.has(member.user.user_id)) {
-              usersById.set(member.user.user_id, member.user);
-            }
-          }
-        }
-
-        setMembers(projectMembersData.members || []);
-        setCandidates(
-          [...usersById.values()].sort((left, right) =>
-            getUserLabel(left).localeCompare(getUserLabel(right)),
-          ),
-        );
-      } catch (err) {
-        if (!cancelled) {
-          setError(err.message || "Failed to load members.");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
+      setSubmitting(false);
     }
-
-    loadData();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, project, token]);
+  }, [open, project]);
 
   async function handleSubmit(event) {
     event.preventDefault();
-    if (!token || !project || !selectedUserId || submitting) return;
+    if (!token || !project || submitting) return;
+
+    const trimmedName = fullName.trim();
+    const trimmedEmail = email.trim();
+    const trimmedPhone = phoneNumber.trim();
+
+    if (!trimmedName) {
+      setError("Name is required.");
+      return;
+    }
+    if (!trimmedEmail) {
+      setError("Email is required.");
+      return;
+    }
+    if (!trimmedPhone) {
+      setError("Phone number is required.");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
 
     setSubmitting(true);
     setError("");
@@ -202,7 +163,12 @@ export function AddProjectMembersDialog({
     try {
       await apiPost(
         `/projects/${project.project_id}/members`,
-        { user_id: Number(selectedUserId) },
+        {
+          full_name: trimmedName,
+          email: trimmedEmail,
+          phone_number: trimmedPhone,
+          password,
+        },
         { token },
       );
       onMembersChanged?.();
@@ -218,40 +184,61 @@ export function AddProjectMembersDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add members</DialogTitle>
+          <DialogTitle>Add member</DialogTitle>
           <DialogDescription>
-            Add a team member to &ldquo;{project?.name}&rdquo;.
+            Create a new member account for &ldquo;{project?.name}&rdquo;.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {loading ? (
-            <p className="text-sm text-muted-foreground">Loading users...</p>
-          ) : (
-            <div className="space-y-2">
-              <Label htmlFor="add-project-member">User</Label>
-              <select
-                id="add-project-member"
-                value={selectedUserId}
-                onChange={(event) => setSelectedUserId(event.target.value)}
-                className="flex h-9 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-                required
-              >
-                <option value="">Select a user</option>
-                {candidates.map((user) => (
-                  <option key={user.user_id} value={user.user_id}>
-                    {getUserLabel(user)}
-                  </option>
-                ))}
-              </select>
-              {!loading && candidates.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  No available users found from your teams. Current members:{" "}
-                  {members.length}.
-                </p>
-              ) : null}
-            </div>
-          )}
+          <div className="space-y-2">
+            <Label htmlFor="add-member-name">Name</Label>
+            <Input
+              id="add-member-name"
+              value={fullName}
+              onChange={(event) => setFullName(event.target.value)}
+              maxLength={255}
+              autoFocus
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="add-member-email">Email</Label>
+            <Input
+              id="add-member-email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              autoComplete="off"
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="add-member-phone">Phone number</Label>
+            <Input
+              id="add-member-phone"
+              type="tel"
+              value={phoneNumber}
+              onChange={(event) => setPhoneNumber(event.target.value)}
+              autoComplete="off"
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="add-member-password">Password</Label>
+            <Input
+              id="add-member-password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              minLength={6}
+              autoComplete="new-password"
+              required
+            />
+          </div>
 
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
@@ -264,11 +251,8 @@ export function AddProjectMembersDialog({
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={submitting || loading || !selectedUserId}
-            >
-              {submitting ? "Adding..." : "Add member"}
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "Creating..." : "Create"}
             </Button>
           </DialogFooter>
         </form>
@@ -381,9 +365,16 @@ export function RemoveProjectMembersDialog({
                   key={member.project_member_id}
                   className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2"
                 >
-                  <span className="truncate text-sm">
-                    {getUserLabel(member.user)}
-                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">
+                      {member.user?.full_name || member.user?.email || "Member"}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {[member.user?.email, member.user?.phone_number]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  </div>
                   <Button
                     type="button"
                     variant="outline"

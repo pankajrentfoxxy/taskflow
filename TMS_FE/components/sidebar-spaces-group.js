@@ -150,7 +150,7 @@ export function SidebarSpacesGroup() {
                               openProjectAction(project, "add-members")
                             }
                           >
-                            Add members
+                            Add member
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() =>

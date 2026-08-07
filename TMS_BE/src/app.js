@@ -91,16 +91,16 @@ app.use(errorHandler);
   try {
     await db.Role.sync();
     await db.Authentication.sync();
-    await db.Project.sync();
+    await db.Project.sync({ alter: true });
     await db.ProjectMember.sync({ alter: true });
     await db.Team.sync();
     await db.TeamMember.sync();
-    await db.ActivityLog.sync();
     await db.ErrorLog.sync();
     await db.TaskStatus.sync();
     await db.TaskType.sync();
     await db.TaskAssignee.sync({ alter: true });
     await db.Task.sync({ alter: true });
+    await db.ActivityLog.sync();
     await db.Comment.sync();
     await db.CommentReaction.sync();
     await db.Scribble.sync({ alter: true });
