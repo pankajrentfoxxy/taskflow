@@ -1,0 +1,29 @@
+name: CI/CD Deploy Taskflow
+
+# Deploy on push to the active branch only.
+on:
+  push:
+    branches:
+      - task-management-flow-v2
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Deploy to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          ssh -o StrictHostKeyChecking=no "${VPS_USER}@${VPS_HOST}" << 'EOF'
+          set -euo pipefail
+          cd /var/www/taskflow
+          DEPLOY_BRANCH=task-management-flow-v2 bash scripts/deploy.sh
+          EOF

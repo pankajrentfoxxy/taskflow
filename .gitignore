@@ -25,6 +25,9 @@ Thumbs.db
 TMS_BE/uploads/*
 !TMS_BE/uploads/.gitkeep
 
+# Local/runtime data
+data/
+
 # Build / cache
 .turbo
 .eslintcache
