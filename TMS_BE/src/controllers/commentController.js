@@ -22,7 +22,8 @@ export const createComment = async (req, res) => {
     action: "comment.create",
     entityType: "comment",
     entityId: comment.comment_id,
-    description: `Added comment on task #${req.params.taskId}`,
+    taskId: Number(req.params.taskId),
+    description: comment.content,
     metadata: {
       task_id: Number(req.params.taskId),
       parent_comment_id: comment.parent_comment_id,
@@ -74,7 +75,8 @@ export const updateComment = async (req, res) => {
     action: "comment.update",
     entityType: "comment",
     entityId: comment.comment_id,
-    description: `Edited comment #${comment.comment_id}`,
+    taskId: Number(req.params.taskId),
+    description: comment.content,
     metadata: { edited: true },
   });
 };
@@ -91,6 +93,7 @@ export const deleteComment = async (req, res) => {
     action: "comment.delete",
     entityType: "comment",
     entityId: Number(req.params.commentId),
+    taskId: Number(req.params.taskId),
     description: `Deleted comment #${req.params.commentId} from task #${req.params.taskId}`,
   });
 };
@@ -108,6 +111,7 @@ export const toggleCommentReaction = async (req, res) => {
     action: "comment.reaction.toggle",
     entityType: "comment",
     entityId: Number(req.params.commentId),
+    taskId: Number(req.params.taskId),
     description: `Toggled reaction on comment #${req.params.commentId}`,
     metadata: { emoji: req.body.emoji, reacted: result.reacted },
   });

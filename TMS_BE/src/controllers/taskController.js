@@ -21,6 +21,7 @@ export const createTask = async (req, res) => {
     action: task.parent_task_id ? "subtask.create" : "task.create",
     entityType: "task",
     entityId: task.task_id,
+    taskId: task.parent_task_id ?? task.task_id,
     description: task.parent_task_id
       ? `Created subtask "${task.name}" under task #${task.parent_task_id}`
       : `Created task "${task.name}" in project #${req.params.projectId}`,
@@ -80,6 +81,7 @@ export const createSubtask = async (req, res) => {
     action: "subtask.create",
     entityType: "task",
     entityId: task.task_id,
+    taskId: Number(req.params.taskId),
     description: `Created subtask "${task.name}" under task #${req.params.taskId}`,
     metadata: {
       project_id: Number(req.params.projectId),
@@ -116,6 +118,7 @@ export const updateTask = async (req, res) => {
     action: "task.update",
     entityType: "task",
     entityId: task.task_id,
+    taskId: task.task_id,
     description: `Updated task "${task.name}"`,
     metadata: req.body,
   });
@@ -132,7 +135,17 @@ export const deleteTask = async (req, res) => {
     action: "task.delete",
     entityType: "task",
     entityId: Number(req.params.taskId),
+    taskId: Number(req.params.taskId),
     description: `Deleted task #${req.params.taskId} from project #${req.params.projectId}`,
     metadata: { project_id: Number(req.params.projectId) },
   });
+};
+
+export const getTaskActivity = async (req, res) => {
+  const activities = await taskService.listTaskActivity(
+    req.user.user_id,
+    req.params.projectId,
+    req.params.taskId,
+  );
+  res.json({ activities });
 };

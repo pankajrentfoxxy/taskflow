@@ -73,6 +73,17 @@ Project.belongsToMany(Authentication, {
 Authentication.hasMany(ActivityLog, { foreignKey: "user_id", as: "activities" });
 ActivityLog.belongsTo(Authentication, { foreignKey: "user_id", as: "user" });
 
+Task.hasMany(ActivityLog, {
+  foreignKey: "task_id",
+  as: "activityLogs",
+  constraints: false,
+});
+ActivityLog.belongsTo(Task, {
+  foreignKey: "task_id",
+  as: "task",
+  constraints: false,
+});
+
 Authentication.hasMany(ErrorLog, { foreignKey: "user_id", as: "errors" });
 ErrorLog.belongsTo(Authentication, { foreignKey: "user_id", as: "user" });
 

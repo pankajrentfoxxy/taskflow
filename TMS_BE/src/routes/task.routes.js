@@ -10,6 +10,7 @@ import {
   getTask,
   updateTask,
   deleteTask,
+  getTaskActivity,
 } from "../controllers/taskController.js";
 import commentRoutes from "./comment.routes.js";
 import subtaskRoutes from "./subtask.routes.js";
@@ -112,6 +113,12 @@ router.post(
 );
 router.use("/:taskId/subtasks", subtaskRoutes);
 router.use("/:taskId/comments", commentRoutes);
+router.get(
+  "/:taskId/activity",
+  auth(),
+  validate({ params: taskIdParam }),
+  asyncHandler(getTaskActivity),
+);
 router.get(
   "/:taskId",
   auth(),

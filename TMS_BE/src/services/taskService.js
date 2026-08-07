@@ -1,5 +1,5 @@
 import httpStatus from "http-status";
-import { QueryTypes } from "sequelize";
+import { Op, QueryTypes } from "sequelize";
 import {
   Task,
   TaskAssignee,
@@ -9,6 +9,7 @@ import {
   ProjectMember,
   Project,
   Comment,
+  ActivityLog,
 } from "../models/index.js";
 import * as projectService from "./projectService.js";
 import ApiError from "../utils/ApiError.js";
@@ -143,7 +144,7 @@ async function attachSubtasks(tasks) {
 
   const parentTaskIds = tasks.map((task) => task.task_id);
   const subtasks = await Task.findAll({
-    where: { parent_task_id: parentTaskIds },
+    where: { parent_task_id: parentTaskIds, deleted: false },
     include: defaultIncludes,
     order: [["created_at", "ASC"]],
   });
@@ -210,7 +211,7 @@ function collectTasksWithSubtasks(tasks, includeSubtasks) {
 
 async function getTaskRecord(taskId, projectId) {
   const task = await Task.findOne({
-    where: { task_id: taskId, project_id: projectId },
+    where: { task_id: taskId, project_id: projectId, deleted: false },
   });
 
   if (!task) {
@@ -278,7 +279,9 @@ async function assertAssigneeInProject(projectId, assigneeId) {
     return;
   }
 
-  const project = await Project.findByPk(projectId);
+  const project = await Project.findOne({
+    where: { project_id: projectId, deleted: false },
+  });
   if (!project) {
     throw new ApiError(httpStatus.NOT_FOUND, "Project not found");
   }
@@ -316,7 +319,7 @@ async function assertParentTask(projectId, parentTaskId, { taskId = null } = {})
   }
 
   const parentTask = await Task.findOne({
-    where: { task_id: parentTaskId, project_id: projectId },
+    where: { task_id: parentTaskId, project_id: projectId, deleted: false },
   });
 
   if (!parentTask) {
@@ -332,7 +335,7 @@ async function assertParentTask(projectId, parentTaskId, { taskId = null } = {})
 
   if (taskId != null) {
     const childCount = await Task.count({
-      where: { parent_task_id: taskId },
+      where: { parent_task_id: taskId, deleted: false },
     });
 
     if (childCount > 0) {
@@ -360,7 +363,7 @@ function assertTimelinePayload(timeline) {
 }
 
 function buildTaskWhere(projectId, options = {}) {
-  const where = { project_id: projectId };
+  const where = { project_id: projectId, deleted: false };
 
   if (options.parent_task_id !== undefined) {
     where.parent_task_id =
@@ -458,7 +461,7 @@ export async function getTaskById(userId, projectId, taskId) {
   await projectService.getProjectById(userId, projectId);
 
   const task = await Task.findOne({
-    where: { task_id: taskId, project_id: projectId },
+    where: { task_id: taskId, project_id: projectId, deleted: false },
     include: defaultIncludes,
   });
 
@@ -532,6 +535,53 @@ export async function deleteTask(userId, projectId, taskId) {
   await projectService.getProjectById(userId, projectId);
   const task = await getTaskRecord(taskId, projectId);
 
-  await task.destroy();
+  await task.update({ deleted: true, updated_at: now() });
   return { message: "Task deleted" };
+}
+
+const activityUserInclude = {
+  model: Authentication,
+  as: "user",
+  attributes: ["user_id", "email", "full_name"],
+};
+
+function toPublicActivityUser(user) {
+  if (!user) return null;
+  return {
+    user_id: user.user_id,
+    email: user.email,
+    full_name: user.full_name,
+  };
+}
+
+export async function listTaskActivity(userId, projectId, taskId) {
+  await projectService.getProjectById(userId, projectId);
+  await getTaskRecord(taskId, projectId);
+
+  const logs = await ActivityLog.findAll({
+    where: {
+      task_id: taskId,
+      action: {
+        [Op.notIn]: [
+          "task.list",
+          "task.view",
+          "subtask.list",
+          "comment.list",
+          "comment.view",
+        ],
+      },
+    },
+    include: [activityUserInclude],
+    order: [["created_at", "DESC"]],
+    limit: 50,
+  });
+
+  return logs.map((log) => ({
+    activity_id: `log-${log.activity_log_id}`,
+    type: log.action?.startsWith("comment.") ? "comment" : "log",
+    action: log.action,
+    description: log.description,
+    created_at: log.created_at,
+    user: toPublicActivityUser(log.user),
+  }));
 }
