@@ -31,6 +31,10 @@ const createTeamSchema = {
   body: Joi.object({
     name: Joi.string().trim().min(1).max(255).required(),
     description: Joi.string().allow("", null),
+    member_ids: Joi.array()
+      .items(Joi.number().integer().positive())
+      .unique()
+      .optional(),
   }),
 };
 

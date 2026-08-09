@@ -44,7 +44,7 @@ const statusInclude = {
 const typeInclude = {
   model: TaskType,
   as: "type",
-  attributes: ["task_type_id", "name", "description"],
+  attributes: ["task_type_id", "name", "description", "team_id", "alias"],
 };
 
 function mapPublicAssignees(assignees = []) {
@@ -68,6 +68,8 @@ const toPublicTask = (task, { includeNestedSubtasks = true } = {}) => ({
   ),
   due_date: task.due_date,
   priority: task.priority,
+  target: task.target ?? null,
+  target_completed: task.target_completed ?? null,
   timeline: normalizeTimelineValue(task.timeline),
   scribble: task.scribble ?? null,
   created_by: task.created_by,
@@ -84,6 +86,8 @@ const toPublicTask = (task, { includeNestedSubtasks = true } = {}) => ({
         task_type_id: task.type.task_type_id,
         name: task.type.name,
         description: task.type.description,
+        team_id: task.type.team_id,
+        alias: task.type.alias,
       }
     : undefined,
   assignees: mapPublicAssignees(task.assignees),
@@ -402,6 +406,8 @@ export async function createTask(userId, projectId, payload) {
     description: payload.description ?? null,
     due_date: payload.due_date ?? null,
     priority: payload.priority ?? "medium",
+    target: payload.target ?? null,
+    target_completed: payload.target_completed ?? null,
     timeline,
     created_by: userId,
     created_at: timestamp,
@@ -515,6 +521,10 @@ export async function updateTask(userId, projectId, taskId, payload) {
       : {}),
     ...(payload.due_date !== undefined ? { due_date: payload.due_date } : {}),
     ...(payload.priority !== undefined ? { priority: payload.priority } : {}),
+    ...(payload.target !== undefined ? { target: payload.target } : {}),
+    ...(payload.target_completed !== undefined
+      ? { target_completed: payload.target_completed }
+      : {}),
     ...(payload.timeline !== undefined
       ? { timeline: buildTimelinePayload(payload.timeline, userId) }
       : {}),

@@ -29,7 +29,7 @@ const taskIdParam = Joi.object({
 const timelineSchema = Joi.object({
   start_date: Joi.number().integer().positive().allow(null),
   end_date: Joi.number().integer().positive().allow(null),
-});
+}).prefs({ stripUnknown: true });
 
 const taskBodyFields = {
   name: Joi.string().trim().min(1).max(255),
@@ -43,6 +43,8 @@ const taskBodyFields = {
     .optional(),
   due_date: Joi.number().integer().positive().allow(null),
   priority: Joi.string().valid(...TASK_PRIORITIES),
+  target: Joi.number().integer().min(0).allow(null),
+  target_completed: Joi.number().integer().min(0).allow(null),
   timeline: timelineSchema,
   scribble: Joi.alternatives()
     .try(
@@ -80,6 +82,8 @@ const createTaskSchema = {
     due_date: taskBodyFields.due_date,
     priority: taskBodyFields.priority,
     timeline: taskBodyFields.timeline,
+    target: taskBodyFields.target,
+    target_completed: taskBodyFields.target_completed,
   }),
 };
 
@@ -96,6 +100,8 @@ const updateTaskSchema = {
     priority: taskBodyFields.priority,
     timeline: taskBodyFields.timeline,
     scribble: taskBodyFields.scribble,
+    target: taskBodyFields.target,
+    target_completed: taskBodyFields.target_completed,
   }).min(1),
 };
 

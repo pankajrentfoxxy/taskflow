@@ -17,6 +17,14 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      team_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
+      alias: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+      },
       created_by: {
         type: DataTypes.INTEGER,
         allowNull: false,

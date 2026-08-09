@@ -21,6 +21,8 @@ const createTaskTypeSchema = {
   body: Joi.object({
     name: Joi.string().trim().min(1).max(100).required(),
     description: Joi.string().allow("", null),
+    team_id: Joi.number().integer().positive().allow(null),
+    alias: Joi.string().trim().max(100).allow("", null),
   }),
 };
 
@@ -29,6 +31,8 @@ const updateTaskTypeSchema = {
   body: Joi.object({
     name: Joi.string().trim().min(1).max(100).optional(),
     description: Joi.string().allow("", null),
+    team_id: Joi.number().integer().positive().allow(null),
+    alias: Joi.string().trim().max(100).allow("", null),
   }).min(1),
 };
 

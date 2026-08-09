@@ -4,10 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  ListTodo,
-  Settings,
-  Users,
-  ClipboardList,
+  Shield,
 } from "lucide-react";
 import { SidebarSpacesGroup } from "@/components/sidebar-spaces-group";
 import {
@@ -26,10 +23,7 @@ import {
 
 const navItems = [
   { title: "Dashboard", href: "/", icon: LayoutDashboard },
-  { title: "Tasks", href: "/tasks", icon: ListTodo },
-  { title: "Tickets", href: "/tickets", icon: ClipboardList },
-  { title: "Users", href: "/users", icon: Users },
-  { title: "Settings", href: "/settings", icon: Settings },
+  { title: "Admin", href: "/admin", icon: Shield },
 ];
 
 function SidebarNavGroup({ label, items, pathname }) {

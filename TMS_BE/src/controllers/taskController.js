@@ -1,5 +1,6 @@
 import * as taskService from "../services/taskService.js";
 import { logActivity } from "../services/activityLogService.js";
+import { buildTaskUpdateActivityDescription } from "../utils/taskActivityDescription.js";
 
 function logTaskActivity(req, res, overrides = {}) {
   logActivity({
@@ -119,7 +120,7 @@ export const updateTask = async (req, res) => {
     entityType: "task",
     entityId: task.task_id,
     taskId: task.task_id,
-    description: `Updated task "${task.name}"`,
+    description: buildTaskUpdateActivityDescription(req.body, task.name),
     metadata: req.body,
   });
 };

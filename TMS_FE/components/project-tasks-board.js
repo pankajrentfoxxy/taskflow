@@ -22,6 +22,10 @@ import {
 } from "@/components/date-preset-picker";
 import { TaskCommentsPopover } from "@/components/task-comments-popover";
 import { TaskDetailDialog } from "@/components/task-detail-dialog";
+import {
+  findMatchingTeamId,
+  TaskAssigneePickerContent,
+} from "@/components/task-assignee-picker";
 import { DrawCell } from "@/components/task-draw-dialog";
 import {
   DropdownMenu,
@@ -211,15 +215,19 @@ function cellButtonClassName(active = false) {
   );
 }
 
-function AssigneeCell({ assignees = [], members = [], onChange }) {
+function AssigneeCell({ assignees = [], members = [], teams = [], onChange }) {
   const selectedIds = assignees.map((assignee) => String(assignee.user_id));
+  const [assigneeTeamId, setAssigneeTeamId] = useState(() =>
+    findMatchingTeamId(teams, selectedIds, members),
+  );
 
-  function toggleAssignee(userId) {
-    const id = String(userId);
-    const nextIds = selectedIds.includes(id)
-      ? selectedIds.filter((value) => value !== id)
-      : [...selectedIds, id];
-    onChange(nextIds.map(Number));
+  useEffect(() => {
+    setAssigneeTeamId(findMatchingTeamId(teams, selectedIds, members));
+  }, [members, selectedIds.join(","), teams]);
+
+  function handleAssigneeChange({ assigneeIds, assigneeTeamId: teamId }) {
+    setAssigneeTeamId(teamId || "");
+    onChange(assigneeIds.map(Number));
   }
 
   return (
@@ -243,19 +251,14 @@ function AssigneeCell({ assignees = [], members = [], onChange }) {
           <UserRound className="size-3.5 text-muted-foreground/35" />
         )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="center" className="max-h-60 min-w-44">
-        <DropdownMenuItem onClick={() => onChange([])}>Clear assignees</DropdownMenuItem>
-        {members.map((member) => (
-          <DropdownMenuCheckboxItem
-            key={member.user_id}
-            checked={selectedIds.includes(String(member.user_id))}
-            onCheckedChange={() => toggleAssignee(member.user_id)}
-          >
-            {member.user?.full_name ||
-              member.user?.email ||
-              `User #${member.user_id}`}
-          </DropdownMenuCheckboxItem>
-        ))}
+      <DropdownMenuContent align="center" className="max-h-72 min-w-52">
+        <TaskAssigneePickerContent
+          members={members}
+          teams={teams}
+          assigneeIds={selectedIds}
+          assigneeTeamId={assigneeTeamId}
+          onChange={handleAssigneeChange}
+        />
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -375,6 +378,7 @@ function EditableTaskRow({
   statuses,
   taskTypes,
   members,
+  teams = [],
   isSubtask = false,
   onAddSubtask,
   subtaskCount = 0,
@@ -514,6 +518,7 @@ function EditableTaskRow({
       <AssigneeCell
         assignees={task.assignees}
         members={members}
+        teams={teams}
         onChange={(assigneeIds) => patchTask({ assignee_ids: assigneeIds })}
       />
 
@@ -570,6 +575,7 @@ function EditableTaskRow({
         statuses={statuses}
         taskTypes={taskTypes}
         members={members}
+        teams={teams}
         onUpdated={onUpdated}
       />
     </TaskRowShell>
@@ -582,6 +588,7 @@ function DraftTaskRow({
   token,
   statuses,
   members,
+  teams = [],
   parentTaskId = null,
   onDraftChange,
   onCreated,
@@ -696,6 +703,7 @@ function DraftTaskRow({
         <AssigneeCell
           assignees={draftAssignees}
           members={members}
+          teams={teams}
           onChange={(assigneeIds) =>
             onDraftChange({ ...draft, assignee_ids: assigneeIds })
           }
@@ -767,6 +775,7 @@ function TaskWithSubtasks({
   statuses,
   taskTypes,
   members,
+  teams = [],
   onUpdated,
   onDeleted,
 }) {
@@ -841,6 +850,7 @@ function TaskWithSubtasks({
         statuses={statuses}
         taskTypes={taskTypes}
         members={members}
+        teams={teams}
         onAddSubtask={handleAddSubtask}
         subtaskCount={subtaskCount}
         expanded={expanded}
@@ -860,6 +870,7 @@ function TaskWithSubtasks({
               statuses={statuses}
               taskTypes={taskTypes}
               members={members}
+              teams={teams}
               isSubtask
               onUpdated={handleSubtaskUpdated}
               onDeleted={handleSubtaskDeleted}
@@ -875,6 +886,7 @@ function TaskWithSubtasks({
           parentTaskId={task.task_id}
           statuses={statuses}
           members={members}
+          teams={teams}
           onDraftChange={setSubtaskDraft}
           onCreated={(subtask) => {
             setSubtasks((current) => [...current, subtask]);
@@ -910,6 +922,7 @@ function StatusGroup({
   statuses,
   taskTypes,
   members,
+  teams = [],
   onTaskCreated,
   onTaskUpdated,
   onTaskDeleted,
@@ -974,6 +987,7 @@ function StatusGroup({
                   statuses={statuses}
                   taskTypes={taskTypes}
                   members={members}
+                  teams={teams}
                   onUpdated={onTaskUpdated}
                   onDeleted={onTaskDeleted}
                 />
@@ -987,6 +1001,7 @@ function StatusGroup({
                 token={token}
                 statuses={statuses}
                 members={members}
+                teams={teams}
                 onDraftChange={setDraft}
                 onCreated={(task) => {
                   setDraft(null);
@@ -1021,6 +1036,7 @@ export function ProjectTasksBoard({
   statuses,
   taskTypes,
   members,
+  teams = [],
   onTaskCreated,
   onTaskUpdated,
   onTaskDeleted,
@@ -1038,6 +1054,7 @@ export function ProjectTasksBoard({
           statuses={statuses}
           taskTypes={taskTypes}
           members={members}
+          teams={teams}
           onTaskCreated={onTaskCreated}
           onTaskUpdated={onTaskUpdated}
           onTaskDeleted={onTaskDeleted}
