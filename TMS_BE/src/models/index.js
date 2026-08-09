@@ -99,6 +99,9 @@ Authentication.hasMany(TaskType, {
 });
 TaskType.belongsTo(Authentication, { foreignKey: "created_by", as: "creator" });
 
+Team.hasMany(TaskType, { foreignKey: "team_id", as: "taskTypes" });
+TaskType.belongsTo(Team, { foreignKey: "team_id", as: "team" });
+
 Project.hasMany(Task, { foreignKey: "project_id", as: "tasks" });
 Task.belongsTo(Project, { foreignKey: "project_id", as: "project" });
 

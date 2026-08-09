@@ -27,12 +27,24 @@ import { cn } from "@/lib/utils";
 
 export function SidebarSpacesGroup() {
   const pathname = usePathname();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [manageProject, setManageProject] = useState(null);
   const [manageAction, setManageAction] = useState(null);
+
+  function canManageProject(project) {
+    if (!user || !project) {
+      return false;
+    }
+
+    if (user.role?.slug === "super_admin") {
+      return true;
+    }
+
+    return Number(project.created_by) === Number(user.user_id);
+  }
 
   function loadProjects() {
     if (!token) {
@@ -86,8 +98,12 @@ export function SidebarSpacesGroup() {
           <button
             type="button"
             onClick={() => setCreateOpen(true)}
-            disabled={!token}
-            title="Create space"
+            disabled={!token || user?.role?.slug !== "super_admin"}
+            title={
+              user?.role?.slug === "super_admin"
+                ? "Create space"
+                : "Only super admins can create spaces"
+            }
             className="flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50"
           >
             <Plus className="size-3.5" />
@@ -123,51 +139,53 @@ export function SidebarSpacesGroup() {
                         <span className="truncate">{project.name}</span>
                       </SidebarMenuButton>
 
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          render={
-                            <button
-                              type="button"
-                              onClick={(event) => event.stopPropagation()}
-                              className={cn(
-                                "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                                "opacity-0 group-hover/project:opacity-100 focus-visible:opacity-100 data-open:opacity-100",
-                              )}
-                              aria-label={`Project actions for ${project.name}`}
-                            />
-                          }
-                        >
-                          <MoreHorizontal className="size-4" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" side="bottom">
-                          <DropdownMenuItem
-                            onClick={() => openProjectAction(project, "rename")}
-                          >
-                            Rename
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              openProjectAction(project, "add-members")
+                      {canManageProject(project) ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            render={
+                              <button
+                                type="button"
+                                onClick={(event) => event.stopPropagation()}
+                                className={cn(
+                                  "inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                                  "opacity-0 group-hover/project:opacity-100 focus-visible:opacity-100 data-open:opacity-100",
+                                )}
+                                aria-label={`Project actions for ${project.name}`}
+                              />
                             }
                           >
-                            Add member
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() =>
-                              openProjectAction(project, "remove-members")
-                            }
-                          >
-                            Remove members
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onClick={() => openProjectAction(project, "delete")}
-                          >
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                            <MoreHorizontal className="size-4" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" side="bottom">
+                            <DropdownMenuItem
+                              onClick={() => openProjectAction(project, "rename")}
+                            >
+                              Rename
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                openProjectAction(project, "add-members")
+                              }
+                            >
+                              Add member
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() =>
+                                openProjectAction(project, "remove-members")
+                              }
+                            >
+                              Remove members
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onClick={() => openProjectAction(project, "delete")}
+                            >
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : null}
                     </div>
                   </SidebarMenuItem>
                 );

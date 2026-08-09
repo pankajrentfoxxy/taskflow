@@ -3,8 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Calendar,
-  ChevronDown,
-  Circle,
   ListChecks,
   MoreHorizontal,
   Tag,
@@ -19,7 +17,6 @@ import {
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuRadioGroup,
@@ -28,6 +25,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { PriorityDisplay, TASK_PRIORITIES } from "@/lib/task-priorities";
+import {
+  getAssigneeLabel,
+  TaskAssigneePickerContent,
+} from "@/components/task-assignee-picker";
+import {
+  getVisibleTaskTypes,
+  reconcileTaskTypeSelection,
+} from "@/lib/task-type-visibility";
+import {
+  parseTaskTargetValue,
+  TaskTargetFields,
+} from "@/components/task-target-field";
 
 const PRIORITIES = TASK_PRIORITIES;
 
@@ -37,8 +46,11 @@ const initialForm = {
   task_status_id: "",
   task_type_id: "",
   assignee_ids: [],
+  assignee_team_id: "",
   due_date: "",
   priority: "medium",
+  target: "",
+  target_completed: "",
 };
 
 function chipClassName(active) {
@@ -58,6 +70,7 @@ export function CreateTaskDialog({
   statuses = [],
   taskTypes = [],
   members = [],
+  teams = [],
   defaultStatusId = "",
   onCreated,
 }) {
@@ -75,6 +88,8 @@ export function CreateTaskDialog({
       return;
     }
 
+    const defaultTaskTypes = getVisibleTaskTypes(taskTypes, [], teams);
+
     setForm({
       ...initialForm,
       task_status_id: defaultStatusId
@@ -82,15 +97,35 @@ export function CreateTaskDialog({
         : statuses[0]?.task_status_id
           ? String(statuses[0].task_status_id)
           : "",
-      task_type_id: taskTypes[0]?.task_type_id
-        ? String(taskTypes[0].task_type_id)
+      task_type_id: defaultTaskTypes[0]?.task_type_id
+        ? String(defaultTaskTypes[0].task_type_id)
         : "",
     });
-  }, [open, statuses, taskTypes, defaultStatusId]);
+  }, [open, statuses, taskTypes, teams, defaultStatusId]);
 
   function updateField(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
   }
+
+  function updateTaskTypeId(value) {
+    const nextType = visibleTaskTypes.find(
+      (type) => String(type.task_type_id) === value,
+    );
+    setForm((current) => ({
+      ...current,
+      task_type_id: value,
+      target: nextType?.alias ? current.target : "",
+      target_completed: nextType?.alias ? current.target_completed : "",
+    }));
+  }
+
+  const visibleTaskTypes = getVisibleTaskTypes(
+    taskTypes,
+    form.assignee_ids,
+    teams,
+    form.assignee_team_id,
+    form.task_type_id,
+  );
 
   const selectedStatus = statuses.find(
     (status) => String(status.task_status_id) === form.task_status_id,
@@ -98,35 +133,37 @@ export function CreateTaskDialog({
   const selectedType = taskTypes.find(
     (type) => String(type.task_type_id) === form.task_type_id,
   );
-  const selectedAssignees = members.filter((member) =>
-    form.assignee_ids.includes(String(member.user_id)),
-  );
 
-  function toggleAssignee(userId) {
-    const id = String(userId);
-    setForm((current) => ({
-      ...current,
-      assignee_ids: current.assignee_ids.includes(id)
-        ? current.assignee_ids.filter((value) => value !== id)
-        : [...current.assignee_ids, id],
-    }));
+  function updateAssignees({ assigneeIds, assigneeTeamId }) {
+    setForm((current) => {
+      const nextAssigneeIds = assigneeIds.map(String);
+      const nextAssigneeTeamId = assigneeTeamId || "";
+      const typeSelection = reconcileTaskTypeSelection({
+        taskTypes,
+        assigneeIds: nextAssigneeIds,
+        teams,
+        assigneeTeamId: nextAssigneeTeamId,
+        taskTypeId: current.task_type_id,
+        target: current.target,
+        targetCompleted: current.target_completed,
+      });
+
+      return {
+        ...current,
+        assignee_ids: nextAssigneeIds,
+        assignee_team_id: nextAssigneeTeamId,
+        ...typeSelection,
+      };
+    });
   }
 
-  function getAssigneeLabel() {
-    if (selectedAssignees.length === 0) {
-      return "Assignee";
-    }
-
-    if (selectedAssignees.length === 1) {
-      const member = selectedAssignees[0];
-      return (
-        member.user?.full_name ||
-        member.user?.email ||
-        `User #${member.user_id}`
-      );
-    }
-
-    return `${selectedAssignees.length} assignees`;
+  function getAssigneeChipLabel() {
+    return getAssigneeLabel({
+      members,
+      teams,
+      assigneeIds: form.assignee_ids,
+      assigneeTeamId: form.assignee_team_id,
+    });
   }
 
   function formatDueDateLabel(value) {
@@ -167,6 +204,11 @@ export function CreateTaskDialog({
         payload.task_type_id = Number(form.task_type_id);
       }
 
+      if (selectedType?.alias) {
+        payload.target = parseTaskTargetValue(form.target);
+        payload.target_completed = parseTaskTargetValue(form.target_completed);
+      }
+
       if (form.assignee_ids.length > 0) {
         payload.assignee_ids = form.assignee_ids.map(Number);
       }
@@ -205,39 +247,6 @@ export function CreateTaskDialog({
               <ListChecks className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="max-w-[160px] truncate">{projectName}</span>
             </div>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1.5 rounded-md bg-background/90 px-2.5 py-1.5 text-sm text-foreground ring-1 ring-foreground/10 outline-none hover:bg-background"
-                  />
-                }
-              >
-                <Circle className="size-3.5 shrink-0 text-muted-foreground" />
-                <span>{selectedType?.name || "Task"}</span>
-                <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="min-w-40">
-                <DropdownMenuRadioGroup
-                  value={form.task_type_id}
-                  onValueChange={(value) => updateField("task_type_id", value)}
-                >
-                  <DropdownMenuRadioItem value="">
-                    Task
-                  </DropdownMenuRadioItem>
-                  {taskTypes.map((type) => (
-                    <DropdownMenuRadioItem
-                      key={type.task_type_id}
-                      value={String(type.task_type_id)}
-                    >
-                      {type.name}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
 
           <div className="space-y-1 bg-muted/10 px-5 py-6">
@@ -257,6 +266,17 @@ export function CreateTaskDialog({
               placeholder="Add description"
               rows={5}
               className="mt-3 w-full resize-none bg-transparent text-sm leading-relaxed placeholder:text-muted-foreground outline-none"
+            />
+
+            <TaskTargetFields
+              alias={selectedType?.alias}
+              targetValue={form.target}
+              targetCompletedValue={form.target_completed}
+              onTargetChange={(value) => updateField("target", value)}
+              onTargetCompletedChange={(value) =>
+                updateField("target_completed", value)
+              }
+              className="mt-4"
             />
           </div>
 
@@ -298,25 +318,16 @@ export function CreateTaskDialog({
                 }
               >
                 <Users className="size-3.5 shrink-0" />
-                <span className="truncate">{getAssigneeLabel()}</span>
+                <span className="truncate">{getAssigneeChipLabel()}</span>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="max-h-60 min-w-48">
-                <DropdownMenuItem
-                  onClick={() => updateField("assignee_ids", [])}
-                >
-                  Clear assignees
-                </DropdownMenuItem>
-                {members.map((member) => (
-                  <DropdownMenuCheckboxItem
-                    key={member.user_id}
-                    checked={form.assignee_ids.includes(String(member.user_id))}
-                    onCheckedChange={() => toggleAssignee(member.user_id)}
-                  >
-                    {member.user?.full_name ||
-                      member.user?.email ||
-                      `User #${member.user_id}`}
-                  </DropdownMenuCheckboxItem>
-                ))}
+              <DropdownMenuContent align="start" className="max-h-72 min-w-52">
+                <TaskAssigneePickerContent
+                  members={members}
+                  teams={teams}
+                  assigneeIds={form.assignee_ids}
+                  assigneeTeamId={form.assignee_team_id}
+                  onChange={updateAssignees}
+                />
               </DropdownMenuContent>
             </DropdownMenu>
 
@@ -384,10 +395,10 @@ export function CreateTaskDialog({
               <DropdownMenuContent align="start" className="min-w-40">
                 <DropdownMenuRadioGroup
                   value={form.task_type_id}
-                  onValueChange={(value) => updateField("task_type_id", value)}
+                  onValueChange={updateTaskTypeId}
                 >
                   <DropdownMenuRadioItem value="">None</DropdownMenuRadioItem>
-                  {taskTypes.map((type) => (
+                  {visibleTaskTypes.map((type) => (
                     <DropdownMenuRadioItem
                       key={type.task_type_id}
                       value={String(type.task_type_id)}
@@ -416,6 +427,7 @@ export function CreateTaskDialog({
                     setForm((current) => ({
                       ...current,
                       assignee_ids: [],
+                      assignee_team_id: "",
                       due_date: "",
                       priority: "medium",
                       task_type_id: "",

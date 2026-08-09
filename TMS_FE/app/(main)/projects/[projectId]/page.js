@@ -43,6 +43,7 @@ export default function ProjectPage() {
   const [tasks, setTasks] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [taskTypes, setTaskTypes] = useState([]);
+  const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -74,7 +75,7 @@ export default function ProjectPage() {
       setError("");
 
       try {
-        const [projectData, tasksData, statusesData, taskTypesData] =
+        const [projectData, tasksData, statusesData, taskTypesData, teamsData] =
           await Promise.all([
             apiGet(`/projects/${params.projectId}`, { token }),
             apiGet(
@@ -83,6 +84,7 @@ export default function ProjectPage() {
             ),
             apiGet("/task-statuses", { token }),
             apiGet("/task-types", { token }),
+            apiGet("/teams", { token }),
           ]);
 
         if (cancelled) return;
@@ -91,6 +93,7 @@ export default function ProjectPage() {
         setTasks(tasksData.tasks || []);
         setStatuses(statusesData.taskStatuses || []);
         setTaskTypes(taskTypesData.taskTypes || []);
+        setTeams(teamsData.teams || []);
       } catch (err) {
         if (!cancelled) {
           setError(err.message || "Failed to load project");
@@ -173,6 +176,7 @@ export default function ProjectPage() {
               statuses={statuses}
               taskTypes={taskTypes}
               members={projectMembers}
+              teams={teams}
               onTaskCreated={handleTaskCreated}
               onTaskUpdated={handleTaskUpdated}
               onTaskDeleted={handleTaskDeleted}
@@ -189,6 +193,7 @@ export default function ProjectPage() {
         statuses={statuses}
         taskTypes={taskTypes}
         members={projectMembers}
+        teams={teams}
         onCreated={handleTaskCreated}
       />
     </>

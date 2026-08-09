@@ -41,6 +41,14 @@ export default (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: "medium",
       },
+      target: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
+      target_completed: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
       timeline: {
         type: DataTypes.JSONB,
         allowNull: false,

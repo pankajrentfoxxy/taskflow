@@ -19,7 +19,7 @@ const taskParams = Joi.object({
 const timelineSchema = Joi.object({
   start_date: Joi.number().integer().positive().allow(null),
   end_date: Joi.number().integer().positive().allow(null),
-});
+}).prefs({ stripUnknown: true });
 
 const subtaskBodyFields = {
   name: Joi.string().trim().min(1).max(255),
@@ -32,6 +32,8 @@ const subtaskBodyFields = {
     .optional(),
   due_date: Joi.number().integer().positive().allow(null),
   priority: Joi.string().valid(...TASK_PRIORITIES),
+  target: Joi.number().integer().min(0).allow(null),
+  target_completed: Joi.number().integer().min(0).allow(null),
   timeline: timelineSchema,
 };
 
@@ -54,6 +56,8 @@ const createSubtaskSchema = {
     due_date: subtaskBodyFields.due_date,
     priority: subtaskBodyFields.priority,
     timeline: subtaskBodyFields.timeline,
+    target: subtaskBodyFields.target,
+    target_completed: subtaskBodyFields.target_completed,
   }),
 };
 

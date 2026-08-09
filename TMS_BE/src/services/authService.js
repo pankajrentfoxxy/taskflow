@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { Authentication, sequelize } from '../models/index.js';
+import { Authentication, Role, sequelize } from '../models/index.js';
 import { generateAuthTokens, verify, signResetToken } from '../utils/jwt.js';
 import logger from '../config/logger.js';
 
@@ -25,6 +25,12 @@ const findUserByIdentifier = async (identifier) => {
 
 const TRIAL_DAYS_DEFAULT = 30;
 
+const roleInclude = {
+  model: Role,
+  as: 'role',
+  attributes: ['role_id', 'slug'],
+};
+
 const toPublicUser = (user) => ({
   user_id: user.user_id,
   email: user.email,
@@ -32,6 +38,12 @@ const toPublicUser = (user) => ({
   role_id: user.role_id,
   is_active: user.is_active,
   is_blocked: user.is_blocked,
+  role: user.role
+    ? {
+        role_id: user.role.role_id,
+        slug: user.role.slug,
+      }
+    : null,
 });
 
 const tokensFor = (user) =>
@@ -91,7 +103,10 @@ export const signupUser = async ({
 };
 
 export const loginUser = async ({ email, password }) => {
-  const user = await Authentication.findOne({ where: { email } });
+  const user = await Authentication.findOne({
+    where: { email },
+    include: [roleInclude],
+  });
   if (!user) {
     const err = new Error('Invalid credentials');
     err.status = 401;
@@ -141,7 +156,9 @@ export const refreshAuthTokens = async (refreshTokenString) => {
     throw err;
   }
 
-  const user = await Authentication.findByPk(payload.user_id);
+  const user = await Authentication.findByPk(payload.user_id, {
+    include: [roleInclude],
+  });
   if (!user || user.is_blocked) {
     const err = new Error('User not found or blocked');
     err.status = 401;
@@ -155,7 +172,9 @@ export const refreshAuthTokens = async (refreshTokenString) => {
 };
 
 export const getUserById = async (user_id) => {
-  const user = await Authentication.findByPk(user_id);
+  const user = await Authentication.findByPk(user_id, {
+    include: [roleInclude],
+  });
   if (!user) return null;
   return toPublicUser(user);
 };
@@ -256,11 +275,15 @@ export const verifyLoginOtp = async ({ identifier, otp }) => {
     throw err;
   }
 
-  await user.update({ last_login: Date.now() });
+  const fullUser = await Authentication.findByPk(user.user_id, {
+    include: [roleInclude],
+  });
+
+  await fullUser.update({ last_login: Date.now() });
 
   return {
-    tokens: tokensFor(user),
-    user: toPublicUser(user),
+    tokens: tokensFor(fullUser),
+    user: toPublicUser(fullUser),
   };
 };
 

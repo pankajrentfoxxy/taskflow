@@ -97,7 +97,7 @@ app.use(errorHandler);
     await db.TeamMember.sync();
     await db.ErrorLog.sync();
     await db.TaskStatus.sync();
-    await db.TaskType.sync();
+    await db.TaskType.sync({ alter: true });
     await db.TaskAssignee.sync({ alter: true });
     await db.Task.sync({ alter: true });
     await db.ActivityLog.sync();

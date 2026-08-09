@@ -79,6 +79,14 @@ async function assertTeamAccess(userId, teamId, { requireCreator = false } = {})
 }
 
 export async function createTeam(userId, payload) {
+  const memberIds = [
+    ...new Set(
+      (payload.member_ids || [])
+        .map((id) => Number(id))
+        .filter((id) => Number.isInteger(id) && id > 0 && id !== userId),
+    ),
+  ];
+
   const result = await sequelize.transaction(async (transaction) => {
     const team = await Team.create(
       {
@@ -100,6 +108,26 @@ export async function createTeam(userId, payload) {
       },
       { transaction },
     );
+
+    for (const memberUserId of memberIds) {
+      const targetUser = await Authentication.findByPk(memberUserId, {
+        transaction,
+      });
+
+      if (!targetUser) {
+        throw new ApiError(httpStatus.NOT_FOUND, `User #${memberUserId} not found`);
+      }
+
+      await TeamMember.create(
+        {
+          team_id: team.team_id,
+          user_id: memberUserId,
+          created_at: now(),
+          updated_at: now(),
+        },
+        { transaction },
+      );
+    }
 
     return team;
   });
@@ -128,6 +156,17 @@ export async function listTeams(userId) {
         model: Authentication,
         as: "creator",
         attributes: ["user_id", "email", "full_name"],
+      },
+      {
+        model: TeamMember,
+        as: "members",
+        include: [
+          {
+            model: Authentication,
+            as: "user",
+            attributes: ["user_id", "email", "full_name"],
+          },
+        ],
       },
     ],
     order: [["created_at", "DESC"]],

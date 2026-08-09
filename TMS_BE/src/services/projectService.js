@@ -10,6 +10,7 @@ import {
 } from "../models/index.js";
 import ApiError from "../utils/ApiError.js";
 import { getRoleByName } from "../config/roles.js";
+import { isSuperAdminUser } from "../utils/userAccess.js";
 
 const now = () => Date.now();
 
@@ -81,6 +82,10 @@ async function getProjectRecord(projectId) {
 
 async function assertProjectAccess(userId, projectId, { requireCreator = false } = {}) {
   const project = await getProjectRecord(projectId);
+
+  if (await isSuperAdminUser(userId)) {
+    return project;
+  }
 
   if (requireCreator) {
     if (project.created_by !== userId) {
@@ -190,6 +195,22 @@ export async function createProject(userId, payload) {
 }
 
 export async function listProjects(userId) {
+  if (await isSuperAdminUser(userId)) {
+    const projects = await Project.findAll({
+      where: { deleted: false },
+      include: [
+        {
+          model: Authentication,
+          as: "creator",
+          attributes: ["user_id", "email", "full_name"],
+        },
+      ],
+      order: [["created_at", "DESC"]],
+    });
+
+    return projects.map(toPublicProject);
+  }
+
   const memberships = await ProjectMember.findAll({
     where: { user_id: userId },
     attributes: ["project_id"],

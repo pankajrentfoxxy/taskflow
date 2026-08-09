@@ -1,5 +1,5 @@
 import httpStatus from "http-status";
-import { TaskType, Task, Authentication } from "../models/index.js";
+import { TaskType, Task, Authentication, Team } from "../models/index.js";
 import ApiError from "../utils/ApiError.js";
 
 const now = () => Date.now();
@@ -8,6 +8,8 @@ const toPublicTaskType = (taskType) => ({
   task_type_id: taskType.task_type_id,
   name: taskType.name,
   description: taskType.description,
+  team_id: taskType.team_id,
+  alias: taskType.alias,
   created_by: taskType.created_by,
   created_at: taskType.created_at,
   updated_at: taskType.updated_at,
@@ -18,12 +20,24 @@ const toPublicTaskType = (taskType) => ({
         full_name: taskType.creator.full_name,
       }
     : undefined,
+  team: taskType.team
+    ? {
+        team_id: taskType.team.team_id,
+        name: taskType.team.name,
+      }
+    : undefined,
 });
 
 const creatorInclude = {
   model: Authentication,
   as: "creator",
   attributes: ["user_id", "email", "full_name"],
+};
+
+const teamInclude = {
+  model: Team,
+  as: "team",
+  attributes: ["team_id", "name"],
 };
 
 async function getTaskTypeRecord(taskTypeId) {
@@ -43,15 +57,30 @@ function assertCreator(userId, taskType) {
   }
 }
 
+async function assertTeamExists(teamId) {
+  if (teamId == null) {
+    return;
+  }
+
+  const team = await Team.findByPk(teamId);
+  if (!team) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Team not found");
+  }
+}
+
 export async function createTaskType(userId, payload) {
   const existing = await TaskType.findOne({ where: { name: payload.name } });
   if (existing) {
     throw new ApiError(httpStatus.CONFLICT, "Task type name already exists");
   }
 
+  await assertTeamExists(payload.team_id ?? null);
+
   const taskType = await TaskType.create({
     name: payload.name,
     description: payload.description ?? null,
+    team_id: payload.team_id ?? null,
+    alias: payload.alias ?? null,
     created_by: userId,
     created_at: now(),
     updated_at: now(),
@@ -62,7 +91,7 @@ export async function createTaskType(userId, payload) {
 
 export async function listTaskTypes() {
   const taskTypes = await TaskType.findAll({
-    include: [creatorInclude],
+    include: [creatorInclude, teamInclude],
     order: [["task_type_id", "ASC"]],
   });
 
@@ -71,7 +100,7 @@ export async function listTaskTypes() {
 
 export async function getTaskTypeById(taskTypeId) {
   const taskType = await TaskType.findByPk(taskTypeId, {
-    include: [creatorInclude],
+    include: [creatorInclude, teamInclude],
   });
 
   if (!taskType) {
@@ -92,11 +121,17 @@ export async function updateTaskType(userId, taskTypeId, payload) {
     }
   }
 
+  if (payload.team_id !== undefined) {
+    await assertTeamExists(payload.team_id);
+  }
+
   await taskType.update({
     ...(payload.name !== undefined ? { name: payload.name } : {}),
     ...(payload.description !== undefined
       ? { description: payload.description }
       : {}),
+    ...(payload.team_id !== undefined ? { team_id: payload.team_id } : {}),
+    ...(payload.alias !== undefined ? { alias: payload.alias } : {}),
     updated_at: now(),
   });
 
