@@ -1,0 +1,28 @@
+import http from "http";
+import app, { initApp } from "./src/app.js";
+import config from "./src/config/config.js";
+import logger from "./src/config/logger.js";
+
+await initApp();
+
+const server = http.createServer(app).listen(config.port, () => {
+  logger.info(`TaskFlow API listening on port ${config.port}`);
+});
+
+const exitHandler = () => {
+  if (server) server.close(() => process.exit(1));
+  else process.exit(1);
+};
+
+process.on("uncaughtException", (err) => {
+  logger.error(err);
+  exitHandler();
+});
+process.on("unhandledRejection", (err) => {
+  logger.error(err);
+  exitHandler();
+});
+process.on("SIGTERM", () => {
+  logger.info("SIGTERM received");
+  server.close();
+});
