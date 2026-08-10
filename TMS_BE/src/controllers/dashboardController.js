@@ -10,3 +10,8 @@ export const getReports = async (req, res) => {
 
   res.json({ reports });
 };
+
+export const getMyDashboard = async (req, res) => {
+  const dashboard = await dashboardService.getMyDashboard(req.user.user_id);
+  res.json({ dashboard });
+};

@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useMemo } from "react";
 import {
   LayoutDashboard,
   Shield,
 } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
+import { canAccessAdmin } from "@/lib/user-roles";
 import { SidebarSpacesGroup } from "@/components/sidebar-spaces-group";
 import {
   Sidebar,
@@ -23,7 +26,7 @@ import {
 
 const navItems = [
   { title: "Dashboard", href: "/", icon: LayoutDashboard },
-  { title: "Admin", href: "/admin", icon: Shield },
+  { title: "Admin", href: "/admin", icon: Shield, adminOnly: true },
 ];
 
 function SidebarNavGroup({ label, items, pathname }) {
@@ -62,6 +65,12 @@ function SidebarNavGroup({ label, items, pathname }) {
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const { user } = useAuth();
+
+  const visibleNavItems = useMemo(() => {
+    const canSeeAdmin = canAccessAdmin(user?.role?.slug);
+    return navItems.filter((item) => !item.adminOnly || canSeeAdmin);
+  }, [user]);
 
   return (
     <Sidebar collapsible="icon" variant="sidebar">
@@ -86,7 +95,7 @@ export function AppSidebar() {
       <SidebarContent className="gap-0">
         <SidebarNavGroup
           label="Navigation"
-          items={navItems}
+          items={visibleNavItems}
           pathname={pathname}
         />
         <SidebarSpacesGroup />

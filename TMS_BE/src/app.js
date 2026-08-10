@@ -104,6 +104,7 @@ app.use(errorHandler);
     await db.Comment.sync();
     await db.CommentReaction.sync();
     await db.Scribble.sync({ alter: true });
+    await db.Notification.sync();
     console.log("✅ Database connected");
   } catch (err) {
     console.error("❌ Unable to connect to the database:", err);

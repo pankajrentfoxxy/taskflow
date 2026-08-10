@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { apiGet } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
+import { canAccessAdmin } from "@/lib/user-roles";
 import { CreateUserDialog } from "@/components/create-user-dialog";
 import { CreateTeamDialog } from "@/components/create-team-dialog";
 import { CreateTaskTypeDialog } from "@/components/create-task-type-dialog";
@@ -17,7 +19,8 @@ import {
 } from "@/components/ui/card";
 
 export default function AdminPage() {
-  const { token, user: currentUser } = useAuth();
+  const router = useRouter();
+  const { token, user: currentUser, loading: authLoading } = useAuth();
   const [users, setUsers] = useState([]);
   const [teams, setTeams] = useState([]);
   const [taskTypes, setTaskTypes] = useState([]);
@@ -108,6 +111,14 @@ export default function AdminPage() {
   }, [loadAll]);
 
   useEffect(() => {
+    if (authLoading) return;
+
+    if (!canAccessAdmin(currentUser?.role?.slug)) {
+      router.replace("/");
+    }
+  }, [authLoading, currentUser?.role?.slug, router]);
+
+  useEffect(() => {
     if (selectedTeamId) {
       loadTeamMembers(selectedTeamId);
     } else {
@@ -151,6 +162,16 @@ export default function AdminPage() {
     if (team?.team_id) {
       setSelectedTeamId(String(team.team_id));
     }
+  }
+
+  if (authLoading) {
+    return (
+      <p className="text-sm text-muted-foreground">Loading admin page...</p>
+    );
+  }
+
+  if (!canAccessAdmin(currentUser?.role?.slug)) {
+    return null;
   }
 
   return (
