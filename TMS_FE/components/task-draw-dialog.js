@@ -125,8 +125,8 @@ function ImportScribbleDialog({ open, onOpenChange, token, onImport }) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[min(80vh,560px)] w-[min(96vw,520px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[520px]">
-        <DialogHeader className="shrink-0 border-b px-4 py-3">
+      <DialogContent className="flex max-h-[min(80vh,calc(100dvh-1.5rem),560px)] w-[min(96vw,520px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[520px]">
+        <DialogHeader className="shrink-0 border-b px-4 py-3 pr-14">
           <DialogTitle>Import scribble</DialogTitle>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
@@ -261,11 +261,11 @@ export function TaskDrawDialog({
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
-          className="flex h-[88vh] w-[96vw] max-w-[96vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
+          className="flex h-[min(88vh,calc(100dvh-1.5rem))] w-[96vw] max-w-[96vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
           showCloseButton
         >
-          <DialogHeader className="shrink-0 border-b px-4 py-3">
-            <div className="flex items-center justify-between gap-3 pr-8">
+          <DialogHeader className="shrink-0 border-b px-4 py-3 pr-14">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
               <DialogTitle className="truncate">
                 Scribble — {taskName || `Task #${taskId}`}
               </DialogTitle>
@@ -273,6 +273,7 @@ export function TaskDrawDialog({
                 type="button"
                 variant="outline"
                 size="sm"
+                className="w-full sm:w-auto"
                 onClick={() => setImportOpen(true)}
                 disabled={!token || saving}
               >

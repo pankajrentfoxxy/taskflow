@@ -327,9 +327,9 @@ export function TaskDetailDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent
           showCloseButton
-          className="flex max-h-[90vh] w-[min(96vw,1024px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1024px]"
+          className="flex max-h-[calc(100dvh-1.5rem)] w-[min(96vw,1024px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1024px]"
         >
-          <div className="flex items-center gap-2 border-b bg-muted/20 px-4 py-3">
+          <div className="flex items-center gap-2 border-b bg-muted/20 px-4 py-3 pr-14">
             <div className="inline-flex items-center gap-1.5 rounded-md bg-background/90 px-2.5 py-1.5 text-sm text-foreground ring-1 ring-foreground/10">
               <ListChecks className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="max-w-[180px] truncate">{projectName}</span>

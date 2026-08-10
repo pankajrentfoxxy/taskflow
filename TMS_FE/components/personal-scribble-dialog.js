@@ -281,8 +281,8 @@ function ScribbleBoardEditor({
 
   return (
     <>
-      <DialogHeader className="shrink-0 border-b px-4 py-3">
-        <div className="flex items-center gap-2 pr-8">
+      <DialogHeader className="shrink-0 border-b px-4 py-3 pr-14">
+        <div className="flex items-center gap-2">
           <Button
             type="button"
             variant="ghost"
@@ -454,14 +454,14 @@ export function PersonalScribbleDialog({ token, open, onOpenChange }) {
         className={cn(
           "flex flex-col gap-0 overflow-hidden p-0 sm:max-w-none",
           view === "editor"
-            ? "h-[88vh] w-[96vw] max-w-[96vw]"
-            : "h-[min(80vh,720px)] w-[96vw] max-w-[1200px]",
+            ? "h-[min(88vh,calc(100dvh-1.5rem))] w-[96vw] max-w-[96vw]"
+            : "h-[min(80vh,720px,calc(100dvh-1.5rem))] w-[96vw] max-w-[1200px]",
         )}
         showCloseButton
       >
         {view === "list" ? (
           <>
-            <DialogHeader className="shrink-0 border-b px-4 py-3">
+            <DialogHeader className="shrink-0 border-b px-4 py-3 pr-14">
               <DialogTitle>Your scribble boards</DialogTitle>
             </DialogHeader>
             <ScribbleBoardPicker

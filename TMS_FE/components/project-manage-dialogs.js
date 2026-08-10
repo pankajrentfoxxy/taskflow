@@ -366,7 +366,7 @@ export function AddProjectMembersDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[calc(100dvh-1.5rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Add member</DialogTitle>
           <DialogDescription>{descriptionByMode[mode]}</DialogDescription>
@@ -711,7 +711,7 @@ export function RemoveProjectMembersDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[calc(100dvh-1.5rem)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Remove members</DialogTitle>
           <DialogDescription>
