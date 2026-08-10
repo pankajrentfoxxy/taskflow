@@ -9,6 +9,7 @@ import configRoutes from "./routes/config.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import roleRoutes from "./routes/role.routes.js";
 import dashboardRoutes from "./routes/dashboard.routes.js";
+import errorLogRoutes from "./routes/errorLog.routes.js";
 
 const router = express.Router();
 
@@ -23,6 +24,7 @@ const defaultRoutes = [
   { path: "/users", route: userRoutes },
   { path: "/roles", route: roleRoutes },
   { path: "/dashboard", route: dashboardRoutes },
+  { path: "/error-logs", route: errorLogRoutes },
 ];
 
 defaultRoutes.forEach((route) => {
