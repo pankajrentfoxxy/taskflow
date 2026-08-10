@@ -1,7 +1,11 @@
 'use client';
+
 import { useState } from 'react';
 import Modal from './Modal';
 import { api, fromLocalInput, toLocalInput } from '@/lib/util';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function AckModal({
   task, open, onClose, onDone,
@@ -30,19 +34,28 @@ export default function AckModal({
   return (
     <Modal open={open} onClose={onClose} title="Acknowledge & set ETA">
       <div className="space-y-4">
-        <p className="text-sm text-gray-600">
-          You are acknowledging <strong>&quot;{task?.title}&quot;</strong>. An ETA is mandatory.
+        <p className="text-sm text-muted-foreground">
+          You are acknowledging <strong className="text-foreground">&quot;{task?.title}&quot;</strong>. An ETA is mandatory.
         </p>
-        <div className="flex gap-1.5 flex-wrap">
-          <button className="btn-secondary !py-1 !px-2.5 text-xs" onClick={() => quick(0, true)}>Today EOD</button>
-          <button className="btn-secondary !py-1 !px-2.5 text-xs" onClick={() => quick(24)}>+24 hours</button>
-          <button className="btn-secondary !py-1 !px-2.5 text-xs" onClick={() => quick(48)}>+2 days</button>
+        <div className="flex flex-wrap gap-1.5">
+          <Button type="button" variant="outline" size="sm" onClick={() => quick(0, true)}>Today EOD</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => quick(24)}>+24 hours</Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => quick(48)}>+2 days</Button>
         </div>
-        <input type="datetime-local" className="input" value={eta} onChange={(e) => setEta(e.target.value)} />
-        {err && <div className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{err}</div>}
-        <button className="btn-primary w-full" disabled={busy} onClick={submit}>
+        <Input
+          type="datetime-local"
+          className="h-10"
+          value={eta}
+          onChange={(e) => setEta(e.target.value)}
+        />
+        {err && (
+          <Alert variant="destructive">
+            <AlertDescription>{err}</AlertDescription>
+          </Alert>
+        )}
+        <Button className="w-full" size="lg" disabled={busy} onClick={submit}>
           {busy ? 'Saving…' : 'Acknowledge with this ETA'}
-        </button>
+        </Button>
       </div>
     </Modal>
   );

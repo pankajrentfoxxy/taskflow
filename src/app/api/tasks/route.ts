@@ -8,7 +8,8 @@ import { runSlaSweep } from '@/lib/cron';
 
 const SUB_COUNTS = `
   (SELECT COUNT(*) FROM tasks s WHERE s.parent_id = t.id) AS subtask_count,
-  (SELECT COUNT(*) FROM tasks s WHERE s.parent_id = t.id AND s.status = 'DONE') AS subtask_done`;
+  (SELECT COUNT(*) FROM tasks s WHERE s.parent_id = t.id AND s.status = 'DONE') AS subtask_done,
+  (SELECT COUNT(*) FROM comments c WHERE c.task_id = t.id) AS comment_count`;
 
 export async function GET(req: Request) {
   const user = await getSessionUser();

@@ -5,13 +5,32 @@ import Shell from '@/components/Shell';
 import Modal from '@/components/Modal';
 import Composer from '@/components/Composer';
 import AckModal from '@/components/AckModal';
+import CommentsPanel from '@/components/CommentsPanel';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { api, fmtDateTime, timeAgo, countdown, toLocalInput, fromLocalInput, STATUS_LABEL, STATUS_COLOR, PRIORITY_COLOR } from '@/lib/util';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { cn } from '@/lib/utils';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex justify-between items-start gap-3 py-2 border-b border-gray-50 last:border-0">
       <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide pt-0.5">{label}</span>
       <span className="text-sm text-right">{children}</span>
+    </div>
+  );
+}
+
+function PanelHeader({ title }: { title: string }) {
+  return (
+    <div className="shrink-0 border-b bg-muted/30 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      {title}
     </div>
   );
 }
@@ -27,9 +46,7 @@ function TaskDetailInner({ id }: { id: string }) {
   const [etaVal, setEtaVal] = useState('');
   const [explanation, setExplanation] = useState('');
   const [propEta, setPropEta] = useState('');
-  const [comment, setComment] = useState('');
   const [deliveredVal, setDeliveredVal] = useState('');
-  const [showActivity, setShowActivity] = useState(false);
   const [showEtaHistory, setShowEtaHistory] = useState(false);
 
   const load = useCallback(() => {
@@ -37,10 +54,16 @@ function TaskDetailInner({ id }: { id: string }) {
   }, [id]);
   useEffect(() => { load(); }, [load]);
 
-  if (err) return <div className="card p-8 text-center text-red-600">{err}</div>;
-  if (!data) return <div className="card h-60 animate-pulse" />;
+  if (err) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center text-red-600">{err}</CardContent>
+      </Card>
+    );
+  }
+  if (!data) return <Card className="h-60 animate-pulse" />;
 
-  const { task, subtasks, comments, activity, attachments, escalation, batchTasks, permissions: perm } = data;
+  const { task, subtasks, activity, attachments, escalation, batchTasks, permissions: perm } = data;
 
   const act = async (body: any) => {
     setErr('');
@@ -80,12 +103,6 @@ function TaskDetailInner({ id }: { id: string }) {
     } catch (e: any) { setErr(e.message); }
   };
 
-  const postComment = async () => {
-    if (!comment.trim()) return;
-    await api(`/api/tasks/${id}/comments`, { method: 'POST', body: JSON.stringify({ body: comment }) });
-    setComment(''); load();
-  };
-
   const submitEta = () => {
     const v = fromLocalInput(etaVal);
     if (v) { act({ action: 'update_eta', etaAt: v }); setEtaOpen(false); }
@@ -95,244 +112,252 @@ function TaskDetailInner({ id }: { id: string }) {
   const overdue = task.due_at < Date.now() && !['DONE', 'CANCELLED'].includes(task.status);
 
   return (
-    <div className="space-y-4">
-      <Link href="/tasks" className="text-sm text-gray-400 hover:text-brand-600">← Back to tasks</Link>
+    <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-3">
+      <Link href="/tasks" className="shrink-0 text-sm text-muted-foreground hover:text-foreground">← Back to tasks</Link>
 
-      {/* Header card */}
-      <div className="card p-4">
-        <div className="flex items-center gap-2 flex-wrap mb-2">
-          <span className={`pill ${STATUS_COLOR[task.status]}`}>{STATUS_LABEL[task.status]}</span>
-          {task.sla_breached_at && task.status === 'ASSIGNED' && <span className="pill bg-red-600 text-white">NO RESPONSE</span>}
-          {task.status === 'ASSIGNED' && !task.sla_breached_at && task.sla_deadline_at && (
-            <span className="pill bg-amber-500 text-white">⏱ Respond: {countdown(task.sla_deadline_at)}</span>
-          )}
-          {task.blocked_reason && <span className="pill bg-purple-100 text-purple-700">Blocked</span>}
-          <span className={`text-xs font-bold ${PRIORITY_COLOR[task.priority]}`}>{task.priority}</span>
-          {task.reopen_count > 0 && <span className="pill bg-gray-100 text-gray-500">Reopened ×{task.reopen_count}</span>}
-        </div>
-        <h1 className="text-lg font-bold leading-snug">{task.title}</h1>
-        {task.description && <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap">{task.description}</p>}
-        {task.blocked_reason && (
-          <div className="mt-2 text-sm bg-purple-50 text-purple-800 rounded-lg px-3 py-2">🚧 Blocked: {task.blocked_reason}</div>
-        )}
-
-        <div className="mt-3">
-          <Row label="Assignee">{task.assignee_name || (task.team_name ? `Team: ${task.team_name}` : '—')}</Row>
-          <Row label="Created by">{task.creator_name} · {timeAgo(task.created_at)}</Row>
-          <Row label="Due">
-            <span className={overdue ? 'text-red-600 font-bold' : ''}>{fmtDateTime(task.due_at)}{overdue ? ' (overdue)' : ''}</span>
-          </Row>
-          <Row label="ETA">
-            <span>
-              {fmtDateTime(task.eta_at)}
-              {etaHistory.length > 0 && (
-                <button className="ml-2 text-xs text-brand-600 underline" onClick={() => setShowEtaHistory(!showEtaHistory)}>
-                  history ({etaHistory.length})
-                </button>
-              )}
-            </span>
-          </Row>
-          {showEtaHistory && etaHistory.map((h: any) => {
-            const m = JSON.parse(h.meta || '{}');
-            return (
-              <div key={h.id} className="text-xs text-gray-500 py-1 pl-2 border-l-2 border-brand-100">
-                {h.actor_name}: {fmtDateTime(m.from)} → <strong>{fmtDateTime(m.to)}</strong> · {timeAgo(h.created_at)}
-              </div>
-            );
-          })}
-          {task.type_name && <Row label="Task type">{task.type_name} <span className="text-gray-400">(counted in {task.type_alias})</span></Row>}
-          {task.acknowledged_at && <Row label="Acknowledged">{fmtDateTime(task.acknowledged_at)}</Row>}
-          {task.done_at && <Row label="Done at">{fmtDateTime(task.done_at)}</Row>}
-          {task.project_name && (
-            <Row label="Project"><Link className="text-brand-600 underline" href={`/projects/${task.project_id}`}>{task.project_name}</Link></Row>
-          )}
-          {task.parent_id && <Row label="Parent task"><Link className="text-brand-600 underline" href={`/tasks/${task.parent_id}`}>#{task.parent_id}</Link></Row>}
-        </div>
-
-        {batchTasks.length > 0 && (
-          <div className="mt-2 text-xs text-gray-500">
-            📎 Part of a batch: {batchTasks.map((b: any) => (
-              <Link key={b.id} href={`/tasks/${b.id}`} className="text-brand-600 underline mr-2">#{b.id} {b.title}</Link>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Delivery target */}
-      {task.target_count != null && (
-        <div className={`card p-4 ${task.delivered_count >= task.target_count ? 'border-emerald-300 bg-emerald-50' : ''}`}>
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="font-bold text-sm">
-              Delivery: {task.delivered_count}/{task.target_count} {task.type_alias}
-              {task.delivered_count >= task.target_count && <span className="ml-2 text-emerald-600">🎯 Target met</span>}
-            </h3>
-          </div>
-          <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-3">
-            <div className={`h-full rounded-full ${task.delivered_count >= task.target_count ? 'bg-emerald-500' : 'bg-brand-500'}`}
-              style={{ width: `${Math.min(100, (100 * task.delivered_count) / task.target_count)}%` }} />
-          </div>
-          {perm.canProgress && (
-            <div className="flex gap-2 items-center flex-wrap">
-              <button className="btn-primary !py-1.5 text-sm" onClick={() => act({ action: 'progress', increment: 1 })}>
-                +1 {task.type_alias}
-              </button>
-              <input type="number" min="0" className="input !w-24 !py-1.5" placeholder={String(task.delivered_count)}
-                value={deliveredVal} onChange={(e) => setDeliveredVal(e.target.value)} />
-              <button className="btn-secondary !py-1.5 text-sm" disabled={deliveredVal === ''}
-                onClick={() => { act({ action: 'progress', delivered: Number(deliveredVal) }); setDeliveredVal(''); }}>
-                Set exact
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Escalation banners */}
-      {perm.mustExplain && (
-        <div className="card p-4 border-red-300 bg-red-50">
-          <h3 className="font-bold text-red-700 mb-1">🚨 Explanation required</h3>
-          <p className="text-sm text-red-600 mb-3">
-            This task passed its due date. You must submit a written explanation (min 20 characters) and propose a new ETA before doing anything else.
-          </p>
-          <textarea className="input min-h-[80px] mb-2" placeholder="Why was this task delayed?" value={explanation} onChange={(e) => setExplanation(e.target.value)} />
-          <span className="label">Proposed new ETA</span>
-          <input type="datetime-local" className="input mb-3" value={propEta} onChange={(e) => setPropEta(e.target.value)} />
-          <button className="btn-danger w-full" onClick={submitExplanation}>Submit explanation</button>
-        </div>
-      )}
-      {escalation?.explanation && task.status === 'ESCALATED' && (
-        <div className="card p-4 border-amber-300 bg-amber-50">
-          <h3 className="font-bold text-amber-800 mb-1">Escalation explanation</h3>
-          <p className="text-sm text-gray-700 whitespace-pre-wrap">{escalation.explanation}</p>
-          <p className="text-xs text-gray-500 mt-1">Proposed ETA: {fmtDateTime(escalation.proposed_eta_at)} · submitted {timeAgo(escalation.explanation_at)}</p>
-          {perm.canReview && (
-            <div className="flex gap-2 mt-3">
-              <button className="btn-primary flex-1" onClick={() => review('ACCEPTED')}>Accept & re-plan</button>
-              <button className="btn-danger flex-1" onClick={() => review('REJECTED')}>Reject</button>
-            </div>
-          )}
-          {escalation.review_status && escalation.review_status !== 'PENDING' && (
-            <div className="text-xs font-bold mt-2">{escalation.review_status}</div>
-          )}
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="flex gap-2 flex-wrap">
-        {perm.canAcknowledge && <button className="btn-primary" onClick={() => setAckOpen(true)}>✓ Acknowledge + ETA</button>}
-        {perm.canStart && <button className="btn-primary" onClick={() => act({ action: 'start' })}>▶ Start</button>}
-        {perm.canDone && <button className="btn-primary !bg-emerald-600 hover:!bg-emerald-700" onClick={() => act({ action: 'done' })}>✔ Mark done</button>}
-        {perm.canEditEta && <button className="btn-secondary" onClick={() => { setEtaVal(toLocalInput(task.eta_at || Date.now())); setEtaOpen(true); }}>Edit ETA</button>}
-        {perm.canBlock && !task.blocked_reason && <button className="btn-secondary" onClick={() => setReasonModal({ action: 'block', title: 'What is blocking you?' })}>🚧 Blocked</button>}
-        {task.blocked_reason && perm.isAssignee && <button className="btn-secondary" onClick={() => act({ action: 'unblock' })}>Unblock</button>}
-        {perm.canReopen && <button className="btn-secondary" onClick={() => setReasonModal({ action: 'reopen', title: 'Why reopen this task?' })}>↩ Reopen</button>}
-        {perm.canCancel && <button className="btn-secondary !text-red-600" onClick={() => setReasonModal({ action: 'cancel', title: 'Why cancel this task?' })}>Cancel task</button>}
-      </div>
-      {err && <div className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{err}</div>}
-
-      {/* Attachments */}
-      {attachments.length > 0 && (
-        <div className="card p-4">
-          <h3 className="font-bold text-sm mb-2">Attachments</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {attachments.map((a: any) => (
-              <a key={a.id} href={`/api/uploads/${a.id}`} target="_blank" className="block border border-gray-200 rounded-lg overflow-hidden hover:border-brand-500">
-                {a.mime_type.startsWith('image/') ? (
-                  <img src={`/api/uploads/${a.id}`} alt={a.file_name} className="w-full h-28 object-cover" />
-                ) : (
-                  <div className="h-28 flex items-center justify-center text-3xl bg-gray-50">📄</div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card lg:flex-row">
+        {/* Left — Task details */}
+        <section className="flex min-h-0 flex-1 flex-col border-b lg:w-1/2 lg:border-b-0 lg:border-r">
+          <PanelHeader title="Task details" />
+          <ScrollArea className="min-h-0 flex-1">
+            <div className="space-y-4 p-4">
+              <div>
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <Badge className={STATUS_COLOR[task.status]}>{STATUS_LABEL[task.status]}</Badge>
+                  {task.sla_breached_at && task.status === 'ASSIGNED' && <Badge className="bg-red-600 text-white">NO RESPONSE</Badge>}
+                  {task.status === 'ASSIGNED' && !task.sla_breached_at && task.sla_deadline_at && (
+                    <Badge className="bg-amber-500 text-white">⏱ Respond: {countdown(task.sla_deadline_at)}</Badge>
+                  )}
+                  {task.blocked_reason && <Badge className="bg-purple-100 text-purple-700">Blocked</Badge>}
+                  <span className={`text-xs font-bold ${PRIORITY_COLOR[task.priority]}`}>{task.priority}</span>
+                  {task.reopen_count > 0 && <Badge className="bg-gray-100 text-gray-500">Reopened ×{task.reopen_count}</Badge>}
+                </div>
+                <h1 className="text-lg font-bold leading-snug">{task.title}</h1>
+                {task.description && <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{task.description}</p>}
+                {task.blocked_reason && (
+                  <div className="mt-2 rounded-lg bg-purple-50 px-3 py-2 text-sm text-purple-800">🚧 Blocked: {task.blocked_reason}</div>
                 )}
-                <div className="px-2 py-1 text-[11px] truncate text-gray-500">{a.file_name}</div>
-              </a>
-            ))}
-          </div>
-        </div>
-      )}
+              </div>
 
-      {/* Subtasks */}
-      {!task.parent_id && (
-        <div className="card p-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="font-bold text-sm">
-              Subtasks{subtasks.length > 0 && (
-                <span className="ml-2 text-emerald-600">{subtasks.filter((s: any) => s.status === 'DONE').length} of {subtasks.length} done</span>
+              <div className="rounded-lg border p-3">
+                <Row label="Assignee">{task.assignee_name || (task.team_name ? `Team: ${task.team_name}` : '—')}</Row>
+                <Row label="Created by">{task.creator_name} · {timeAgo(task.created_at)}</Row>
+                <Row label="Due">
+                  <span className={overdue ? 'font-bold text-red-600' : ''}>{fmtDateTime(task.due_at)}{overdue ? ' (overdue)' : ''}</span>
+                </Row>
+                <Row label="ETA">
+                  <span>
+                    {fmtDateTime(task.eta_at)}
+                    {etaHistory.length > 0 && (
+                      <button className="ml-2 text-xs underline" onClick={() => setShowEtaHistory(!showEtaHistory)}>
+                        history ({etaHistory.length})
+                      </button>
+                    )}
+                  </span>
+                </Row>
+                {showEtaHistory && etaHistory.map((h: any) => {
+                  const m = JSON.parse(h.meta || '{}');
+                  return (
+                    <div key={h.id} className="border-l-2 border-border py-1 pl-2 text-xs text-muted-foreground">
+                      {h.actor_name}: {fmtDateTime(m.from)} → <strong>{fmtDateTime(m.to)}</strong> · {timeAgo(h.created_at)}
+                    </div>
+                  );
+                })}
+                {task.type_name && <Row label="Task type">{task.type_name} <span className="text-muted-foreground">(counted in {task.type_alias})</span></Row>}
+                {task.acknowledged_at && <Row label="Acknowledged">{fmtDateTime(task.acknowledged_at)}</Row>}
+                {task.done_at && <Row label="Done at">{fmtDateTime(task.done_at)}</Row>}
+                {task.project_name && (
+                  <Row label="Project"><Link className="underline" href={`/projects/${task.project_id}`}>{task.project_name}</Link></Row>
+                )}
+                {task.parent_id && <Row label="Parent task"><Link className="underline" href={`/tasks/${task.parent_id}`}>#{task.parent_id}</Link></Row>}
+              </div>
+
+              {batchTasks.length > 0 && (
+                <div className="text-xs text-muted-foreground">
+                  📎 Part of a batch: {batchTasks.map((b: any) => (
+                    <Link key={b.id} href={`/tasks/${b.id}`} className="mr-2 underline">#{b.id} {b.title}</Link>
+                  ))}
+                </div>
               )}
-            </h3>
-            {perm.canAddSubtask && <button className="btn-secondary !py-1 !px-2.5 text-xs" onClick={() => setSubOpen(true)}>+ Add subtask</button>}
-          </div>
-          {subtasks.length > 0 && (
-            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-3">
-              <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${(100 * subtasks.filter((s: any) => s.status === 'DONE').length) / subtasks.length}%` }} />
-            </div>
-          )}
-          <div className="space-y-2">
-            {subtasks.map((s: any) => (
-              <div key={s.id} className="flex items-center gap-2.5">
-                <input
-                  type="checkbox"
-                  checked={s.status === 'DONE'}
-                  disabled={s.status === 'DONE'}
-                  onChange={() => api(`/api/tasks/${s.id}`, { method: 'PATCH', body: JSON.stringify({ action: 'done' }) }).then(load).catch((e) => setErr(e.message))}
-                  className="w-5 h-5 rounded accent-emerald-600"
-                />
-                <div className="min-w-0 flex-1">
-                  <Link href={`/tasks/${s.id}`} className={`text-sm block truncate ${s.status === 'DONE' ? 'line-through text-gray-400' : 'font-medium'}`}>{s.title}</Link>
-                  <div className="text-[11px] text-gray-400">
-                    {s.assignee_name || 'Unassigned'}
-                    {s.done_at && <> · ✔ done {fmtDateTime(s.done_at)}</>}
+
+              {task.target_count != null && (
+                <Card className={cn(task.delivered_count >= task.target_count && 'border-emerald-300 bg-emerald-50')}>
+                  <CardContent className="p-3">
+                    <h3 className="mb-2 text-sm font-bold">
+                      Delivery: {task.delivered_count}/{task.target_count} {task.type_alias}
+                      {task.delivered_count >= task.target_count && <span className="ml-2 text-emerald-600">🎯 Target met</span>}
+                    </h3>
+                    <div className="mb-3 h-2 overflow-hidden rounded-full bg-muted">
+                      <div className={`h-full rounded-full ${task.delivered_count >= task.target_count ? 'bg-emerald-500' : 'bg-foreground'}`}
+                        style={{ width: `${Math.min(100, (100 * task.delivered_count) / task.target_count)}%` }} />
+                    </div>
+                    {perm.canProgress && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button size="sm" onClick={() => act({ action: 'progress', increment: 1 })}>+1 {task.type_alias}</Button>
+                        <Input type="number" min="0" className="w-24" placeholder={String(task.delivered_count)}
+                          value={deliveredVal} onChange={(e) => setDeliveredVal(e.target.value)} />
+                        <Button variant="outline" size="sm" disabled={deliveredVal === ''}
+                          onClick={() => { act({ action: 'progress', delivered: Number(deliveredVal) }); setDeliveredVal(''); }}>
+                          Set exact
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {perm.mustExplain && (
+                <Card className="border-red-300 bg-red-50">
+                  <CardContent className="p-3">
+                    <h3 className="mb-1 font-bold text-red-700">🚨 Explanation required</h3>
+                    <p className="mb-3 text-sm text-red-600">
+                      Submit a written explanation (min 20 characters) and propose a new ETA before doing anything else.
+                    </p>
+                    <Textarea className="mb-2 min-h-[80px]" placeholder="Why was this task delayed?" value={explanation} onChange={(e) => setExplanation(e.target.value)} />
+                    <Label>Proposed new ETA</Label>
+                    <Input type="datetime-local" className="mb-3" value={propEta} onChange={(e) => setPropEta(e.target.value)} />
+                    <Button variant="destructive" className="w-full" onClick={submitExplanation}>Submit explanation</Button>
+                  </CardContent>
+                </Card>
+              )}
+
+              {escalation?.explanation && task.status === 'ESCALATED' && (
+                <Card className="border-amber-300 bg-amber-50">
+                  <CardContent className="p-3">
+                    <h3 className="mb-1 font-bold text-amber-800">Escalation explanation</h3>
+                    <p className="whitespace-pre-wrap text-sm text-gray-700">{escalation.explanation}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Proposed ETA: {fmtDateTime(escalation.proposed_eta_at)} · submitted {timeAgo(escalation.explanation_at)}</p>
+                    {perm.canReview && (
+                      <div className="mt-3 flex gap-2">
+                        <Button className="flex-1" onClick={() => review('ACCEPTED')}>Accept & re-plan</Button>
+                        <Button variant="destructive" className="flex-1" onClick={() => review('REJECTED')}>Reject</Button>
+                      </div>
+                    )}
+                    {escalation.review_status && escalation.review_status !== 'PENDING' && (
+                      <div className="mt-2 text-xs font-bold">{escalation.review_status}</div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                {perm.canAcknowledge && <Button onClick={() => setAckOpen(true)}>✓ Acknowledge + ETA</Button>}
+                {perm.canStart && <Button onClick={() => act({ action: 'start' })}>▶ Start</Button>}
+                {perm.canDone && (
+                  <Button className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => act({ action: 'done' })}>
+                    ✔ Mark done
+                  </Button>
+                )}
+                {perm.canEditEta && <Button variant="outline" onClick={() => { setEtaVal(toLocalInput(task.eta_at || Date.now())); setEtaOpen(true); }}>Edit ETA</Button>}
+                {perm.canBlock && !task.blocked_reason && <Button variant="outline" onClick={() => setReasonModal({ action: 'block', title: 'What is blocking you?' })}>🚧 Blocked</Button>}
+                {task.blocked_reason && perm.isAssignee && <Button variant="outline" onClick={() => act({ action: 'unblock' })}>Unblock</Button>}
+                {perm.canReopen && <Button variant="outline" onClick={() => setReasonModal({ action: 'reopen', title: 'Why reopen this task?' })}>↩ Reopen</Button>}
+                {perm.canCancel && <Button variant="outline" className="text-red-600" onClick={() => setReasonModal({ action: 'cancel', title: 'Why cancel this task?' })}>Cancel task</Button>}
+              </div>
+
+              {err && (
+                <Alert variant="destructive">
+                  <AlertDescription>{err}</AlertDescription>
+                </Alert>
+              )}
+
+              {attachments.length > 0 && (
+                <div>
+                  <h3 className="mb-2 text-sm font-bold">Attachments</h3>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {attachments.map((a: any) => (
+                      <a key={a.id} href={`/api/uploads/${a.id}`} target="_blank" className="block overflow-hidden rounded-lg border hover:border-foreground">
+                        {a.mime_type.startsWith('image/') ? (
+                          <img src={`/api/uploads/${a.id}`} alt={a.file_name} className="h-24 w-full object-cover" />
+                        ) : (
+                          <div className="flex h-24 items-center justify-center bg-muted text-3xl">📄</div>
+                        )}
+                        <div className="truncate px-2 py-1 text-[11px] text-muted-foreground">{a.file_name}</div>
+                      </a>
+                    ))}
                   </div>
                 </div>
-              </div>
-            ))}
-            {subtasks.length === 0 && <div className="text-xs text-gray-400">No subtasks. Break this task down if it contains several items.</div>}
-          </div>
-        </div>
-      )}
+              )}
 
-      {/* Comments */}
-      <div className="card p-4">
-        <h3 className="font-bold text-sm mb-3">Comments ({comments.length})</h3>
-        <div className="space-y-3 mb-3">
-          {comments.map((c: any) => (
-            <div key={c.id}>
-              <div className="text-xs text-gray-400"><strong className="text-gray-600">{c.author_name}</strong> · {timeAgo(c.created_at)}</div>
-              <div className="text-sm whitespace-pre-wrap">{c.body}</div>
+              {!task.parent_id && (
+                <div>
+                  <div className="mb-2 flex items-center justify-between">
+                    <h3 className="text-sm font-bold">
+                      Subtasks{subtasks.length > 0 && (
+                        <span className="ml-2 text-emerald-600">{subtasks.filter((s: any) => s.status === 'DONE').length} of {subtasks.length} done</span>
+                      )}
+                    </h3>
+                    {perm.canAddSubtask && (
+                      <Button variant="outline" size="xs" onClick={() => setSubOpen(true)}>+ Add subtask</Button>
+                    )}
+                  </div>
+                  {subtasks.length > 0 && (
+                    <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-emerald-500" style={{ width: `${(100 * subtasks.filter((s: any) => s.status === 'DONE').length) / subtasks.length}%` }} />
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    {subtasks.map((s: any) => (
+                      <div key={s.id} className="flex items-center gap-2.5">
+                        <Checkbox
+                          checked={s.status === 'DONE'}
+                          disabled={s.status === 'DONE'}
+                          onCheckedChange={() => api(`/api/tasks/${s.id}`, { method: 'PATCH', body: JSON.stringify({ action: 'done' }) }).then(load).catch((e) => setErr(e.message))}
+                          className="size-5"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <Link href={`/tasks/${s.id}`} className={`block truncate text-sm ${s.status === 'DONE' ? 'text-muted-foreground line-through' : 'font-medium'}`}>{s.title}</Link>
+                          <div className="text-[11px] text-muted-foreground">
+                            {s.assignee_name || 'Unassigned'}
+                            {s.done_at && <> · ✔ done {fmtDateTime(s.done_at)}</>}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {subtasks.length === 0 && <div className="text-xs text-muted-foreground">No subtasks yet.</div>}
+                  </div>
+                </div>
+              )}
             </div>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <input className="input flex-1" placeholder="Write a comment…" value={comment} onChange={(e) => setComment(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && postComment()} />
-          <button className="btn-primary" onClick={postComment}>Send</button>
-        </div>
-      </div>
+          </ScrollArea>
+        </section>
 
-      {/* Activity */}
-      <div className="card p-4">
-        <button className="font-bold text-sm w-full text-left" onClick={() => setShowActivity(!showActivity)}>
-          Activity log ({activity.length}) {showActivity ? '▾' : '▸'}
-        </button>
-        {showActivity && (
-          <div className="mt-3 space-y-1.5">
-            {activity.map((a: any) => (
-              <div key={a.id} className="text-xs text-gray-500">
-                <span className="font-semibold text-gray-600">{a.actor_name || 'System'}</span> · {a.type.toLowerCase().replace(/_/g, ' ')} · {timeAgo(a.created_at)}
+        {/* Right — Activity + Comments */}
+        <section className="flex min-h-0 flex-1 flex-col lg:w-1/2">
+          <div className="flex h-44 shrink-0 flex-col overflow-hidden border-b">
+            <PanelHeader title="Activity" />
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="space-y-2 p-4">
+                {activity.length === 0 ? (
+                  <div className="py-6 text-center text-sm text-muted-foreground">No activity yet.</div>
+                ) : (
+                  activity.map((a: any) => (
+                    <div key={a.id} className="rounded-lg border bg-muted/20 px-3 py-2 text-xs">
+                      <span className="font-semibold text-foreground">{a.actor_name || 'System'}</span>
+                      <span className="text-muted-foreground"> · {a.type.toLowerCase().replace(/_/g, ' ')} · {timeAgo(a.created_at)}</span>
+                    </div>
+                  ))
+                )}
               </div>
-            ))}
+            </div>
           </div>
-        )}
+
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <PanelHeader title="Comments" />
+            <CommentsPanel taskId={Number(id)} onChanged={load} />
+          </div>
+        </section>
       </div>
 
-      {/* Modals */}
       <AckModal task={task} open={ackOpen} onClose={() => setAckOpen(false)} onDone={load} />
       <Composer open={subOpen} onClose={() => setSubOpen(false)} onCreated={load} presetParentId={task.id} />
       <Modal open={etaOpen} onClose={() => setEtaOpen(false)} title="Update ETA">
-        <input type="datetime-local" className="input mb-3" value={etaVal} onChange={(e) => setEtaVal(e.target.value)} />
-        <button className="btn-primary w-full" onClick={submitEta}>Save ETA</button>
+        <Input type="datetime-local" className="mb-3" value={etaVal} onChange={(e) => setEtaVal(e.target.value)} />
+        <Button className="w-full" onClick={submitEta}>Save ETA</Button>
       </Modal>
       <Modal open={!!reasonModal} onClose={() => setReasonModal(null)} title={reasonModal?.title || ''}>
-        <textarea className="input min-h-[80px] mb-3" value={reasonText} onChange={(e) => setReasonText(e.target.value)} />
-        <button className="btn-primary w-full" onClick={submitReason} disabled={!reasonText.trim()}>Submit</button>
+        <Textarea className="mb-3 min-h-[80px]" value={reasonText} onChange={(e) => setReasonText(e.target.value)} />
+        <Button className="w-full" onClick={submitReason} disabled={!reasonText.trim()}>Submit</Button>
       </Modal>
     </div>
   );

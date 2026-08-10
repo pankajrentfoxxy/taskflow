@@ -3,6 +3,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Shell from '@/components/Shell';
 import { api, timeAgo } from '@/lib/util';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 const ICONS: Record<string, string> = {
   ASSIGNED: '📥', SLA_WARNING: '⏰', SLA_BREACH: '🚨', ESCALATED: '🔺', EXPLANATION: '📝',
@@ -20,21 +23,23 @@ function NotificationsInner() {
 
   return (
     <>
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4 flex items-center justify-between">
         <h1 className="text-xl font-bold">Notifications</h1>
-        <button className="btn-secondary" onClick={markAll}>Mark all read</button>
+        <Button variant="outline" onClick={markAll}>Mark all read</Button>
       </div>
       <div className="space-y-2">
         {items.map((n) => {
           const inner = (
-            <div className={`card p-3.5 flex gap-3 ${!n.read_at ? 'border-brand-200 bg-brand-50/50' : ''}`}>
-              <span className="text-xl">{ICONS[n.type] || '🔔'}</span>
-              <div className="min-w-0">
-                <div className={`text-sm ${!n.read_at ? 'font-semibold' : ''}`}>{n.title}</div>
-                {n.body && <div className="text-xs text-gray-500 truncate">{n.body}</div>}
-                <div className="text-[11px] text-gray-400 mt-0.5">{timeAgo(n.created_at)}</div>
-              </div>
-            </div>
+            <Card className={cn('py-0', !n.read_at && 'border-brand-200 bg-brand-50/50')}>
+              <CardContent className="flex gap-3 p-3.5">
+                <span className="text-xl">{ICONS[n.type] || '🔔'}</span>
+                <div className="min-w-0">
+                  <div className={cn('text-sm', !n.read_at && 'font-semibold')}>{n.title}</div>
+                  {n.body && <div className="truncate text-xs text-gray-500">{n.body}</div>}
+                  <div className="mt-0.5 text-[11px] text-gray-400">{timeAgo(n.created_at)}</div>
+                </div>
+              </CardContent>
+            </Card>
           );
           return n.task_id ? (
             <Link key={n.id} href={`/tasks/${n.task_id}`} className="block"
@@ -43,7 +48,11 @@ function NotificationsInner() {
             </Link>
           ) : <div key={n.id}>{inner}</div>;
         })}
-        {items.length === 0 && <div className="card p-10 text-center text-gray-400">No notifications.</div>}
+        {items.length === 0 && (
+          <Card className="py-0">
+            <CardContent className="p-10 text-center text-gray-400">No notifications.</CardContent>
+          </Card>
+        )}
       </div>
     </>
   );

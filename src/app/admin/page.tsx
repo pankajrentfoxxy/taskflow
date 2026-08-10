@@ -3,6 +3,14 @@ import { useEffect, useState } from 'react';
 import Shell, { useMe } from '@/components/Shell';
 import Modal from '@/components/Modal';
 import { api } from '@/lib/util';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import { NativeSelect } from '@/components/ui/native-select';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 function AdminInner() {
   const me = useMe();
@@ -26,7 +34,13 @@ function AdminInner() {
   const isAdmin = me?.role === 'ADMIN';
   const isHead = me?.role === 'MANAGER';
   if (me && !isAdmin && !isHead && me.role !== 'CEO') {
-    return <div className="card p-8 text-center text-gray-400">Admin or Team Head access only.</div>;
+    return (
+      <Card>
+        <CardContent className="p-8 text-center text-gray-400">
+          Admin or Team Head access only.
+        </CardContent>
+      </Card>
+    );
   }
 
   const createType = async () => {
@@ -66,158 +80,211 @@ function AdminInner() {
   return (
     <>
       <h1 className="text-xl font-bold mb-4">Admin</h1>
-      {err && <div className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-3">{err}</div>}
+      {err && (
+        <Alert variant="destructive" className="mb-3">
+          <AlertDescription>{err}</AlertDescription>
+        </Alert>
+      )}
 
       <div className="flex items-center justify-between mb-2">
         <h2 className="font-bold text-sm">Task Types — category & alias per team</h2>
       </div>
-      <div className="card overflow-x-auto mb-3">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs text-gray-400 uppercase border-b border-gray-100">
-              <th className="px-4 py-2.5">Team</th><th className="px-2 py-2.5">Task type</th><th className="px-2 py-2.5">Alias (unit)</th><th className="px-2 py-2.5">Used</th><th className="px-2 py-2.5">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {types.map((tt) => (
-              <tr key={tt.id} className="border-b border-gray-50 last:border-0">
-                <td className="px-4 py-2 text-xs text-gray-500">{tt.team_name}</td>
-                <td className="px-2 py-2 font-medium">{tt.name}</td>
-                <td className="px-2 py-2">{tt.alias}</td>
-                <td className="px-2 py-2 text-xs text-gray-400">{tt.used_count} task{tt.used_count === 1 ? '' : 's'}</td>
-                <td className="px-2 py-2">
-                  <button className={`pill ${tt.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'}`}
-                    onClick={() => api('/api/task-types', { method: 'PATCH', body: JSON.stringify({ id: tt.id, isActive: !tt.is_active }) }).then(load).catch((e) => setErr(e.message))}>
-                    {tt.is_active ? 'Active' : 'Inactive'}
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {types.length === 0 && <tr><td className="px-4 py-4 text-gray-400" colSpan={5}>No task types yet.</td></tr>}
-          </tbody>
-        </table>
-      </div>
-      <div className="card p-4 mb-6">
-        <div className="grid sm:grid-cols-4 gap-2">
-          {(isAdmin || me?.role === 'CEO') ? (
-            <select className="input" value={typeForm.teamId} onChange={(e) => setTypeForm({ ...typeForm, teamId: e.target.value })}>
-              <option value="">Team…</option>
-              {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-          ) : (
-            <div className="input bg-gray-50 text-gray-500">{me?.team || 'My team'}</div>
-          )}
-          <input className="input" placeholder="Type name (e.g. Job Role)" value={typeForm.name} onChange={(e) => setTypeForm({ ...typeForm, name: e.target.value })} />
-          <input className="input" placeholder="Alias / unit (e.g. Resume)" value={typeForm.alias} onChange={(e) => setTypeForm({ ...typeForm, alias: e.target.value })} />
-          <button className="btn-primary" onClick={createType}
-            disabled={!typeForm.name.trim() || !typeForm.alias.trim() || ((isAdmin || me?.role === 'CEO') && !typeForm.teamId)}>
-            + Add type
-          </button>
-        </div>
-      </div>
+      <Card className="mb-3 overflow-hidden py-0 gap-0">
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="text-left text-xs text-gray-400 uppercase border-b border-gray-100 hover:bg-transparent">
+                <TableHead className="px-4 py-2.5">Team</TableHead>
+                <TableHead className="px-2 py-2.5">Task type</TableHead>
+                <TableHead className="px-2 py-2.5">Alias (unit)</TableHead>
+                <TableHead className="px-2 py-2.5">Used</TableHead>
+                <TableHead className="px-2 py-2.5">Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {types.map((tt) => (
+                <TableRow key={tt.id} className="border-b border-gray-50 last:border-0">
+                  <TableCell className="px-4 py-2 text-xs text-gray-500">{tt.team_name}</TableCell>
+                  <TableCell className="px-2 py-2 font-medium">{tt.name}</TableCell>
+                  <TableCell className="px-2 py-2">{tt.alias}</TableCell>
+                  <TableCell className="px-2 py-2 text-xs text-gray-400">{tt.used_count} task{tt.used_count === 1 ? '' : 's'}</TableCell>
+                  <TableCell className="px-2 py-2">
+                    <Badge
+                      role="button"
+                      className={`cursor-pointer ${tt.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'}`}
+                      onClick={() => api('/api/task-types', { method: 'PATCH', body: JSON.stringify({ id: tt.id, isActive: !tt.is_active }) }).then(load).catch((e) => setErr(e.message))}
+                    >
+                      {tt.is_active ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {types.length === 0 && (
+                <TableRow>
+                  <TableCell className="px-4 py-4 text-gray-400" colSpan={5}>No task types yet.</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+      <Card className="mb-6">
+        <CardContent>
+          <div className="grid sm:grid-cols-4 gap-2">
+            {(isAdmin || me?.role === 'CEO') ? (
+              <NativeSelect value={typeForm.teamId} onChange={(e) => setTypeForm({ ...typeForm, teamId: e.target.value })}>
+                <option value="">Team…</option>
+                {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </NativeSelect>
+            ) : (
+              <div className="flex h-8 items-center rounded-lg border border-input bg-gray-50 px-2.5 text-sm text-gray-500">
+                {me?.team || 'My team'}
+              </div>
+            )}
+            <Input placeholder="Type name (e.g. Job Role)" value={typeForm.name} onChange={(e) => setTypeForm({ ...typeForm, name: e.target.value })} />
+            <Input placeholder="Alias / unit (e.g. Resume)" value={typeForm.alias} onChange={(e) => setTypeForm({ ...typeForm, alias: e.target.value })} />
+            <Button
+              onClick={createType}
+              disabled={!typeForm.name.trim() || !typeForm.alias.trim() || ((isAdmin || me?.role === 'CEO') && !typeForm.teamId)}
+            >
+              + Add type
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {isAdmin && (<>
       <div className="flex items-center justify-between mb-2">
         <h2 className="font-bold text-sm">Users ({users.length})</h2>
-        <button className="btn-primary !py-1.5 text-xs" onClick={() => setUserOpen(true)}>+ Add user</button>
+        <Button size="sm" className="text-xs" onClick={() => setUserOpen(true)}>+ Add user</Button>
       </div>
-      <div className="card overflow-x-auto mb-6">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs text-gray-400 uppercase border-b border-gray-100">
-              <th className="px-4 py-2.5">Name</th><th className="px-2 py-2.5">Role</th><th className="px-2 py-2.5">Team</th><th className="px-2 py-2.5">Status</th><th className="px-2 py-2.5"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id} className="border-b border-gray-50 last:border-0">
-                <td className="px-4 py-2">
-                  <div className="font-medium">{u.name}</div>
-                  <div className="text-[11px] text-gray-400">{u.email}</div>
-                </td>
-                <td className="px-2 py-2">
-                  <select className="input !w-auto !py-1 text-xs" value={u.role} onChange={(e) => patchUser(u.id, { role: e.target.value })}>
-                    <option>ADMIN</option><option>CEO</option><option>MANAGER</option><option>MEMBER</option>
-                  </select>
-                </td>
-                <td className="px-2 py-2">
-                  <select className="input !w-auto !py-1 text-xs" value={u.team_id ?? ''} onChange={(e) => patchUser(u.id, { teamId: e.target.value ? Number(e.target.value) : null })}>
-                    <option value="">—</option>
-                    {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                </td>
-                <td className="px-2 py-2">
-                  <button className={`pill ${u.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'}`}
-                    onClick={() => patchUser(u.id, { isActive: !u.is_active })}>
-                    {u.is_active ? 'Active' : 'Inactive'}
-                  </button>
-                </td>
-                <td className="px-2 py-2">
-                  <button className="text-xs text-brand-600 underline"
-                    onClick={() => { const p = prompt(`New password for ${u.name}:`); if (p) patchUser(u.id, { password: p }); }}>
-                    Reset pw
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Card className="mb-6 overflow-hidden py-0 gap-0">
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="text-left text-xs text-gray-400 uppercase border-b border-gray-100 hover:bg-transparent">
+                <TableHead className="px-4 py-2.5">Name</TableHead>
+                <TableHead className="px-2 py-2.5">Role</TableHead>
+                <TableHead className="px-2 py-2.5">Team</TableHead>
+                <TableHead className="px-2 py-2.5">Status</TableHead>
+                <TableHead className="px-2 py-2.5"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {users.map((u) => (
+                <TableRow key={u.id} className="border-b border-gray-50 last:border-0">
+                  <TableCell className="px-4 py-2">
+                    <div className="font-medium">{u.name}</div>
+                    <div className="text-[11px] text-gray-400">{u.email}</div>
+                  </TableCell>
+                  <TableCell className="px-2 py-2">
+                    <NativeSelect className="w-auto py-1 text-xs h-auto" value={u.role} onChange={(e) => patchUser(u.id, { role: e.target.value })}>
+                      <option>ADMIN</option><option>CEO</option><option>MANAGER</option><option>MEMBER</option>
+                    </NativeSelect>
+                  </TableCell>
+                  <TableCell className="px-2 py-2">
+                    <NativeSelect className="w-auto py-1 text-xs h-auto" value={u.team_id ?? ''} onChange={(e) => patchUser(u.id, { teamId: e.target.value ? Number(e.target.value) : null })}>
+                      <option value="">—</option>
+                      {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </NativeSelect>
+                  </TableCell>
+                  <TableCell className="px-2 py-2">
+                    <Badge
+                      role="button"
+                      className={`cursor-pointer ${u.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'}`}
+                      onClick={() => patchUser(u.id, { isActive: !u.is_active })}
+                    >
+                      {u.is_active ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="px-2 py-2">
+                    <button className="text-xs text-brand-600 underline"
+                      onClick={() => { const p = prompt(`New password for ${u.name}:`); if (p) patchUser(u.id, { password: p }); }}>
+                      Reset pw
+                    </button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       <div className="flex items-center justify-between mb-2">
         <h2 className="font-bold text-sm">Teams ({teams.length})</h2>
-        <button className="btn-primary !py-1.5 text-xs" onClick={() => setTeamOpen(true)}>+ Add team</button>
+        <Button size="sm" className="text-xs" onClick={() => setTeamOpen(true)}>+ Add team</Button>
       </div>
       <div className="grid sm:grid-cols-3 gap-3 mb-6">
         {teams.map((t) => (
-          <div key={t.id} className="card p-4">
-            <div className="font-bold">{t.name}</div>
-            <div className="text-xs text-gray-500 mt-1">Manager: {t.manager_name || '—'}</div>
-            <div className="text-xs text-gray-400">{t.member_count} members</div>
-          </div>
+          <Card key={t.id}>
+            <CardContent>
+              <div className="font-bold">{t.name}</div>
+              <div className="text-xs text-gray-500 mt-1">Manager: {t.manager_name || '—'}</div>
+              <div className="text-xs text-gray-400">{t.member_count} members</div>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
       </>)}
 
-      <div className="card p-4 text-xs text-gray-500 leading-relaxed">
-        <div className="font-bold text-gray-700 mb-1">System settings</div>
-        Working hours: <strong>10:00 – 19:00 IST, Mon–Sat</strong> · Response SLA: <strong>30 working minutes</strong> · Escalation: automatic when a task passes its due date.
-        External cron (optional): <code className="bg-gray-100 px-1 rounded">GET /api/cron/sla-check</code> every minute — the app also sweeps automatically on activity.
-      </div>
+      <Card>
+        <CardHeader className="pb-0">
+          <CardTitle className="text-xs text-gray-700">System settings</CardTitle>
+        </CardHeader>
+        <CardContent className="text-xs text-gray-500 leading-relaxed">
+          Working hours: <strong>10:00 – 19:00 IST, Mon–Sat</strong> · Response SLA: <strong>30 working minutes</strong> · Escalation: automatic when a task passes its due date.
+          External cron (optional): <code className="bg-gray-100 px-1 rounded">GET /api/cron/sla-check</code> every minute — the app also sweeps automatically on activity.
+        </CardContent>
+      </Card>
 
       <Modal open={userOpen} onClose={() => setUserOpen(false)} title="Add user">
         <div className="space-y-3">
-          <div><span className="label">Name</span><input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-          <div><span className="label">Email</span><input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-          <div><span className="label">Password</span><input className="input" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
+          <div>
+            <Label>Name</Label>
+            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          </div>
+          <div>
+            <Label>Email</Label>
+            <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          </div>
+          <div>
+            <Label>Password</Label>
+            <Input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+          </div>
           <div className="grid grid-cols-2 gap-3">
-            <div><span className="label">Role</span>
-              <select className="input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+            <div>
+              <Label>Role</Label>
+              <NativeSelect value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
                 <option>MEMBER</option><option>MANAGER</option><option>CEO</option><option>ADMIN</option>
-              </select>
+              </NativeSelect>
             </div>
-            <div><span className="label">Team</span>
-              <select className="input" value={form.teamId} onChange={(e) => setForm({ ...form, teamId: e.target.value })}>
+            <div>
+              <Label>Team</Label>
+              <NativeSelect value={form.teamId} onChange={(e) => setForm({ ...form, teamId: e.target.value })}>
                 <option value="">None</option>
                 {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
+              </NativeSelect>
             </div>
           </div>
-          <button className="btn-primary w-full" onClick={createUser} disabled={!form.name || !form.email || !form.password}>Create user</button>
+          <Button className="w-full" onClick={createUser} disabled={!form.name || !form.email || !form.password}>Create user</Button>
         </div>
       </Modal>
 
       <Modal open={teamOpen} onClose={() => setTeamOpen(false)} title="Add team">
         <div className="space-y-3">
-          <div><span className="label">Team name</span><input className="input" value={teamForm.name} onChange={(e) => setTeamForm({ ...teamForm, name: e.target.value })} /></div>
-          <div><span className="label">Manager</span>
-            <select className="input" value={teamForm.managerId} onChange={(e) => setTeamForm({ ...teamForm, managerId: e.target.value })}>
+          <div>
+            <Label>Team name</Label>
+            <Input value={teamForm.name} onChange={(e) => setTeamForm({ ...teamForm, name: e.target.value })} />
+          </div>
+          <div>
+            <Label>Manager</Label>
+            <NativeSelect value={teamForm.managerId} onChange={(e) => setTeamForm({ ...teamForm, managerId: e.target.value })}>
               <option value="">Choose later</option>
               {users.filter((u) => u.is_active).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
+            </NativeSelect>
           </div>
-          <button className="btn-primary w-full" onClick={createTeam} disabled={!teamForm.name}>Create team</button>
+          <Button className="w-full" onClick={createTeam} disabled={!teamForm.name}>Create team</Button>
         </div>
       </Modal>
     </>

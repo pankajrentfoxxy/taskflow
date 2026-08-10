@@ -166,8 +166,25 @@ export function getDb(): DB {
     'ALTER TABLE tasks ADD COLUMN task_type_id INTEGER',
     'ALTER TABLE tasks ADD COLUMN target_count INTEGER',
     'ALTER TABLE tasks ADD COLUMN delivered_count INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE comments ADD COLUMN parent_comment_id INTEGER',
+    'ALTER TABLE comments ADD COLUMN edited INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE comments ADD COLUMN edited_at INTEGER',
+    'ALTER TABLE comments ADD COLUMN updated_at INTEGER',
   ];
   for (const m of MIGRATIONS) { try { db.exec(m); } catch {} }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS comment_reactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      comment_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      emoji TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      UNIQUE(comment_id, user_id, emoji)
+    );
+    CREATE INDEX IF NOT EXISTS idx_comments_task ON comments(task_id);
+    CREATE INDEX IF NOT EXISTS idx_comments_parent ON comments(parent_comment_id);
+    CREATE INDEX IF NOT EXISTS idx_comment_reactions_comment ON comment_reactions(comment_id);
+  `);
   const userCount = (db.prepare('SELECT COUNT(*) AS c FROM users').get() as any).c;
   if (userCount === 0) seed(db);
   globalThis.__tfdb = db;

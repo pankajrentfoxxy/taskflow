@@ -1,0 +1,172 @@
+'use client';
+
+import Link from 'next/link';
+import { ChevronRight, Flag, MessageSquare, User } from 'lucide-react';
+import { STATUS_LABEL, STATUS_COLOR, PRIORITY_COLOR } from '@/lib/util';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { cn } from '@/lib/utils';
+
+const STATUS_DOT: Record<string, string> = {
+  ASSIGNED: 'bg-sky-500',
+  ACKNOWLEDGED: 'bg-sky-500',
+  IN_PROGRESS: 'bg-blue-500',
+  DONE: 'bg-emerald-500',
+  CANCELLED: 'bg-gray-400',
+  ESCALATED: 'bg-red-500',
+};
+
+const initials = (n?: string | null) =>
+  (n || '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+
+function fmtShortDate(ms?: number | null) {
+  if (!ms) return '—';
+  const d = new Date(ms);
+  return d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: '2-digit' });
+}
+
+function TaskRow({
+  task,
+  onOpenComments,
+  renderAction,
+}: {
+  task: any;
+  onOpenComments: (task: any) => void;
+  renderAction?: (task: any) => React.ReactNode;
+}) {
+  const overdue = task.due_at < Date.now() && !['DONE', 'CANCELLED'].includes(task.status);
+  const assignee = task.assignee_name || (task.team_name ? `Team ${task.team_name}` : null);
+
+  return (
+    <TableRow className="group hover:bg-muted/40">
+      <TableCell className="min-w-[280px] max-w-[420px] whitespace-normal py-3 pl-3">
+        <Link href={`/tasks/${task.id}`} className="flex items-center gap-2.5">
+          <ChevronRight
+            className={cn(
+              'size-4 shrink-0 text-muted-foreground/50 transition-transform',
+              task.subtask_count > 0 && 'text-muted-foreground group-hover:translate-x-0.5'
+            )}
+          />
+          <span className={cn('size-2 shrink-0 rounded-full', STATUS_DOT[task.status] || 'bg-gray-400')} />
+          <span className="truncate font-medium text-foreground group-hover:text-primary">{task.title}</span>
+        </Link>
+      </TableCell>
+
+      <TableCell className="py-3">
+        {assignee ? (
+          <div className="flex items-center gap-2">
+            <Avatar className="size-7 bg-muted">
+              <AvatarFallback className="bg-muted text-[10px] font-semibold text-muted-foreground">
+                {initials(task.assignee_name || task.team_name)}
+              </AvatarFallback>
+            </Avatar>
+            <span className="hidden max-w-[120px] truncate text-sm text-muted-foreground xl:inline">
+              {assignee.split(' (')[0]}
+            </span>
+          </div>
+        ) : (
+          <User className="size-5 text-muted-foreground/60" />
+        )}
+      </TableCell>
+
+      <TableCell className={cn('py-3 text-sm', overdue ? 'font-medium text-red-600' : 'text-muted-foreground')}>
+        {fmtShortDate(task.due_at)}
+      </TableCell>
+
+      <TableCell className="py-3">
+        <span className={cn('inline-flex items-center gap-1.5 text-sm font-medium capitalize', PRIORITY_COLOR[task.priority])}>
+          <Flag className="size-3.5 fill-current" />
+          {task.priority.toLowerCase()}
+        </span>
+      </TableCell>
+
+      <TableCell className="py-3">
+        <Badge className={cn('border-0 font-semibold uppercase tracking-wide', STATUS_COLOR[task.status] || 'bg-gray-100')}>
+          <span className="mr-1.5 size-1.5 rounded-full bg-current opacity-70" />
+          {STATUS_LABEL[task.status] || task.status}
+        </Badge>
+      </TableCell>
+
+      <TableCell className={cn('hidden py-3 md:table-cell', !renderAction && 'pr-3')}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="relative text-muted-foreground hover:text-foreground"
+          onClick={() => onOpenComments(task)}
+          title="Comments"
+        >
+          <MessageSquare className="size-4" />
+          {task.comment_count > 0 && (
+            <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">
+              {task.comment_count > 9 ? '9+' : task.comment_count}
+            </span>
+          )}
+        </Button>
+      </TableCell>
+      {renderAction && (
+        <TableCell className="py-3 pr-3 text-right">{renderAction(task)}</TableCell>
+      )}
+    </TableRow>
+  );
+}
+
+export default function TaskTable({
+  tasks,
+  onOpenComments,
+  renderAction,
+}: {
+  tasks: any[];
+  onOpenComments: (task: any) => void;
+  renderAction?: (task: any) => React.ReactNode;
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border bg-card ring-1 ring-foreground/5">
+      <Table>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="h-11 pl-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Name</TableHead>
+            <TableHead className="h-11 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Assignee</TableHead>
+            <TableHead className="h-11 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Due date</TableHead>
+            <TableHead className="h-11 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Priority</TableHead>
+            <TableHead className="h-11 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status</TableHead>
+            <TableHead className="hidden h-11 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground md:table-cell">Comments</TableHead>
+            {renderAction && (
+              <TableHead className="h-11 pr-3 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Action</TableHead>
+            )}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {tasks.map((task) => (
+            <TaskRow key={task.id} task={task} onOpenComments={onOpenComments} renderAction={renderAction} />
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+export function TaskTableSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-xl border bg-card ring-1 ring-foreground/5">
+      <div className="space-y-0">
+        <div className="h-11 border-b bg-muted/30" />
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="flex h-14 items-center gap-4 border-b px-3 last:border-0">
+            <div className="h-4 w-4 animate-pulse rounded bg-muted" />
+            <div className="h-4 flex-1 animate-pulse rounded bg-muted" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

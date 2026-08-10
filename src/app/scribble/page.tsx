@@ -6,13 +6,15 @@ import dynamic from 'next/dynamic';
 import Modal from '@/components/Modal';
 import Composer from '@/components/Composer';
 import { api, timeAgo } from '@/lib/util';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import '@excalidraw/excalidraw/index.css';
 
 // Full Excalidraw editor: infinite scrollable/zoomable canvas, freehand pen
 // (stylus + touch + mouse), shapes, arrows, text, images, undo/redo, dark mode.
 const Excalidraw = dynamic(
   async () => (await import('@excalidraw/excalidraw')).Excalidraw,
-  { ssr: false, loading: () => <div className="h-full flex items-center justify-center text-gray-400">Loading board…</div> }
+  { ssr: false, loading: () => <div className="flex h-full items-center justify-center text-muted-foreground">Loading board…</div> }
 );
 
 export default function ScribblePage() {
@@ -131,28 +133,30 @@ export default function ScribblePage() {
   };
 
   return (
-    <div className="fixed inset-0 bg-white flex flex-col">
+    <div className="fixed inset-0 flex flex-col bg-background">
       {/* Top bar */}
-      <div className="bg-white border-b border-gray-200 px-3 py-2 flex items-center gap-2 flex-wrap shrink-0">
-        <Link href="/home" className="text-gray-400 hover:text-brand-600 font-bold px-1 text-lg" title="Back to TaskFlow">←</Link>
-        <input
-          className="input !w-44 !py-1 text-sm font-semibold"
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-background px-3 py-2">
+        <Button asChild variant="ghost" size="icon-sm" className="text-lg font-bold text-muted-foreground hover:text-brand-600" title="Back to TaskFlow">
+          <Link href="/home">←</Link>
+        </Button>
+        <Input
+          className="w-44 py-1 text-sm font-semibold"
           value={boardName}
           onChange={(e) => { setBoardName(e.target.value); dirty.current = true; }}
           placeholder="Board name"
         />
-        <button className="btn-secondary !py-1 !px-2.5 text-xs" onClick={saveBoard} disabled={saving}>
+        <Button variant="outline" size="xs" onClick={saveBoard} disabled={saving}>
           {saving ? 'Saving…' : boardId ? 'Saved ✓ (auto)' : 'Save board'}
-        </button>
-        <button className="btn-secondary !py-1 !px-2.5 text-xs" onClick={() => setBoardsOpen(true)}>My boards</button>
+        </Button>
+        <Button variant="outline" size="xs" onClick={() => setBoardsOpen(true)}>My boards</Button>
         <div className="flex-1" />
-        <button className="btn-primary !py-1.5 !px-3 text-sm" onClick={sendAsTask} disabled={exporting}>
+        <Button size="sm" onClick={sendAsTask} disabled={exporting}>
           {exporting ? 'Exporting…' : '📤 Send as Task'}
-        </button>
+        </Button>
       </div>
 
       {/* Excalidraw canvas — infinite, pannable (drag with hand tool / two fingers / space+drag), zoomable */}
-      <div className="flex-1 min-h-0">
+      <div className="min-h-0 flex-1">
         <Excalidraw
           key={sceneKey}
           initialData={initialData}
@@ -173,21 +177,25 @@ export default function ScribblePage() {
 
       {/* Boards modal */}
       <Modal open={boardsOpen} onClose={() => setBoardsOpen(false)} title="My boards">
-        <button className="btn-primary w-full mb-3" onClick={newBoard}>+ New blank board</button>
+        <Button className="mb-3 w-full" onClick={newBoard}>+ New blank board</Button>
         <div className="space-y-2">
           {boards.map((b) => (
-            <div key={b.id} className="flex items-center justify-between border border-gray-200 rounded-lg px-3 py-2">
-              <button className="text-sm font-medium text-left flex-1 hover:text-brand-600" onClick={() => openBoard(b)}>
+            <div key={b.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+              <button type="button" className="flex-1 text-left text-sm font-medium hover:text-brand-600" onClick={() => openBoard(b)}>
                 {b.name}
-                <span className="block text-[11px] font-normal text-gray-400">updated {timeAgo(b.updated_at)}</span>
+                <span className="block text-[11px] font-normal text-muted-foreground">updated {timeAgo(b.updated_at)}</span>
               </button>
-              <button className="text-xs text-red-400 hover:text-red-600 px-2"
-                onClick={() => api(`/api/boards?id=${b.id}`, { method: 'DELETE' }).then(loadBoards)}>
+              <Button
+                variant="ghost"
+                size="xs"
+                className="text-red-400 hover:text-red-600"
+                onClick={() => api(`/api/boards?id=${b.id}`, { method: 'DELETE' }).then(loadBoards)}
+              >
                 Delete
-              </button>
+              </Button>
             </div>
           ))}
-          {boards.length === 0 && <div className="text-sm text-gray-400 text-center py-4">No saved boards yet.</div>}
+          {boards.length === 0 && <div className="py-4 text-center text-sm text-muted-foreground">No saved boards yet.</div>}
         </div>
       </Modal>
 

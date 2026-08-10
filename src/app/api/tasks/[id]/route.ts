@@ -40,8 +40,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     WHERE t.parent_id = ? ORDER BY t.id
   `).all(task.id);
   const comments = db.prepare(`
-    SELECT c.*, u.name AS author_name FROM comments c JOIN users u ON u.id = c.author_id
-    WHERE c.task_id = ? ORDER BY c.id
+    SELECT c.id, c.task_id, c.author_id, c.parent_comment_id, c.body AS content,
+           c.edited, c.edited_at, c.created_at, c.updated_at,
+           u.name AS author_name
+    FROM comments c JOIN users u ON u.id = c.author_id
+    WHERE c.task_id = ? ORDER BY c.created_at ASC, c.id ASC
   `).all(task.id);
   const activity = db.prepare(`
     SELECT a.*, u.name AS actor_name FROM activity a LEFT JOIN users u ON u.id = a.actor_id

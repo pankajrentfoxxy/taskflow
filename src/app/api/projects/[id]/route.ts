@@ -22,13 +22,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     WHERE n.project_id = ? ORDER BY n.pinned DESC, n.id DESC
   `).all(pid);
   const tasks = db.prepare(`
-    SELECT t.*, ua.name AS assignee_name, uc.name AS creator_name, tt.name AS type_name, tt.alias AS type_alias,
+    SELECT t.*, ua.name AS assignee_name, uc.name AS creator_name, tm.name AS team_name,
+      tt.name AS type_name, tt.alias AS type_alias,
       (SELECT COUNT(*) FROM tasks s WHERE s.parent_id = t.id) AS subtask_count,
-      (SELECT COUNT(*) FROM tasks s WHERE s.parent_id = t.id AND s.status = 'DONE') AS subtask_done
+      (SELECT COUNT(*) FROM tasks s WHERE s.parent_id = t.id AND s.status = 'DONE') AS subtask_done,
+      (SELECT COUNT(*) FROM comments c WHERE c.task_id = t.id) AS comment_count
     FROM tasks t
     LEFT JOIN task_types tt ON tt.id = t.task_type_id
     LEFT JOIN users ua ON ua.id = t.assignee_id
     LEFT JOIN users uc ON uc.id = t.creator_id
+    LEFT JOIN teams tm ON tm.id = t.assigned_team_id
     WHERE t.project_id = ? AND t.parent_id IS NULL
     ORDER BY CASE t.status WHEN 'ESCALATED' THEN 0 WHEN 'ASSIGNED' THEN 1 ELSE 2 END, t.due_at
   `).all(pid);

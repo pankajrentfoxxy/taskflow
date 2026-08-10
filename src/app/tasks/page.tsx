@@ -2,9 +2,14 @@
 import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Shell, { useMe } from '@/components/Shell';
-import TaskCard from '@/components/TaskCard';
+import TaskTable, { TaskTableSkeleton } from '@/components/TaskTable';
+import CommentsModal from '@/components/CommentsModal';
 import Composer from '@/components/Composer';
 import { api, STATUS_LABEL } from '@/lib/util';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { NativeSelect } from '@/components/ui/native-select';
+import { Card, CardContent } from '@/components/ui/card';
 
 function TasksInner() {
   const me = useMe();
@@ -14,6 +19,7 @@ function TasksInner() {
   const [q, setQ] = useState('');
   const [tasks, setTasks] = useState<any[]>([]);
   const [composerOpen, setComposerOpen] = useState(params.get('new') === '1');
+  const [commentsTask, setCommentsTask] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
@@ -34,37 +40,48 @@ function TasksInner() {
 
   return (
     <>
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4 flex items-center justify-between">
         <h1 className="text-xl font-bold">Tasks</h1>
-        <button className="btn-primary" onClick={() => setComposerOpen(true)}>+ New task</button>
+        <Button onClick={() => setComposerOpen(true)}>+ New task</Button>
       </div>
 
-      <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1">
+      <div className="mb-3 flex gap-1.5 overflow-x-auto pb-1">
         {segments.map((s) => (
-          <button key={s.key}
-            className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap ${filter === s.key ? 'bg-brand-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}
+          <Button
+            key={s.key}
+            size="sm"
+            variant={filter === s.key ? 'default' : 'outline'}
+            className="rounded-full whitespace-nowrap"
             onClick={() => setFilter(s.key)}>
             {s.label}
-          </button>
+          </Button>
         ))}
       </div>
 
-      <div className="flex gap-2 mb-4">
-        <input className="input flex-1" placeholder="Search tasks…" value={q} onChange={(e) => setQ(e.target.value)} />
-        <select className="input !w-auto" value={status} onChange={(e) => setStatus(e.target.value)}>
+      <div className="mb-4 flex gap-2">
+        <Input className="flex-1" placeholder="Search tasks…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <NativeSelect className="w-auto" value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">All statuses</option>
           {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
+        </NativeSelect>
       </div>
 
       {loading ? (
-        <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="card h-24 animate-pulse" />)}</div>
+        <TaskTableSkeleton />
       ) : tasks.length === 0 ? (
-        <div className="card p-10 text-center text-gray-400">No tasks match.</div>
+        <Card className="py-0">
+          <CardContent className="p-10 text-center text-muted-foreground">No tasks match.</CardContent>
+        </Card>
       ) : (
-        <div className="space-y-2">{tasks.map((t) => <TaskCard key={t.id} task={t} />)}</div>
+        <TaskTable tasks={tasks} onOpenComments={setCommentsTask} />
       )}
 
+      <CommentsModal
+        task={commentsTask}
+        open={!!commentsTask}
+        onClose={() => setCommentsTask(null)}
+        onChanged={load}
+      />
       <Composer open={composerOpen} onClose={() => setComposerOpen(false)} onCreated={load} />
     </>
   );

@@ -6,6 +6,13 @@ export function fmtDateTime(ms?: number | null): string {
   });
 }
 
+export function fmtTime(ms?: number | null): string {
+  if (!ms) return '—';
+  return new Date(ms).toLocaleTimeString('en-IN', {
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  });
+}
+
 export function fmtDate(ms?: number | null): string {
   if (!ms) return '—';
   return new Date(ms).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });

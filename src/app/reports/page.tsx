@@ -5,25 +5,42 @@ import Shell, { useMe } from '@/components/Shell';
 import Modal from '@/components/Modal';
 import { api, fmtDateTime, STATUS_LABEL, STATUS_COLOR } from '@/lib/util';
 import { IconInbox, IconClock, IconMute, IconAlert, IconScale, IconCalendar, IconCheckCircle, IconZap, IconActivity, IconTag, IconUsers, IconDownload } from '@/components/Icons';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import { NativeSelect } from '@/components/ui/native-select';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { cn } from '@/lib/utils';
 
 function Stat({ icon, chip, label, value, tone, onClick, bar }: {
   icon: React.ReactNode; chip: string; label: string; value: any; tone?: string; onClick?: () => void; bar?: number | null;
 }) {
   return (
-    <button type="button" onClick={onClick} disabled={!onClick}
-      className={`card p-4 text-left w-full group transition ${onClick ? 'hover:border-brand-300 hover:shadow-md' : 'cursor-default'}`}>
-      <div className="flex items-center justify-between">
-        <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-base ${chip}`}>{icon}</span>
-        {onClick && <span className="text-gray-300 group-hover:text-brand-500 group-hover:translate-x-0.5 transition text-sm">→</span>}
-      </div>
-      <div className={`text-[24px] font-bold mt-2.5 leading-none tracking-tight tnum ${tone || 'text-gray-900'}`}>{value ?? '—'}</div>
-      <div className="text-xs text-gray-500 mt-1.5 font-medium">{label}</div>
-      {bar != null && (
-        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mt-2.5">
-          <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${bar}%` }} />
-        </div>
+    <Card
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+      className={cn(
+        'text-left w-full group transition gap-0 py-4',
+        onClick ? 'cursor-pointer hover:border-brand-300 hover:shadow-md' : 'cursor-default',
       )}
-    </button>
+    >
+      <CardContent>
+        <div className="flex items-center justify-between">
+          <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-base ${chip}`}>{icon}</span>
+          {onClick && <span className="text-gray-300 group-hover:text-brand-500 group-hover:translate-x-0.5 transition text-sm">→</span>}
+        </div>
+        <div className={`text-[24px] font-bold mt-2.5 leading-none tracking-tight tnum ${tone || 'text-gray-900'}`}>{value ?? '—'}</div>
+        <div className="text-xs text-gray-500 mt-1.5 font-medium">{label}</div>
+        {bar != null && (
+          <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mt-2.5">
+            <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${bar}%` }} />
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -84,8 +101,8 @@ function ReportsInner() {
   if (!data) {
     return (
       <div className="space-y-4">
-        <div className="h-24 card animate-pulse" />
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{[...Array(6)].map((_, i) => <div key={i} className="h-28 card animate-pulse" />)}</div>
+        <Card className="h-24 animate-pulse" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{[...Array(6)].map((_, i) => <Card key={i} className="h-28 animate-pulse" />)}</div>
       </div>
     );
   }
@@ -115,33 +132,37 @@ function ReportsInner() {
           </p>
           <h1 className="text-[24px] font-bold tracking-tight mt-1">Reports</h1>
         </div>
-        <span className={`pill !px-3 !py-1.5 !text-xs ${attention > 0 ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-emerald-50 text-emerald-600 border border-emerald-200'}`}>
+        <Badge className={`!px-3 !py-1.5 !text-xs h-auto gap-1 ${attention > 0 ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-emerald-50 text-emerald-600 border border-emerald-200'}`}>
           {attention > 0 ? <IconAlert className="w-3.5 h-3.5" /> : <IconCheckCircle className="w-3.5 h-3.5" />}
           {attention} need{attention === 1 ? 's' : ''} attention
-        </span>
+        </Badge>
       </div>
 
       {/* Filters */}
       <div className="flex gap-2 flex-wrap mb-5">
         {me && ['ADMIN', 'CEO'].includes(me.role) && (
-          <select className="input !w-auto" value={teamId} onChange={(e) => setTeamId(e.target.value)}>
+          <NativeSelect className="w-auto" value={teamId} onChange={(e) => setTeamId(e.target.value)}>
             <option value="">All teams</option>
             {teams.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
+          </NativeSelect>
         )}
         {types.length > 0 && (
-          <select className="input !w-auto" value={typeId} onChange={(e) => setTypeId(e.target.value)}>
+          <NativeSelect className="w-auto" value={typeId} onChange={(e) => setTypeId(e.target.value)}>
             <option value="">All task types</option>
             {types.map((tt: any) => <option key={tt.id} value={tt.id}>{tt.name} ({tt.alias})</option>)}
-          </select>
+          </NativeSelect>
         )}
-        <select className="input !w-auto" value={days} onChange={(e) => setDays(e.target.value)}>
+        <NativeSelect className="w-auto" value={days} onChange={(e) => setDays(e.target.value)}>
           <option value="0">All time</option>
           <option value="7">Last 7 days</option>
           <option value="30">Last 30 days</option>
           <option value="90">Last 90 days</option>
-        </select>
-        {data.people.length > 0 && <button className="btn-secondary ml-auto" onClick={exportCsv}><IconDownload className="w-4 h-4" /> CSV</button>}
+        </NativeSelect>
+        {data.people.length > 0 && (
+          <Button variant="outline" className="ml-auto" onClick={exportCsv}>
+            <IconDownload className="w-4 h-4" /> CSV
+          </Button>
+        )}
       </div>
 
       {/* Stat cards */}
@@ -165,37 +186,37 @@ function ReportsInner() {
             <h2 className="text-[13px] font-semibold uppercase tracking-wide text-gray-600">By task type</h2>
             <div className="flex-1 h-px bg-gray-200/70 ml-1" />
           </div>
-          <div className="card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50/80">
-                  <tr>
-                    <th className={`${TH} !pl-4`}>Team</th>
-                    <th className={TH}>Task type</th>
-                    <th className={TH}>Total</th>
-                    <th className={TH}>Open</th>
-                    <th className={`${TH} !text-red-500`}>Overdue</th>
-                    <th className={TH}>No resp.</th>
-                    <th className={TH}>Done</th>
-                    <th className={TH}>Delivered</th>
-                  </tr>
-                </thead>
-                <tbody>
+          <Card className="overflow-hidden py-0 gap-0">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader className="bg-gray-50/80">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className={`${TH} !pl-4`}>Team</TableHead>
+                    <TableHead className={TH}>Task type</TableHead>
+                    <TableHead className={TH}>Total</TableHead>
+                    <TableHead className={TH}>Open</TableHead>
+                    <TableHead className={`${TH} !text-red-500`}>Overdue</TableHead>
+                    <TableHead className={TH}>No resp.</TableHead>
+                    <TableHead className={TH}>Done</TableHead>
+                    <TableHead className={TH}>Delivered</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {data.byType.map((bt: any) => {
                     const x = { taskTypeId: bt.id };
                     return (
-                      <tr key={bt.id} className="border-t border-gray-50 hover:bg-brand-50/30 transition">
-                        <td className={`${TD} !pl-4 text-xs text-gray-500`}>{bt.team_name}</td>
-                        <td className={TD}>
+                      <TableRow key={bt.id} className="border-t border-gray-50 hover:bg-brand-50/30 transition">
+                        <TableCell className={`${TD} !pl-4 text-xs text-gray-500`}>{bt.team_name}</TableCell>
+                        <TableCell className={TD}>
                           <div className="font-semibold">{bt.name}</div>
                           <div className="text-[11px] text-gray-400">counted in {bt.alias}</div>
-                        </td>
-                        <td className={TD}><Num value={bt.total} onClick={() => openDrill('total', `${bt.name} — all tasks`, x)} /></td>
-                        <td className={TD}><Num value={bt.open} onClick={() => openDrill('open', `${bt.name} — open`, x)} /></td>
-                        <td className={TD}><Num value={bt.overdue} tone={bt.overdue > 0 ? 'text-red-600' : 'text-gray-400'} onClick={() => openDrill('overdue', `${bt.name} — overdue`, x)} /></td>
-                        <td className={TD}><Num value={bt.no_response} tone={bt.no_response > 0 ? 'text-red-600' : 'text-gray-400'} onClick={() => openDrill('no_response', `${bt.name} — no response`, x)} /></td>
-                        <td className={TD}><Num value={bt.done} tone={bt.done > 0 ? 'text-emerald-600' : 'text-gray-400'} onClick={() => openDrill('done', `${bt.name} — done`, x)} /></td>
-                        <td className={TD}>
+                        </TableCell>
+                        <TableCell className={TD}><Num value={bt.total} onClick={() => openDrill('total', `${bt.name} — all tasks`, x)} /></TableCell>
+                        <TableCell className={TD}><Num value={bt.open} onClick={() => openDrill('open', `${bt.name} — open`, x)} /></TableCell>
+                        <TableCell className={TD}><Num value={bt.overdue} tone={bt.overdue > 0 ? 'text-red-600' : 'text-gray-400'} onClick={() => openDrill('overdue', `${bt.name} — overdue`, x)} /></TableCell>
+                        <TableCell className={TD}><Num value={bt.no_response} tone={bt.no_response > 0 ? 'text-red-600' : 'text-gray-400'} onClick={() => openDrill('no_response', `${bt.name} — no response`, x)} /></TableCell>
+                        <TableCell className={TD}><Num value={bt.done} tone={bt.done > 0 ? 'text-emerald-600' : 'text-gray-400'} onClick={() => openDrill('done', `${bt.name} — done`, x)} /></TableCell>
+                        <TableCell className={TD}>
                           {bt.target > 0 ? (
                             <div className="min-w-[110px]">
                               <div className={`text-xs font-semibold ${bt.delivered >= bt.target ? 'text-emerald-600' : 'text-gray-600'}`}>
@@ -207,14 +228,14 @@ function ReportsInner() {
                               </div>
                             </div>
                           ) : <span className="text-gray-300">—</span>}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -226,56 +247,60 @@ function ReportsInner() {
             <h2 className="text-[13px] font-semibold uppercase tracking-wide text-gray-600">By person</h2>
             <div className="flex-1 h-px bg-gray-200/70 ml-1" />
           </div>
-          <div className="card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50/80">
-                  <tr>
-                    <th className={`${TH} !pl-4`}>Person</th>
-                    <th className={TH}>Open</th>
-                    <th className={`${TH} !text-red-500`}>Overdue</th>
-                    <th className={TH}>No resp.</th>
-                    <th className={TH}>Escal.</th>
-                    <th className={TH}>Done</th>
-                    <th className={TH}>On time</th>
-                    <th className={TH}>Avg resp.</th>
-                  </tr>
-                </thead>
-                <tbody>
+          <Card className="overflow-hidden py-0 gap-0">
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader className="bg-gray-50/80">
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className={`${TH} !pl-4`}>Person</TableHead>
+                    <TableHead className={TH}>Open</TableHead>
+                    <TableHead className={`${TH} !text-red-500`}>Overdue</TableHead>
+                    <TableHead className={TH}>No resp.</TableHead>
+                    <TableHead className={TH}>Escal.</TableHead>
+                    <TableHead className={TH}>Done</TableHead>
+                    <TableHead className={TH}>On time</TableHead>
+                    <TableHead className={TH}>Avg resp.</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {data.people.map((p: any) => {
                     const x = { personId: p.id };
                     const initials = p.name.split(' ').map((w: string) => w[0]).slice(0, 2).join('');
                     return (
-                      <tr key={p.id} className="border-t border-gray-50 hover:bg-brand-50/30 transition">
-                        <td className={`${TD} !pl-4`}>
+                      <TableRow key={p.id} className="border-t border-gray-50 hover:bg-brand-50/30 transition">
+                        <TableCell className={`${TD} !pl-4`}>
                           <div className="flex items-center gap-2.5">
-                            <span className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-100 to-violet-100 text-brand-700 text-[11px] font-bold flex items-center justify-center shrink-0">{initials}</span>
+                            <Avatar>
+                              <AvatarFallback className="bg-gradient-to-br from-brand-100 to-violet-100 text-brand-700 text-[11px] font-bold">
+                                {initials}
+                              </AvatarFallback>
+                            </Avatar>
                             <div>
                               <div className="font-semibold">{p.name.split(' (')[0]}</div>
                               <div className="text-[11px] text-gray-400">{p.team_name || '—'}</div>
                             </div>
                           </div>
-                        </td>
-                        <td className={TD}><Num value={p.open} onClick={() => openDrill('open', `${p.name} — open`, x)} /></td>
-                        <td className={TD}><Num value={p.overdue} tone={p.overdue > 0 ? 'text-red-600' : 'text-gray-400'} onClick={() => openDrill('overdue', `${p.name} — overdue`, x)} /></td>
-                        <td className={TD}><Num value={p.no_response} tone={p.no_response > 0 ? 'text-red-600' : 'text-gray-400'} onClick={() => openDrill('no_response', `${p.name} — no response`, x)} /></td>
-                        <td className={TD}><Num value={p.escalations} tone={p.escalations > 0 ? 'text-orange-600' : 'text-gray-400'} onClick={() => openDrill('escalations', `${p.name} — escalations`, x)} /></td>
-                        <td className={TD}><Num value={p.done} tone={p.done > 0 ? 'text-emerald-600' : 'text-gray-400'} onClick={() => openDrill('done', `${p.name} — done`, x)} /></td>
-                        <td className={TD}>
+                        </TableCell>
+                        <TableCell className={TD}><Num value={p.open} onClick={() => openDrill('open', `${p.name} — open`, x)} /></TableCell>
+                        <TableCell className={TD}><Num value={p.overdue} tone={p.overdue > 0 ? 'text-red-600' : 'text-gray-400'} onClick={() => openDrill('overdue', `${p.name} — overdue`, x)} /></TableCell>
+                        <TableCell className={TD}><Num value={p.no_response} tone={p.no_response > 0 ? 'text-red-600' : 'text-gray-400'} onClick={() => openDrill('no_response', `${p.name} — no response`, x)} /></TableCell>
+                        <TableCell className={TD}><Num value={p.escalations} tone={p.escalations > 0 ? 'text-orange-600' : 'text-gray-400'} onClick={() => openDrill('escalations', `${p.name} — escalations`, x)} /></TableCell>
+                        <TableCell className={TD}><Num value={p.done} tone={p.done > 0 ? 'text-emerald-600' : 'text-gray-400'} onClick={() => openDrill('done', `${p.name} — done`, x)} /></TableCell>
+                        <TableCell className={TD}>
                           {p.done ? (
-                            <span className={`pill ${Math.round((100 * p.done_ontime) / p.done) >= 80 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                            <Badge className={Math.round((100 * p.done_ontime) / p.done) >= 80 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}>
                               {Math.round((100 * p.done_ontime) / p.done)}%
-                            </span>
+                            </Badge>
                           ) : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className={`${TD} text-gray-500`}>{p.avg_response_min != null ? `${p.avg_response_min}m` : '—'}</td>
-                      </tr>
+                        </TableCell>
+                        <TableCell className={`${TD} text-gray-500`}>{p.avg_response_min != null ? `${p.avg_response_min}m` : '—'}</TableCell>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -291,8 +316,8 @@ function ReportsInner() {
                 onClick={() => setDrill(null)}>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[11px] font-bold text-gray-400">#{tk.id}</span>
-                  <span className={`pill ${STATUS_COLOR[tk.status] || 'bg-gray-100'}`}>{STATUS_LABEL[tk.status] || tk.status}</span>
-                  {tk.sla_breached_at && tk.status === 'ASSIGNED' && <span className="pill bg-red-600 text-white">NO RESPONSE</span>}
+                  <Badge className={STATUS_COLOR[tk.status] || 'bg-gray-100'}>{STATUS_LABEL[tk.status] || tk.status}</Badge>
+                  {tk.sla_breached_at && tk.status === 'ASSIGNED' && <Badge className="bg-red-600 text-white">NO RESPONSE</Badge>}
                 </div>
                 <div className="font-semibold text-sm mt-1.5">{tk.title}</div>
                 <div className="text-[11px] text-gray-500 mt-1">
