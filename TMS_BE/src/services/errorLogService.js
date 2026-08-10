@@ -1,4 +1,4 @@
-import { ErrorLog } from "../models/index.js";
+import { ErrorLog, Authentication } from "../models/index.js";
 import {
   getClientIp,
   getRequestPath,
@@ -38,4 +38,53 @@ export function logErrorFromRequest(err, req, statusCode) {
     statusCode,
     userId: req?.user?.user_id ?? null,
   });
+}
+
+const toPublicErrorLog = (log) => ({
+  error_log_id: log.error_log_id,
+  user_id: log.user_id,
+  error_name: log.error_name,
+  error_message: log.error_message,
+  error_stack: log.error_stack,
+  method: log.method,
+  path: log.path,
+  status_code: log.status_code,
+  request_body: log.request_body,
+  query_params: log.query_params,
+  ip_address: log.ip_address,
+  user_agent: log.user_agent,
+  created_at: log.created_at,
+  user: log.user
+    ? {
+        user_id: log.user.user_id,
+        email: log.user.email,
+        full_name: log.user.full_name,
+      }
+    : undefined,
+});
+
+export async function listErrorLogs({ limit = 50, offset = 0 } = {}) {
+  const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
+  const safeOffset = Math.max(Number(offset) || 0, 0);
+
+  const { rows, count } = await ErrorLog.findAndCountAll({
+    include: [
+      {
+        model: Authentication,
+        as: "user",
+        attributes: ["user_id", "email", "full_name"],
+        required: false,
+      },
+    ],
+    order: [["created_at", "DESC"]],
+    limit: safeLimit,
+    offset: safeOffset,
+  });
+
+  return {
+    errorLogs: rows.map(toPublicErrorLog),
+    total: count,
+    limit: safeLimit,
+    offset: safeOffset,
+  };
 }
