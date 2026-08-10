@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Deploy task-management-flow-v2 on this VPS.
+# Deploy jatin-tms-old-v on this VPS.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BRANCH="${DEPLOY_BRANCH:-task-management-flow-v2}"
+BRANCH="${DEPLOY_BRANCH:-jatin-tms-old-v}"
 
 cd "$ROOT_DIR"
 

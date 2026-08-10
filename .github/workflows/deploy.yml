@@ -4,7 +4,7 @@ name: CI/CD Deploy Taskflow
 on:
   push:
     branches:
-      - task-management-flow-v2
+      - jatin-tms-old-v
   workflow_dispatch:
 
 jobs:
@@ -23,4 +23,4 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
         run: |
           ssh -o StrictHostKeyChecking=no "${VPS_USER}@${VPS_HOST}" \
-            "set -euo pipefail && cd /var/www/taskflow && DEPLOY_BRANCH=task-management-flow-v2 bash scripts/deploy.sh"
+            "set -euo pipefail && cd /var/www/taskflow && DEPLOY_BRANCH=jatin-tms-old-v bash scripts/deploy.sh"
