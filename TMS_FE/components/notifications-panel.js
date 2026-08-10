@@ -202,13 +202,16 @@ export function NotificationsPanel() {
           </span>
         ) : null}
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[380px] overflow-hidden p-0">
-        <div className="flex items-center justify-between border-b px-4 py-3">
+      <PopoverContent
+        align="end"
+        className="w-[min(380px,calc(100vw-1.5rem))] overflow-hidden p-0"
+      >
+        <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
           <h2 className="text-sm font-semibold">Notifications</h2>
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 text-xs"
+            className="h-8 shrink-0 text-xs"
             onClick={markAllRead}
             disabled={unreadCount === 0}
           >
@@ -216,7 +219,7 @@ export function NotificationsPanel() {
           </Button>
         </div>
 
-        <div className="max-h-[420px] overflow-y-auto">
+        <div className="max-h-[min(420px,70dvh)] overflow-y-auto">
           {loading ? (
             <p className="px-4 py-8 text-center text-sm text-muted-foreground">
               Loading...

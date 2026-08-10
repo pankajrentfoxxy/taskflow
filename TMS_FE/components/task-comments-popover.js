@@ -524,16 +524,24 @@ export function TaskCommentsPopover({
       <PopoverContent
         align="center"
         side="bottom"
-        className="flex w-[min(22rem,calc(100vw-2rem))] flex-col overflow-hidden p-0"
+        className="flex w-[min(22rem,calc(100vw-2rem))] max-h-[min(80dvh,32rem)] flex-col overflow-hidden p-0"
         initialFocus={false}
       >
-        <div className="border-b border-border px-3 py-2">
+        <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
           <p className="text-xs font-medium text-foreground">Comments</p>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Close comments"
+          >
+            <X className="size-4" />
+          </button>
         </div>
 
         <div
           ref={listRef}
-          className="max-h-72 min-h-24 overflow-y-auto px-3 py-3"
+          className="max-h-[min(18rem,50dvh)] min-h-24 overflow-y-auto px-3 py-3"
         >
           {loading ? (
             <p className="py-6 text-center text-xs text-muted-foreground">

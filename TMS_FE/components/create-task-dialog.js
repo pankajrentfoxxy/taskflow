@@ -239,10 +239,10 @@ export function CreateTaskDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton
-        className="gap-0 overflow-hidden p-0 sm:max-w-2xl"
+        className="max-h-[calc(100dvh-1.5rem)] gap-0 overflow-hidden p-0 sm:max-w-2xl"
       >
         <form onSubmit={handleSubmit}>
-          <div className="flex items-center gap-2 border-b bg-muted/20 px-4 py-3">
+          <div className="flex items-center gap-2 border-b bg-muted/20 px-4 py-3 pr-14">
             <div className="inline-flex items-center gap-1.5 rounded-md bg-background/90 px-2.5 py-1.5 text-sm text-foreground ring-1 ring-foreground/10">
               <ListChecks className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="max-w-[160px] truncate">{projectName}</span>
