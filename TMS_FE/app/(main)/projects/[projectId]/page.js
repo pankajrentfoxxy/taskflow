@@ -197,22 +197,26 @@ export default function ProjectPage() {
   return (
     <>
       <div className="space-y-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-2">
-            <h2 className="text-2xl font-semibold tracking-tight">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="min-w-0 space-y-2">
+            <h2 className="text-xl font-semibold tracking-tight sm:text-2xl">
               {project.name}
             </h2>
             {project.description ? (
-              <p className="text-muted-foreground">{project.description}</p>
+              <p className="text-sm text-muted-foreground sm:text-base">
+                {project.description}
+              </p>
             ) : (
-              <p className="text-muted-foreground">
+              <p className="text-sm text-muted-foreground sm:text-base">
                 No description for this project.
               </p>
             )}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <PersonalScribbleButton token={token} />
-            <Button onClick={() => setCreateOpen(true)}>Add task</Button>
+            <Button className="flex-1 sm:flex-none" onClick={() => setCreateOpen(true)}>
+              Add task
+            </Button>
           </div>
         </div>
 

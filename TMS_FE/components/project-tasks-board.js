@@ -47,6 +47,17 @@ const PRIORITIES = TASK_PRIORITIES;
 const ROW_GRID =
   "grid grid-cols-[minmax(220px,2fr)_72px_88px_96px_112px_72px_120px_48px] items-center gap-3 px-3";
 
+function MobileMetaRow({ label, children }) {
+  return (
+    <div className="flex items-start gap-2">
+      <span className="w-[4.5rem] shrink-0 pt-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  );
+}
+
 const STATUS_STYLES = {
   "to do": {
     badge: "bg-sky-100 text-sky-700 dark:bg-sky-950/80 dark:text-sky-300",
@@ -215,7 +226,13 @@ function cellButtonClassName(active = false) {
   );
 }
 
-function AssigneeCell({ assignees = [], members = [], teams = [], onChange }) {
+function AssigneeCell({
+  assignees = [],
+  members = [],
+  teams = [],
+  onChange,
+  align = "center",
+}) {
   const selectedIds = assignees.map((assignee) => String(assignee.user_id));
   const [assigneeTeamId, setAssigneeTeamId] = useState(() =>
     findMatchingTeamId(teams, selectedIds, members),
@@ -234,11 +251,17 @@ function AssigneeCell({ assignees = [], members = [], teams = [], onChange }) {
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <button type="button" className={cellButtonClassName(assignees.length > 0)} />
+          <button
+            type="button"
+            className={cn(
+              cellButtonClassName(assignees.length > 0),
+              align === "start" && "justify-start px-0",
+            )}
+          />
         }
       >
         {assignees.length ? (
-          <AvatarGroup className="justify-center">
+          <AvatarGroup className={align === "start" ? "justify-start" : "justify-center"}>
             {assignees.slice(0, 3).map((assignee) => (
               <Avatar key={assignee.user_id} size="sm">
                 <AvatarFallback className="text-[10px] font-medium">
@@ -352,6 +375,7 @@ function TaskRowShell({
   isSubtask = false,
   rowRef,
   onFocusOut,
+  className,
 }) {
   return (
     <div
@@ -362,6 +386,27 @@ function TaskRowShell({
         "group min-h-9 border-b border-border/40 py-2 text-sm transition-colors",
         isDraft ? "bg-muted/20" : "hover:bg-muted/30",
         isSubtask && "bg-muted/10",
+        saving && "opacity-60",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+function MobileTaskCardShell({
+  children,
+  saving = false,
+  isDraft = false,
+  isSubtask = false,
+}) {
+  return (
+    <div
+      className={cn(
+        "space-y-3 border-b border-border/40 px-3 py-3 text-sm transition-colors md:hidden",
+        isDraft ? "bg-muted/20" : "bg-background",
+        isSubtask && "border-l-2 border-l-border/70 bg-muted/10 pl-4",
         saving && "opacity-60",
       )}
     >
@@ -442,127 +487,277 @@ function EditableTaskRow({
   }
 
   return (
-    <TaskRowShell saving={saving || deleting} isSubtask={isSubtask}>
-      <div className="flex min-w-0 items-center gap-1">
-        <button
-          type="button"
-          onClick={handleDelete}
-          disabled={deleting || saving || !token}
-          className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-all group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
-          aria-label={`Delete ${task.name}`}
-          title="Delete task"
-        >
-          <Trash2 className="size-3.5" />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setDetailOpen(true)}
-          disabled={!token || deleting || saving}
-          className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-all group-hover:opacity-100 hover:bg-muted hover:text-foreground disabled:opacity-40"
-          aria-label={`View ${task.name}`}
-          title="View task details"
-        >
-          <Eye className="size-3.5" />
-        </button>
-
-        {showExpandControl ? (
+    <>
+      <TaskRowShell
+        saving={saving || deleting}
+        isSubtask={isSubtask}
+        className="hidden md:grid"
+      >
+        <div className="flex min-w-0 items-center gap-1">
           <button
             type="button"
-            onClick={onToggleExpand}
-            className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label={expanded ? "Collapse subtasks" : "Expand subtasks"}
+            onClick={handleDelete}
+            disabled={deleting || saving || !token}
+            className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-all group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+            aria-label={`Delete ${task.name}`}
+            title="Delete task"
           >
-            {expanded ? (
-              <ChevronDown className="size-3.5" />
-            ) : (
-              <ChevronRight className="size-3.5" />
-            )}
+            <Trash2 className="size-3.5" />
           </button>
-        ) : null}
 
-        {isSubtask ? <span className="ml-5 shrink-0" aria-hidden /> : null}
+          <button
+            type="button"
+            onClick={() => setDetailOpen(true)}
+            disabled={!token || deleting || saving}
+            className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-all group-hover:opacity-100 hover:bg-muted hover:text-foreground disabled:opacity-40"
+            aria-label={`View ${task.name}`}
+            title="View task details"
+          >
+            <Eye className="size-3.5" />
+          </button>
 
-        <TaskStatusDot
+          {showExpandControl ? (
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label={expanded ? "Collapse subtasks" : "Expand subtasks"}
+            >
+              {expanded ? (
+                <ChevronDown className="size-3.5" />
+              ) : (
+                <ChevronRight className="size-3.5" />
+              )}
+            </button>
+          ) : null}
+
+          {isSubtask ? <span className="ml-5 shrink-0" aria-hidden /> : null}
+
+          <TaskStatusDot
+            statusId={task.task_status_id}
+            statusName={task.status?.name}
+            statuses={statuses}
+            onChange={(value) => patchTask({ task_status_id: value })}
+          />
+
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            onBlur={handleNameBlur}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.currentTarget.blur();
+              }
+            }}
+            className="w-full min-w-0 rounded bg-transparent px-1 text-sm outline-none focus:bg-background focus:ring-1 focus:ring-ring"
+          />
+
+          {!isSubtask && onAddSubtask ? (
+            <button
+              type="button"
+              onClick={onAddSubtask}
+              className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-all group-hover:opacity-100 hover:bg-muted hover:text-foreground"
+              aria-label="Add subtask"
+              title="Add subtask"
+            >
+              <Plus className="size-3.5" />
+            </button>
+          ) : null}
+        </div>
+
+        <AssigneeCell
+          assignees={task.assignees}
+          members={members}
+          teams={teams}
+          onChange={(assigneeIds) => patchTask({ assignee_ids: assigneeIds })}
+        />
+
+        <DueDateCell
+          dueDate={task.due_date}
+          onChange={(value) => patchTask({ due_date: value })}
+        />
+
+        <PriorityCell
+          priority={task.priority}
+          editable
+          onChange={(value) => patchTask({ priority: value })}
+        />
+
+        <StatusCell
           statusId={task.task_status_id}
           statusName={task.status?.name}
           statuses={statuses}
           onChange={(value) => patchTask({ task_status_id: value })}
         />
 
-        <input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          onBlur={handleNameBlur}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.currentTarget.blur();
-            }
-          }}
-          className="w-full min-w-0 rounded bg-transparent px-1 text-sm outline-none focus:bg-background focus:ring-1 focus:ring-ring"
+        <TaskCommentsPopover
+          projectId={projectId}
+          taskId={task.task_id}
+          token={token}
+          commentCount={task.comment_count ?? 0}
+          onCommentCountChange={(count) =>
+            onUpdated?.({ ...task, comment_count: count })
+          }
         />
 
-        {!isSubtask && onAddSubtask ? (
-          <button
-            type="button"
-            onClick={onAddSubtask}
-            className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-all group-hover:opacity-100 hover:bg-muted hover:text-foreground"
-            aria-label="Add subtask"
-            title="Add subtask"
-          >
-            <Plus className="size-3.5" />
-          </button>
-        ) : null}
-      </div>
+        <TimelineCell
+          timeline={task.timeline}
+          onChange={(value) => patchTask({ timeline: value })}
+        />
 
-      <AssigneeCell
-        assignees={task.assignees}
-        members={members}
-        teams={teams}
-        onChange={(assigneeIds) => patchTask({ assignee_ids: assigneeIds })}
-      />
+        <DrawCell
+          projectId={projectId}
+          taskId={task.task_id}
+          taskName={task.name}
+          token={token}
+          scribble={task.scribble}
+          onSaved={onUpdated}
+        />
+      </TaskRowShell>
 
-      <DueDateCell
-        dueDate={task.due_date}
-        onChange={(value) => patchTask({ due_date: value })}
-      />
+      <MobileTaskCardShell
+        saving={saving || deleting}
+        isSubtask={isSubtask}
+      >
+        <div className="flex items-start gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            {showExpandControl ? (
+              <button
+                type="button"
+                onClick={onToggleExpand}
+                className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label={expanded ? "Collapse subtasks" : "Expand subtasks"}
+              >
+                {expanded ? (
+                  <ChevronDown className="size-4" />
+                ) : (
+                  <ChevronRight className="size-4" />
+                )}
+              </button>
+            ) : null}
 
-      <PriorityCell
-        priority={task.priority}
-        editable
-        onChange={(value) => patchTask({ priority: value })}
-      />
+            <TaskStatusDot
+              statusId={task.task_status_id}
+              statusName={task.status?.name}
+              statuses={statuses}
+              onChange={(value) => patchTask({ task_status_id: value })}
+            />
 
-      <StatusCell
-        statusId={task.task_status_id}
-        statusName={task.status?.name}
-        statuses={statuses}
-        onChange={(value) => patchTask({ task_status_id: value })}
-      />
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              onBlur={handleNameBlur}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.currentTarget.blur();
+                }
+              }}
+              className="w-full min-w-0 rounded-md bg-transparent px-1 py-1 text-sm font-medium outline-none focus:bg-background focus:ring-1 focus:ring-ring"
+            />
+          </div>
 
-      <TaskCommentsPopover
-        projectId={projectId}
-        taskId={task.task_id}
-        token={token}
-        commentCount={task.comment_count ?? 0}
-        onCommentCountChange={(count) =>
-          onUpdated?.({ ...task, comment_count: count })
-        }
-      />
+          <div className="flex shrink-0 items-center gap-0.5">
+            {!isSubtask && onAddSubtask ? (
+              <button
+                type="button"
+                onClick={onAddSubtask}
+                className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Add subtask"
+                title="Add subtask"
+              >
+                <Plus className="size-4" />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setDetailOpen(true)}
+              disabled={!token || deleting || saving}
+              className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+              aria-label={`View ${task.name}`}
+              title="View task details"
+            >
+              <Eye className="size-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting || saving || !token}
+              className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+              aria-label={`Delete ${task.name}`}
+              title="Delete task"
+            >
+              <Trash2 className="size-4" />
+            </button>
+          </div>
+        </div>
 
-      <TimelineCell
-        timeline={task.timeline}
-        onChange={(value) => patchTask({ timeline: value })}
-      />
-
-      <DrawCell
-        projectId={projectId}
-        taskId={task.task_id}
-        taskName={task.name}
-        token={token}
-        scribble={task.scribble}
-        onSaved={onUpdated}
-      />
+        <div className="space-y-2.5">
+          <MobileMetaRow label="Status">
+            <StatusCell
+              statusId={task.task_status_id}
+              statusName={task.status?.name}
+              statuses={statuses}
+              onChange={(value) => patchTask({ task_status_id: value })}
+            />
+          </MobileMetaRow>
+          <MobileMetaRow label="Assignee">
+            <AssigneeCell
+              assignees={task.assignees}
+              members={members}
+              teams={teams}
+              align="start"
+              onChange={(assigneeIds) =>
+                patchTask({ assignee_ids: assigneeIds })
+              }
+            />
+          </MobileMetaRow>
+          <div className="grid grid-cols-2 gap-2.5">
+            <MobileMetaRow label="Due">
+              <DueDateCell
+                dueDate={task.due_date}
+                onChange={(value) => patchTask({ due_date: value })}
+              />
+            </MobileMetaRow>
+            <MobileMetaRow label="Priority">
+              <PriorityCell
+                priority={task.priority}
+                editable
+                onChange={(value) => patchTask({ priority: value })}
+              />
+            </MobileMetaRow>
+          </div>
+          <MobileMetaRow label="Timeline">
+            <TimelineCell
+              timeline={task.timeline}
+              onChange={(value) => patchTask({ timeline: value })}
+            />
+          </MobileMetaRow>
+          <div className="flex items-center gap-1 border-t border-border/40 pt-2">
+            <TaskCommentsPopover
+              projectId={projectId}
+              taskId={task.task_id}
+              token={token}
+              commentCount={task.comment_count ?? 0}
+              onCommentCountChange={(count) =>
+                onUpdated?.({ ...task, comment_count: count })
+              }
+            />
+            <DrawCell
+              projectId={projectId}
+              taskId={task.task_id}
+              taskName={task.name}
+              token={token}
+              scribble={task.scribble}
+              onSaved={onUpdated}
+            />
+            {subtaskCount > 0 ? (
+              <span className="ml-auto text-[11px] text-muted-foreground">
+                {subtaskCount} subtask{subtaskCount === 1 ? "" : "s"}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </MobileTaskCardShell>
 
       <TaskDetailDialog
         open={detailOpen}
@@ -578,7 +773,7 @@ function EditableTaskRow({
         teams={teams}
         onUpdated={onUpdated}
       />
-    </TaskRowShell>
+    </>
   );
 }
 
@@ -596,20 +791,28 @@ function DraftTaskRow({
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const nameInputRef = useRef(null);
+  const desktopNameRef = useRef(null);
+  const mobileNameRef = useRef(null);
   const status = statuses.find(
     (item) => item.task_status_id === draft.task_status_id,
   );
 
+  function focusNameInput() {
+    const isDesktop =
+      typeof window !== "undefined" &&
+      window.matchMedia("(min-width: 768px)").matches;
+    (isDesktop ? desktopNameRef : mobileNameRef).current?.focus();
+  }
+
   useEffect(() => {
-    nameInputRef.current?.focus();
+    focusNameInput();
   }, []);
 
   async function handleSave() {
     const trimmedName = draft.name.trim();
     if (!trimmedName) {
       setError("Task name is required.");
-      nameInputRef.current?.focus();
+      focusNameInput();
       return;
     }
 
@@ -680,15 +883,20 @@ function DraftTaskRow({
     <div
       className={cn(
         "border-b border-border/40 bg-muted/20",
-        parentTaskId && "border-l-2 border-l-border/60",
+        parentTaskId && "border-l-2 border-l-border/60 md:border-l-2",
       )}
     >
-      <TaskRowShell saving={saving} isDraft isSubtask={Boolean(parentTaskId)}>
+      <TaskRowShell
+        saving={saving}
+        isDraft
+        isSubtask={Boolean(parentTaskId)}
+        className="hidden md:grid"
+      >
         <div className="flex min-w-0 items-center gap-2">
           {parentTaskId ? <span className="ml-5 size-5 shrink-0" /> : null}
           <TaskTypeIcon typeName="Task" />
           <input
-            ref={nameInputRef}
+            ref={desktopNameRef}
             value={draft.name}
             onChange={(event) => {
               setError("");
@@ -740,6 +948,72 @@ function DraftTaskRow({
 
         <DrawCell disabled />
       </TaskRowShell>
+
+      <MobileTaskCardShell saving={saving} isDraft isSubtask={Boolean(parentTaskId)}>
+        <div className="flex min-w-0 items-center gap-2">
+          <TaskTypeIcon typeName="Task" />
+          <input
+            ref={mobileNameRef}
+            value={draft.name}
+            onChange={(event) => {
+              setError("");
+              onDraftChange({ ...draft, name: event.target.value });
+            }}
+            onKeyDown={handleNameKeyDown}
+            placeholder="Task name"
+            className="w-full min-w-0 rounded-md bg-transparent px-1 py-1 text-sm font-medium outline-none placeholder:text-muted-foreground focus:bg-background focus:ring-1 focus:ring-ring"
+          />
+        </div>
+
+        <div className="space-y-2.5">
+          <MobileMetaRow label="Status">
+            <StatusCell
+              statusId={draft.task_status_id}
+              statusName={status?.name}
+              statuses={statuses}
+              onChange={(value) =>
+                onDraftChange({ ...draft, task_status_id: value })
+              }
+            />
+          </MobileMetaRow>
+          <MobileMetaRow label="Assignee">
+            <AssigneeCell
+              assignees={draftAssignees}
+              members={members}
+              teams={teams}
+              align="start"
+              onChange={(assigneeIds) =>
+                onDraftChange({ ...draft, assignee_ids: assigneeIds })
+              }
+            />
+          </MobileMetaRow>
+          <div className="grid grid-cols-2 gap-2.5">
+            <MobileMetaRow label="Due">
+              <DueDateCell
+                dueDate={draft.due_date}
+                onChange={(value) =>
+                  onDraftChange({ ...draft, due_date: value })
+                }
+              />
+            </MobileMetaRow>
+            <MobileMetaRow label="Priority">
+              <PriorityCell
+                priority={draft.priority}
+                editable
+                onChange={(value) =>
+                  onDraftChange({ ...draft, priority: value })
+                }
+              />
+            </MobileMetaRow>
+          </div>
+          <MobileMetaRow label="Timeline">
+            <TimelineCell
+              timeline={draft.timeline}
+              onChange={(value) => onDraftChange({ ...draft, timeline: value })}
+            />
+          </MobileMetaRow>
+        </div>
+      </MobileTaskCardShell>
 
       <div className="flex items-center justify-end gap-2 px-3 py-2">
         {error ? (
@@ -954,12 +1228,12 @@ function StatusGroup({
       </button>
 
       {!collapsed ? (
-        <div className="overflow-x-auto">
-          <div className="min-w-[820px]">
+        <div className="md:overflow-x-auto">
+          <div className="md:min-w-[820px]">
             <div
               className={cn(
                 ROW_GRID,
-                "border-b border-border/40 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground",
+                "hidden border-b border-border/40 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground md:grid",
               )}
             >
               <span>Name</span>
@@ -1015,7 +1289,7 @@ function StatusGroup({
               <button
                 type="button"
                 onClick={startDraft}
-                className="flex w-full items-center gap-2 px-3 py-2.5 text-xs text-muted-foreground transition-colors hover:bg-muted/20 hover:text-foreground"
+                className="flex w-full items-center gap-2 px-3 py-3 text-sm text-muted-foreground transition-colors hover:bg-muted/20 hover:text-foreground md:py-2.5 md:text-xs"
               >
                 <Plus className="size-3.5" />
                 Add Task
