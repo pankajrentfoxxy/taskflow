@@ -3,7 +3,7 @@ import Joi from "joi";
 import validate from "../middlewares/validate.js";
 import { auth } from "../middlewares/auth.js";
 import asyncHandler from "../utils/asyncHandler.js";
-import { getReports } from "../controllers/dashboardController.js";
+import { getReports, getMyDashboard } from "../controllers/dashboardController.js";
 
 const router = Router();
 
@@ -22,5 +22,7 @@ router.get(
   validate(reportsQuerySchema),
   asyncHandler(getReports),
 );
+
+router.get("/me", auth(), asyncHandler(getMyDashboard));
 
 export default router;

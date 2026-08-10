@@ -67,6 +67,7 @@ const listTasksSchema = {
       .try(Joi.number().integer().positive(), Joi.valid("null"))
       .optional(),
     include_subtasks: Joi.boolean().optional(),
+    scope: Joi.string().valid("all", "assigned", "created").optional(),
   }),
 };
 

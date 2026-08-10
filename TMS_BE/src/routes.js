@@ -11,6 +11,7 @@ import roleRoutes from "./routes/role.routes.js";
 import dashboardRoutes from "./routes/dashboard.routes.js";
 import errorLogRoutes from "./routes/errorLog.routes.js";
 import dbQueryRoutes from "./routes/dbQuery.routes.js";
+import notificationRoutes from "./routes/notification.routes.js";
 
 const router = express.Router();
 
@@ -27,6 +28,7 @@ const defaultRoutes = [
   { path: "/dashboard", route: dashboardRoutes },
   { path: "/error-logs", route: errorLogRoutes },
   { path: "/db-query", route: dbQueryRoutes },
+  { path: "/notifications", route: notificationRoutes },
 ];
 
 defaultRoutes.forEach((route) => {

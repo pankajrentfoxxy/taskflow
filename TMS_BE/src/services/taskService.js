@@ -14,6 +14,10 @@ import {
 import * as projectService from "./projectService.js";
 import ApiError from "../utils/ApiError.js";
 import {
+  canViewAllProjectTasks,
+  userCanAccessTask,
+} from "../utils/userAccess.js";
+import {
   buildTimelinePayload,
   isValidTimelineRange,
   normalizeTimelineValue,
@@ -141,17 +145,23 @@ function normalizeAssigneeIds(assigneeIds) {
   return [...new Set(assigneeIds.map(Number).filter(Boolean))];
 }
 
-async function attachSubtasks(tasks) {
+async function attachSubtasks(tasks, { scope = "all", userId, assignedTaskIds = [] } = {}) {
   if (!tasks.length) {
     return;
   }
 
   const parentTaskIds = tasks.map((task) => task.task_id);
-  const subtasks = await Task.findAll({
+  let subtasks = await Task.findAll({
     where: { parent_task_id: parentTaskIds, deleted: false },
     include: defaultIncludes,
     order: [["created_at", "ASC"]],
   });
+
+  if (scope !== "all") {
+    subtasks = subtasks.filter((subtask) =>
+      subtaskMatchesScope(subtask, scope, userId, assignedTaskIds),
+    );
+  }
 
   const subtasksByParentId = new Map();
   for (const subtask of subtasks) {
@@ -381,6 +391,86 @@ function buildTaskWhere(projectId, options = {}) {
   return where;
 }
 
+async function getAssignedTaskIdsForProject(userId, projectId) {
+  const rows = await TaskAssignee.findAll({
+    attributes: ["task_id"],
+    where: { user_id: userId },
+    include: [
+      {
+        model: Task,
+        as: "task",
+        attributes: [],
+        where: { project_id: projectId, deleted: false },
+        required: true,
+      },
+    ],
+  });
+
+  return rows.map((row) => row.task_id);
+}
+
+function buildMemberTaskWhere(baseWhere, userId, assignedTaskIds, scope) {
+  if (scope === "created") {
+    return {
+      ...baseWhere,
+      created_by: userId,
+    };
+  }
+
+  if (assignedTaskIds.length === 0) {
+    return null;
+  }
+
+  return {
+    ...baseWhere,
+    task_id: { [Op.in]: assignedTaskIds },
+  };
+}
+
+function resolveTaskScope(options, canViewAll) {
+  const scope = String(options.scope || (canViewAll ? "all" : "assigned")).toLowerCase();
+
+  if (scope === "all") {
+    return canViewAll ? "all" : "assigned";
+  }
+
+  if (scope === "assigned" || scope === "created") {
+    return scope;
+  }
+
+  return canViewAll ? "all" : "assigned";
+}
+
+function subtaskMatchesScope(subtask, scope, userId, assignedTaskIds) {
+  if (scope === "all") {
+    return true;
+  }
+
+  if (scope === "created") {
+    return Number(subtask.created_by) === Number(userId);
+  }
+
+  if (scope === "accessible") {
+    return (
+      Number(subtask.created_by) === Number(userId) ||
+      assignedTaskIds.includes(subtask.task_id)
+    );
+  }
+
+  return assignedTaskIds.includes(subtask.task_id);
+}
+
+async function assertTaskVisibleToUser(userId, projectId, task) {
+  if (await canViewAllProjectTasks(userId)) {
+    return;
+  }
+
+  const assigneeIds = await getTaskAssigneeIds(task.task_id);
+  if (!userCanAccessTask(userId, task, assigneeIds)) {
+    throw new ApiError(httpStatus.NOT_FOUND, "Task not found");
+  }
+}
+
 export async function createTask(userId, projectId, payload) {
   await projectService.getProjectById(userId, projectId);
   await assertTaskStatusExists(payload.task_status_id);
@@ -428,7 +518,19 @@ export async function listTasks(userId, projectId, options = {}) {
     options.include_subtasks === true ||
     options.include_subtasks === "true";
 
-  const where = buildTaskWhere(projectId, options);
+  const canViewAll = await canViewAllProjectTasks(userId);
+  const scope = resolveTaskScope(options, canViewAll);
+  const assignedTaskIds = await getAssignedTaskIdsForProject(userId, projectId);
+  let where = buildTaskWhere(projectId, options);
+
+  if (scope === "all") {
+    // Admin and super admin can list every project task.
+  } else {
+    where = buildMemberTaskWhere(where, userId, assignedTaskIds, scope);
+    if (!where) {
+      return [];
+    }
+  }
 
   const tasks = await Task.findAll({
     where,
@@ -438,7 +540,11 @@ export async function listTasks(userId, projectId, options = {}) {
   });
 
   if (includeSubtasks) {
-    await attachSubtasks(tasks);
+    await attachSubtasks(tasks, {
+      scope,
+      userId,
+      assignedTaskIds,
+    });
   }
 
   await attachCommentCounts(collectTasksWithSubtasks(tasks, includeSubtasks));
@@ -475,7 +581,16 @@ export async function getTaskById(userId, projectId, taskId) {
     throw new ApiError(httpStatus.NOT_FOUND, "Task not found");
   }
 
-  await attachSubtasks([task]);
+  await assertTaskVisibleToUser(userId, projectId, task);
+
+  const canViewAll = await canViewAllProjectTasks(userId);
+  const assignedTaskIds = await getAssignedTaskIdsForProject(userId, projectId);
+
+  await attachSubtasks([task], {
+    scope: canViewAll ? "all" : "accessible",
+    userId,
+    assignedTaskIds,
+  });
   await attachCommentCounts(collectTasksWithSubtasks([task], true));
 
   return toPublicTask(task, { includeNestedSubtasks: true });

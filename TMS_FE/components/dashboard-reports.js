@@ -178,7 +178,7 @@ export function DashboardReports() {
         icon: Clock3,
       },
       {
-        label: "No response (SLA breach)",
+        label: "Need response",
         value: summary?.no_response ?? 0,
         tone: "danger",
         icon: BellOff,
@@ -234,7 +234,7 @@ export function DashboardReports() {
       ["Metric", "Value"],
       ["Open tasks", summary?.open_tasks ?? 0],
       ["Overdue", summary?.overdue ?? 0],
-      ["No response", summary?.no_response ?? 0],
+      ["Need response", summary?.no_response ?? 0],
       ["Awaiting explanation", summary?.awaiting_explanation ?? 0],
       ["Pending review", summary?.pending_review ?? 0],
       ["Due this week", summary?.due_this_week ?? 0],
@@ -242,7 +242,7 @@ export function DashboardReports() {
       ["On-time completion", summary?.on_time_completion_pct ?? "—"],
       ["Avg response time", summary?.avg_response_time ?? "—"],
       [],
-      ["Team", "Task Type", "Total", "Open", "Overdue", "No Resp.", "Done", "Delivered"],
+      ["Team", "Task Type", "Total", "Open", "Overdue", "Need Resp.", "Done", "Delivered"],
       ...byTaskType.map((row) => [
         row.team_name,
         row.task_type_name,
@@ -259,7 +259,7 @@ export function DashboardReports() {
         "Department",
         "Open",
         "Overdue",
-        "No Resp.",
+        "Need Resp.",
         "Escal.",
         "Done",
         "On Time",
@@ -367,7 +367,7 @@ export function DashboardReports() {
                   <th className="px-4 py-3 font-medium">Total</th>
                   <th className="px-4 py-3 font-medium">Open</th>
                   <th className="px-4 py-3 font-medium text-red-600">Overdue</th>
-                  <th className="px-4 py-3 font-medium">No resp.</th>
+                  <th className="px-4 py-3 font-medium">Need resp.</th>
                   <th className="px-4 py-3 font-medium">Done</th>
                   <th className="px-4 py-3 font-medium">Delivered</th>
                 </tr>
@@ -430,7 +430,7 @@ export function DashboardReports() {
                   <th className="px-4 py-3 font-medium">Person</th>
                   <th className="px-4 py-3 font-medium">Open</th>
                   <th className="px-4 py-3 font-medium text-red-600">Overdue</th>
-                  <th className="px-4 py-3 font-medium">No resp.</th>
+                  <th className="px-4 py-3 font-medium">Need resp.</th>
                   <th className="px-4 py-3 font-medium">Escal.</th>
                   <th className="px-4 py-3 font-medium">Done</th>
                   <th className="px-4 py-3 font-medium">On time</th>

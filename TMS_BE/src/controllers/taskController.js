@@ -1,6 +1,10 @@
 import * as taskService from "../services/taskService.js";
 import { logActivity } from "../services/activityLogService.js";
 import { buildTaskUpdateActivityDescription } from "../utils/taskActivityDescription.js";
+import {
+  notifyTaskCreated,
+  notifyTaskUpdated,
+} from "../utils/taskNotificationHelper.js";
 
 function logTaskActivity(req, res, overrides = {}) {
   logActivity({
@@ -18,6 +22,11 @@ export const createTask = async (req, res) => {
     req.body,
   );
   res.status(201).json({ task });
+  notifyTaskCreated({
+    task,
+    actor: req.user,
+    projectId: req.params.projectId,
+  }).catch(() => {});
   logTaskActivity(req, res, {
     action: task.parent_task_id ? "subtask.create" : "task.create",
     entityType: "task",
@@ -78,6 +87,11 @@ export const createSubtask = async (req, res) => {
     req.body,
   );
   res.status(201).json({ task });
+  notifyTaskCreated({
+    task,
+    actor: req.user,
+    projectId: req.params.projectId,
+  }).catch(() => {});
   logTaskActivity(req, res, {
     action: "subtask.create",
     entityType: "task",
@@ -108,6 +122,11 @@ export const getTask = async (req, res) => {
 };
 
 export const updateTask = async (req, res) => {
+  const previousTask = await taskService.getTaskById(
+    req.user.user_id,
+    req.params.projectId,
+    req.params.taskId,
+  );
   const task = await taskService.updateTask(
     req.user.user_id,
     req.params.projectId,
@@ -115,6 +134,13 @@ export const updateTask = async (req, res) => {
     req.body,
   );
   res.json({ task });
+  notifyTaskUpdated({
+    task,
+    previousTask,
+    actor: req.user,
+    projectId: req.params.projectId,
+    updateBody: req.body,
+  }).catch(() => {});
   logTaskActivity(req, res, {
     action: "task.update",
     entityType: "task",

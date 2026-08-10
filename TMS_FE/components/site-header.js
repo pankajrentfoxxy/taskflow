@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { NotificationsPanel } from "@/components/notifications-panel";
 
 export function SiteHeader() {
   const { isAuthenticated, user, logout, loading } = useAuth();
@@ -25,6 +26,7 @@ export function SiteHeader() {
           <span className="text-sm text-muted-foreground">Loading...</span>
         ) : isAuthenticated ? (
           <>
+            <NotificationsPanel />
             <span className="hidden text-sm text-muted-foreground sm:inline">
               {user?.full_name || user?.email}
             </span>

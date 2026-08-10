@@ -1,8 +1,13 @@
+import http from "http";
 import app from "./src/app.js";
 import config from "./src/config/config.js";
 import logger from "./src/config/logger.js";
+import { initSocket } from "./src/config/socket.js";
 
-const server = app.listen(config.port, () => {
+const httpServer = http.createServer(app);
+initSocket(httpServer);
+
+const server = httpServer.listen(config.port, () => {
   logger.info(`Listening to port ${config.port}`);
 });
 

@@ -15,8 +15,6 @@ import {
 import { isSuperAdminUser } from "../utils/userAccess.js";
 import { getRoleByName } from "../config/roles.js";
 
-const SLA_NO_RESPONSE_MS = 24 * 60 * 60 * 1000;
-
 function normalizeStatusName(name) {
   return String(name || "").trim().toLowerCase();
 }
@@ -59,6 +57,11 @@ function isOverdueTask(task) {
 
 function isOpenTask(task) {
   return !isDoneStatus(task.status?.name);
+}
+
+function isTodoStatus(statusName) {
+  const normalized = normalizeStatusName(statusName);
+  return normalized === "todo" || normalized === "to do" || normalized === "to-do";
 }
 
 function isDueThisWeek(task) {
@@ -125,25 +128,6 @@ function taskMatchesTeam(task, teamId, assigneeTeamMap) {
   return assigneeIds.some((userId) =>
     (assigneeTeamMap.get(userId) || []).includes(parsedTeamId),
   );
-}
-
-function isNoResponseTask(task, commentsByTaskId, assigneeIds) {
-  if (!isOpenTask(task)) {
-    return false;
-  }
-
-  const age = Date.now() - Number(task.created_at);
-  if (age < SLA_NO_RESPONSE_MS) {
-    return false;
-  }
-
-  const comments = commentsByTaskId.get(task.task_id) || [];
-  if (comments.length === 0) {
-    return assigneeIds.length > 0;
-  }
-
-  const assigneeIdSet = new Set(assigneeIds);
-  return !comments.some((comment) => assigneeIdSet.has(comment.user_id));
 }
 
 function getFirstAssigneeResponseMs(task, commentsByTaskId, assigneeIds) {
@@ -240,6 +224,215 @@ async function getAccessibleProjectIds(userId) {
   return projects.map((project) => project.project_id);
 }
 
+function isDueToday(task) {
+  if (!isOpenTask(task) || task.due_date == null) {
+    return false;
+  }
+
+  const dueDate = new Date(Number(task.due_date));
+  const now = new Date();
+
+  return (
+    dueDate.getFullYear() === now.getFullYear() &&
+    dueDate.getMonth() === now.getMonth() &&
+    dueDate.getDate() === now.getDate()
+  );
+}
+
+function isInProgressStatus(statusName) {
+  return /in progress|in-progress/.test(normalizeStatusName(statusName));
+}
+
+function isEscalatedSectionTask(task) {
+  return (
+    isEscalatedTask(task) || isAwaitingExplanationStatus(task.status?.name)
+  );
+}
+
+function formatDueLabel(task) {
+  if (task.due_date == null) {
+    return null;
+  }
+
+  const dueDate = new Date(Number(task.due_date));
+  const formatted = dueDate.toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  if (isOverdueTask(task)) {
+    return `Overdue · ${formatted}`;
+  }
+
+  return formatted;
+}
+
+function toPublicMyTask(task) {
+  return {
+    task_id: task.task_id,
+    project_id: task.project_id,
+    project_name: task.project?.name ?? "Project",
+    name: task.name,
+    priority: task.priority,
+    due_date: task.due_date,
+    due_label: formatDueLabel(task),
+    is_overdue: isOverdueTask(task),
+    target: task.target ?? null,
+    target_completed: task.target_completed ?? null,
+    status: task.status
+      ? {
+          task_status_id: task.status.task_status_id,
+          name: task.status.name,
+        }
+      : null,
+    type: task.type
+      ? {
+          task_type_id: task.type.task_type_id,
+          name: task.type.name,
+          alias: task.type.alias,
+        }
+      : null,
+    assignees: (task.assignees || []).map((assignee) => ({
+      user_id: assignee.user_id,
+      full_name: assignee.full_name,
+      email: assignee.email,
+      initials: getInitials(assignee.full_name || assignee.email),
+    })),
+    creator: task.creator
+      ? {
+          user_id: task.creator.user_id,
+          full_name: task.creator.full_name,
+        }
+      : null,
+  };
+}
+
+export async function getMyDashboard(userId) {
+  const projectIds = await getAccessibleProjectIds(userId);
+
+  if (projectIds.length === 0) {
+    return {
+      summary: {
+        need_response: 0,
+        escalated: 0,
+        in_progress: 0,
+        due_today: 0,
+      },
+      sections: [],
+    };
+  }
+
+  const tasks = await Task.findAll({
+    where: {
+      project_id: projectIds,
+      deleted: false,
+      parent_task_id: null,
+    },
+    include: [
+      {
+        model: TaskStatus,
+        as: "status",
+        attributes: ["task_status_id", "name"],
+      },
+      {
+        model: TaskType,
+        as: "type",
+        attributes: ["task_type_id", "name", "alias"],
+      },
+      {
+        model: Authentication,
+        as: "assignees",
+        attributes: ["user_id", "full_name", "email"],
+        through: { attributes: [] },
+      },
+      {
+        model: Authentication,
+        as: "creator",
+        attributes: ["user_id", "full_name", "email"],
+      },
+      {
+        model: Project,
+        as: "project",
+        attributes: ["project_id", "name"],
+      },
+    ],
+    order: [["due_date", "ASC"], ["created_at", "DESC"]],
+  });
+
+  const myTasks = tasks.filter((task) =>
+    (task.assignees || []).some((assignee) => assignee.user_id === userId),
+  );
+
+  let needResponse = 0;
+  let escalated = 0;
+  let inProgress = 0;
+  let dueToday = 0;
+
+  const escalatedTasks = [];
+  const dueTodayTasks = [];
+  const inProgressTasks = [];
+  const needResponseTasks = [];
+
+  for (const task of myTasks) {
+    const statusName = task.status?.name;
+    const taskNeedResponse = isTodoStatus(statusName);
+    const taskEscalated = isEscalatedSectionTask(task);
+    const taskInProgress = isInProgressStatus(statusName) && isOpenTask(task);
+    const taskDueToday = isDueToday(task);
+
+    if (taskNeedResponse) needResponse += 1;
+    if (taskEscalated) escalated += 1;
+    if (taskInProgress) inProgress += 1;
+    if (taskDueToday) dueToday += 1;
+
+    const publicTask = toPublicMyTask(task);
+
+    if (taskEscalated) escalatedTasks.push(publicTask);
+    if (taskDueToday) dueTodayTasks.push(publicTask);
+    if (taskInProgress) inProgressTasks.push(publicTask);
+    if (taskNeedResponse) needResponseTasks.push(publicTask);
+  }
+
+  const sections = [
+    {
+      id: "escalated",
+      label: "Escalated · Explanation required",
+      count: escalatedTasks.length,
+      tasks: escalatedTasks,
+    },
+    {
+      id: "due_today",
+      label: "Due today",
+      count: dueTodayTasks.length,
+      tasks: dueTodayTasks,
+    },
+    {
+      id: "in_progress",
+      label: "In progress",
+      count: inProgressTasks.length,
+      tasks: inProgressTasks,
+    },
+    {
+      id: "need_response",
+      label: "Need response",
+      count: needResponseTasks.length,
+      tasks: needResponseTasks,
+    },
+  ].filter((section) => section.count > 0);
+
+  return {
+    summary: {
+      need_response: needResponse,
+      escalated,
+      in_progress: inProgress,
+      due_today: dueToday,
+    },
+    sections,
+  };
+}
+
 function createEmptyBucket() {
   return {
     total: 0,
@@ -252,19 +445,18 @@ function createEmptyBucket() {
   };
 }
 
-function incrementBucket(bucket, task, commentsByTaskId) {
+function incrementBucket(bucket, task) {
   bucket.total += 1;
 
-  const assigneeIds = (task.assignees || []).map((assignee) => assignee.user_id);
   const open = isOpenTask(task);
   const done = isDoneStatus(task.status?.name);
   const overdue = isOverdueTask(task);
-  const noResponse = isNoResponseTask(task, commentsByTaskId, assigneeIds);
+  const needResponse = isTodoStatus(task.status?.name);
 
   if (open) bucket.open += 1;
   if (done) bucket.done += 1;
   if (overdue) bucket.overdue += 1;
-  if (noResponse) bucket.no_response += 1;
+  if (needResponse) bucket.no_response += 1;
 
   if (task.target != null) {
     bucket.target += Number(task.target) || 0;
@@ -404,11 +596,11 @@ export async function getDashboardReports(userId, { teamId = null, period = "all
     const open = isOpenTask(task);
     const taskDone = isDoneStatus(statusName);
     const taskOverdue = isOverdueTask(task);
-    const taskNoResponse = isNoResponseTask(task, commentsByTaskId, assigneeIds);
+    const taskNeedResponse = isTodoStatus(statusName);
 
     if (open) openTasks += 1;
     if (taskOverdue) overdue += 1;
-    if (taskNoResponse) noResponse += 1;
+    if (taskNeedResponse) noResponse += 1;
     if (isAwaitingExplanationStatus(statusName)) awaitingExplanation += 1;
     if (isPendingReviewStatus(statusName)) pendingReview += 1;
     if (isDueThisWeek(task)) dueThisWeek += 1;
@@ -440,7 +632,7 @@ export async function getDashboardReports(userId, { teamId = null, period = "all
         ...createEmptyBucket(),
       });
     }
-    incrementBucket(taskTypeBuckets.get(typeKey), task, commentsByTaskId);
+    incrementBucket(taskTypeBuckets.get(typeKey), task);
 
     for (const assignee of task.assignees || []) {
       const userIdKey = assignee.user_id;
@@ -458,7 +650,7 @@ export async function getDashboardReports(userId, { teamId = null, period = "all
       personBucket.total += 1;
       if (open) personBucket.open += 1;
       if (taskOverdue) personBucket.overdue += 1;
-      if (taskNoResponse) personBucket.no_response += 1;
+      if (taskNeedResponse) personBucket.no_response += 1;
       if (taskDone) personBucket.done += 1;
       if (isEscalatedTask(task)) personBucket.escalated += 1;
 
@@ -554,7 +746,7 @@ export async function getDashboardReports(userId, { teamId = null, period = "all
       on_time_completion_pct:
         onTimeTotal > 0 ? Math.round((onTimeDone / onTimeTotal) * 100) : null,
       avg_response_time: formatMinutes(avgResponseMs),
-      need_attention: overdue + noResponse + awaitingExplanation,
+      need_attention: overdue + awaitingExplanation,
     },
     by_task_type: byTaskType,
     by_person: byPerson,

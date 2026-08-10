@@ -4,11 +4,19 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { apiGet } from "@/lib/api";
 import { useAuth } from "@/hooks/use-auth";
+import { canViewAllProjectTasks } from "@/lib/user-roles";
 import { Button } from "@/components/ui/button";
 import { CreateTaskDialog } from "@/components/create-task-dialog";
 import { PersonalScribbleButton } from "@/components/personal-scribble-dialog";
 import { ProjectPageSkeleton } from "@/components/project-page-skeleton";
 import { ProjectTasksBoard } from "@/components/project-tasks-board";
+import { cn } from "@/lib/utils";
+
+const TASK_SCOPE_OPTIONS = [
+  { value: "all", label: "All", adminOnly: true },
+  { value: "assigned", label: "My tasks" },
+  { value: "created", label: "Created by me" },
+];
 
 function groupTasksByStatus(statuses, tasks) {
   const groups = statuses.map((status) => ({
@@ -38,15 +46,28 @@ function groupTasksByStatus(statuses, tasks) {
 
 export default function ProjectPage() {
   const params = useParams();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const canViewAll = canViewAllProjectTasks(user?.role?.slug);
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [taskTypes, setTaskTypes] = useState([]);
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [tasksLoading, setTasksLoading] = useState(false);
   const [error, setError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [taskScope, setTaskScope] = useState(canViewAll ? "all" : "assigned");
+
+  const scopeOptions = useMemo(
+    () =>
+      TASK_SCOPE_OPTIONS.filter((option) => !option.adminOnly || canViewAll),
+    [canViewAll],
+  );
+
+  useEffect(() => {
+    setTaskScope(canViewAll ? "all" : "assigned");
+  }, [canViewAll, params.projectId]);
 
   function handleTaskCreated(task) {
     setTasks((prev) => [...prev, task]);
@@ -70,18 +91,14 @@ export default function ProjectPage() {
 
     let cancelled = false;
 
-    async function loadProjectData() {
+    async function loadProjectMeta() {
       setLoading(true);
       setError("");
 
       try {
-        const [projectData, tasksData, statusesData, taskTypesData, teamsData] =
+        const [projectData, statusesData, taskTypesData, teamsData] =
           await Promise.all([
             apiGet(`/projects/${params.projectId}`, { token }),
-            apiGet(
-              `/projects/${params.projectId}/tasks?limit=200&order=asc`,
-              { token },
-            ),
             apiGet("/task-statuses", { token }),
             apiGet("/task-types", { token }),
             apiGet("/teams", { token }),
@@ -90,7 +107,6 @@ export default function ProjectPage() {
         if (cancelled) return;
 
         setProject(projectData.project);
-        setTasks(tasksData.tasks || []);
         setStatuses(statusesData.taskStatuses || []);
         setTaskTypes(taskTypesData.taskTypes || []);
         setTeams(teamsData.teams || []);
@@ -105,12 +121,50 @@ export default function ProjectPage() {
       }
     }
 
-    loadProjectData();
+    loadProjectMeta();
 
     return () => {
       cancelled = true;
     };
   }, [token, params.projectId]);
+
+  useEffect(() => {
+    if (!token || !params.projectId || loading) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadTasks() {
+      setTasksLoading(true);
+      setError("");
+
+      try {
+        const tasksData = await apiGet(
+          `/projects/${params.projectId}/tasks?limit=200&order=asc&scope=${taskScope}`,
+          { token },
+        );
+
+        if (cancelled) return;
+        setTasks(tasksData.tasks || []);
+      } catch (err) {
+        if (!cancelled) {
+          setError(err.message || "Failed to load tasks");
+          setTasks([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setTasksLoading(false);
+        }
+      }
+    }
+
+    loadTasks();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, params.projectId, taskScope, loading]);
 
   const tasksByStatus = useMemo(
     () => groupTasksByStatus(statuses, tasks),
@@ -132,7 +186,7 @@ export default function ProjectPage() {
     return <ProjectPageSkeleton />;
   }
 
-  if (error) {
+  if (error && !project) {
     return <p className="text-sm text-destructive">{error}</p>;
   }
 
@@ -143,30 +197,63 @@ export default function ProjectPage() {
   return (
     <>
       <div className="space-y-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-2">
-            <h2 className="text-2xl font-semibold tracking-tight">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="min-w-0 space-y-2">
+            <h2 className="text-xl font-semibold tracking-tight sm:text-2xl">
               {project.name}
             </h2>
             {project.description ? (
-              <p className="text-muted-foreground">{project.description}</p>
+              <p className="text-sm text-muted-foreground sm:text-base">
+                {project.description}
+              </p>
             ) : (
-              <p className="text-muted-foreground">
+              <p className="text-sm text-muted-foreground sm:text-base">
                 No description for this project.
               </p>
             )}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <PersonalScribbleButton token={token} />
-            <Button onClick={() => setCreateOpen(true)}>Add task</Button>
+            <Button className="flex-1 sm:flex-none" onClick={() => setCreateOpen(true)}>
+              Add task
+            </Button>
           </div>
         </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {scopeOptions.map((option) => {
+            const isActive = taskScope === option.value;
+
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setTaskScope(option.value)}
+                className={cn(
+                  "rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
+                  isActive
+                    ? "border-foreground bg-foreground text-background"
+                    : "border-border bg-background text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+          {tasksLoading ? (
+            <span className="text-sm text-muted-foreground">Updating...</span>
+          ) : null}
+        </div>
+
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
         <div className="space-y-3">
           {statuses.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No task statuses configured yet.
             </p>
+          ) : tasksLoading && tasks.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Loading tasks...</p>
           ) : (
             <ProjectTasksBoard
               columns={tasksByStatus}

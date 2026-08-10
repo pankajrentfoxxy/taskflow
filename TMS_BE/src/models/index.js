@@ -15,6 +15,7 @@ import defineTeam from "./Team.js";
 import defineTeamMember from "./TeamMember.js";
 import defineTaskAssignee from "./TaskAssignee.js";
 import defineScribble from "./Scribble.js";
+import defineNotification from "./Notification.js";
 
 const Authentication = defineAuthentication(sequelize, DataTypes);
 const Role = defineRole(sequelize, DataTypes);
@@ -31,6 +32,7 @@ const TaskAssignee = defineTaskAssignee(sequelize, DataTypes);
 const Scribble = defineScribble(sequelize, DataTypes);
 const Team = defineTeam(sequelize, DataTypes);
 const TeamMember = defineTeamMember(sequelize, DataTypes);
+const Notification = defineNotification(sequelize, DataTypes);
 
 Role.hasMany(Authentication, { foreignKey: "role_id", as: "users" });
 Authentication.belongsTo(Role, { foreignKey: "role_id", as: "role" });
@@ -223,6 +225,44 @@ Authentication.hasMany(Scribble, {
 });
 Scribble.belongsTo(Authentication, { foreignKey: "user_id", as: "author" });
 
+Authentication.hasMany(Notification, {
+  foreignKey: "recipient_user_id",
+  as: "receivedNotifications",
+});
+Notification.belongsTo(Authentication, {
+  foreignKey: "recipient_user_id",
+  as: "recipient",
+});
+
+Authentication.hasMany(Notification, {
+  foreignKey: "actor_user_id",
+  as: "sentNotifications",
+});
+Notification.belongsTo(Authentication, {
+  foreignKey: "actor_user_id",
+  as: "actor",
+});
+
+Task.hasMany(Notification, {
+  foreignKey: "task_id",
+  as: "notifications",
+  onDelete: "SET NULL",
+});
+Notification.belongsTo(Task, {
+  foreignKey: "task_id",
+  as: "task",
+});
+
+Project.hasMany(Notification, {
+  foreignKey: "project_id",
+  as: "notifications",
+  onDelete: "SET NULL",
+});
+Notification.belongsTo(Project, {
+  foreignKey: "project_id",
+  as: "project",
+});
+
 const db = {
   sequelize,
   Role,
@@ -240,6 +280,7 @@ const db = {
   Scribble,
   Team,
   TeamMember,
+  Notification,
 };
 
 export {
@@ -259,5 +300,6 @@ export {
   Scribble,
   Team,
   TeamMember,
+  Notification,
   db,
 };

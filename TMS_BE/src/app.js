@@ -98,12 +98,13 @@ app.use(errorHandler);
     await db.ErrorLog.sync();
     await db.TaskStatus.sync();
     await db.TaskType.sync({ alter: true });
-    await db.TaskAssignee.sync({ alter: true });
     await db.Task.sync({ alter: true });
+    await db.TaskAssignee.sync({ alter: true });
     await db.ActivityLog.sync();
     await db.Comment.sync();
     await db.CommentReaction.sync();
     await db.Scribble.sync({ alter: true });
+    await db.Notification.sync();
     console.log("✅ Database connected");
   } catch (err) {
     console.error("❌ Unable to connect to the database:", err);
