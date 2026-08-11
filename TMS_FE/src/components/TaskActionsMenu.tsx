@@ -21,6 +21,10 @@ export function canDeleteTask(role?: string) {
   return role === 'ADMIN' || role === 'CEO';
 }
 
+function runAfterMenuClose(action: () => void) {
+  window.setTimeout(action, 0);
+}
+
 export default function TaskActionsMenu({
   task,
   onCreateSubtask,
@@ -31,9 +35,15 @@ export default function TaskActionsMenu({
   onDeleted?: () => void;
 }) {
   const me = useMe();
+  const [menuOpen, setMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const subtaskAllowed = canCreateSubtask(task);
   const deleteAllowed = canDeleteTask(me?.role);
+
+  const closeMenuThen = (action: () => void) => {
+    setMenuOpen(false);
+    runAfterMenuClose(action);
+  };
 
   const handleDelete = async () => {
     if (!deleteAllowed || busy) return;
@@ -51,7 +61,7 @@ export default function TaskActionsMenu({
   };
 
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false} open={menuOpen} onOpenChange={setMenuOpen}>
       <DropdownMenuTrigger asChild>
         <Button
           type="button"
@@ -67,7 +77,12 @@ export default function TaskActionsMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
         {subtaskAllowed ? (
-          <DropdownMenuItem onClick={() => onCreateSubtask(task)}>
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault();
+              closeMenuThen(() => onCreateSubtask(task));
+            }}
+          >
             <Plus className="size-4" />
             Create subtask
           </DropdownMenuItem>
@@ -77,7 +92,13 @@ export default function TaskActionsMenu({
         {deleteAllowed && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onClick={handleDelete}>
+            <DropdownMenuItem
+              variant="destructive"
+              onSelect={(e) => {
+                e.preventDefault();
+                closeMenuThen(handleDelete);
+              }}
+            >
               <Trash2 className="size-4" />
               Delete task
             </DropdownMenuItem>
