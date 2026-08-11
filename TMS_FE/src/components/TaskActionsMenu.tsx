@@ -1,0 +1,89 @@
+'use client';
+
+import { useState } from 'react';
+import { MoreVertical, Plus, Trash2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { useMe } from '@/components/Shell';
+import { api } from '@/lib/util';
+
+export function canCreateSubtask(task: { parent_id?: number | null; status?: string }) {
+  return !task.parent_id && !['DONE', 'CANCELLED'].includes(task.status || '');
+}
+
+export function canDeleteTask(role?: string) {
+  return role === 'ADMIN' || role === 'CEO';
+}
+
+export default function TaskActionsMenu({
+  task,
+  onCreateSubtask,
+  onDeleted,
+}: {
+  task: any;
+  onCreateSubtask: (task: any) => void;
+  onDeleted?: () => void;
+}) {
+  const me = useMe();
+  const [busy, setBusy] = useState(false);
+  const subtaskAllowed = canCreateSubtask(task);
+  const deleteAllowed = canDeleteTask(me?.role);
+
+  const handleDelete = async () => {
+    if (!deleteAllowed || busy) return;
+    const ok = window.confirm(`Delete "${task.title}"? This hides the task and its subtasks from the app.`);
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await api(`/api/tasks/${task.id}`, { method: 'DELETE' });
+      onDeleted?.();
+    } catch (e: unknown) {
+      window.alert(e instanceof Error ? e.message : 'Delete failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground hover:text-foreground"
+          title="Actions"
+          disabled={busy}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <MoreVertical className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+        {subtaskAllowed ? (
+          <DropdownMenuItem onClick={() => onCreateSubtask(task)}>
+            <Plus className="size-4" />
+            Create subtask
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem disabled>Create subtask</DropdownMenuItem>
+        )}
+        {deleteAllowed && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onClick={handleDelete}>
+              <Trash2 className="size-4" />
+              Delete task
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}

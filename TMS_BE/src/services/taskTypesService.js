@@ -25,7 +25,7 @@ export const listTaskTypes = async (user, { manage, teamId, userId }) => {
 
     const types = await sequelize.query(
       `SELECT tt.*, tm.name AS team_name,
-        (SELECT COUNT(*)::int FROM tasks WHERE task_type_id = tt.id) AS used_count
+        (SELECT COUNT(*)::int FROM tasks WHERE task_type_id = tt.id AND deleted = false) AS used_count
        FROM task_types tt JOIN teams tm ON tm.id = tt.team_id
        WHERE ${where} ORDER BY tm.name, tt.name`,
       { replacements, type: QueryTypes.SELECT }
@@ -95,7 +95,7 @@ export const deleteTaskType = async (user, id) => {
   }
 
   const [{ used_count: usedCount }] = await sequelize.query(
-    "SELECT COUNT(*)::int AS used_count FROM tasks WHERE task_type_id = :id",
+    "SELECT COUNT(*)::int AS used_count FROM tasks WHERE task_type_id = :id AND deleted = false",
     { replacements: { id: type.id }, type: QueryTypes.SELECT }
   );
   if (usedCount > 0) {

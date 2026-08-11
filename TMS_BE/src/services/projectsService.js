@@ -17,7 +17,7 @@ export const listProjects = async (user) => {
   const projects = await sequelize.query(
     `SELECT p.*, u.name AS owner_name,
       (SELECT COUNT(*)::int FROM project_members pm WHERE pm.project_id = p.id) AS member_count,
-      (SELECT COUNT(*)::int FROM tasks t WHERE t.project_id = p.id AND t.status NOT IN ('DONE','CANCELLED')) AS open_tasks
+      (SELECT COUNT(*)::int FROM tasks t WHERE t.project_id = p.id AND t.status NOT IN ('DONE','CANCELLED') AND t.deleted = false) AS open_tasks
      FROM projects p JOIN users u ON u.id = p.owner_id
      WHERE ${where} ORDER BY p.created_at DESC`,
     { replacements, type: QueryTypes.SELECT }
@@ -65,15 +65,15 @@ export const getProject = async (user, projectId) => {
   const tasks = await sequelize.query(
     `SELECT t.*, ua.name AS assignee_name, uc.name AS creator_name, tm.name AS team_name,
       tt.name AS type_name,
-      (SELECT COUNT(*)::int FROM tasks s WHERE s.parent_id = t.id) AS subtask_count,
-      (SELECT COUNT(*)::int FROM tasks s WHERE s.parent_id = t.id AND s.status = 'DONE') AS subtask_done,
+      (SELECT COUNT(*)::int FROM tasks s WHERE s.parent_id = t.id AND s.deleted = false) AS subtask_count,
+      (SELECT COUNT(*)::int FROM tasks s WHERE s.parent_id = t.id AND s.status = 'DONE' AND s.deleted = false) AS subtask_done,
       (SELECT COUNT(*)::int FROM comments c WHERE c.task_id = t.id) AS comment_count
      FROM tasks t
      LEFT JOIN task_types tt ON tt.id = t.task_type_id
      LEFT JOIN users ua ON ua.id = t.assignee_id
      LEFT JOIN users uc ON uc.id = t.creator_id
      LEFT JOIN teams tm ON tm.id = t.assigned_team_id
-     WHERE t.project_id = :pid AND t.parent_id IS NULL
+     WHERE t.project_id = :pid AND t.parent_id IS NULL AND t.deleted = false
      ORDER BY CASE t.status WHEN 'ESCALATED' THEN 0 WHEN 'ASSIGNED' THEN 1 ELSE 2 END, t.due_at`,
     { replacements: { pid: projectId }, type: QueryTypes.SELECT }
   );
@@ -81,7 +81,7 @@ export const getProject = async (user, projectId) => {
   const files = await sequelize.query(
     `SELECT a.id, a.file_name, a.mime_type, a.size, a.created_at, u.name AS uploader_name, a.task_id
      FROM attachments a JOIN users u ON u.id = a.uploader_id
-     WHERE a.project_id = :pid OR a.task_id IN (SELECT id FROM tasks WHERE project_id = :pid2)
+     WHERE a.project_id = :pid OR a.task_id IN (SELECT id FROM tasks WHERE project_id = :pid2 AND deleted = false)
      ORDER BY a.id DESC`,
     { replacements: { pid: projectId, pid2: projectId }, type: QueryTypes.SELECT }
   );
@@ -89,7 +89,7 @@ export const getProject = async (user, projectId) => {
   const activity = await sequelize.query(
     `SELECT a.*, u.name AS actor_name, t.title AS task_title
      FROM activity a LEFT JOIN users u ON u.id = a.actor_id LEFT JOIN tasks t ON t.id = a.task_id
-     WHERE a.task_id IN (SELECT id FROM tasks WHERE project_id = :pid)
+     WHERE a.task_id IN (SELECT id FROM tasks WHERE project_id = :pid AND deleted = false)
      ORDER BY a.id DESC LIMIT 100`,
     { replacements: { pid: projectId }, type: QueryTypes.SELECT }
   );

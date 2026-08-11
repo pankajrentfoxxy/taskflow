@@ -110,6 +110,7 @@ function TaskDetailInner({ id }: { id: string }) {
 
   const etaHistory = activity.filter((a: any) => a.type === 'ETA_CHANGED');
   const overdue = isTaskOverdue(task.due_at, task.status);
+  const showActivity = perm.canViewActivity;
 
   return (
     <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-3">
@@ -296,25 +297,27 @@ function TaskDetailInner({ id }: { id: string }) {
           </ScrollArea>
         </section>
 
-        {/* Right — Activity + Comments */}
+        {/* Right — Activity (Admin/CEO) + Comments */}
         <section className="flex min-h-0 flex-1 flex-col lg:w-1/2">
-          <div className="flex h-44 shrink-0 flex-col overflow-hidden border-b">
-            <PanelHeader title="Activity" />
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <div className="space-y-2 p-4">
-                {activity.length === 0 ? (
-                  <div className="py-6 text-center text-sm text-muted-foreground">No activity yet.</div>
-                ) : (
-                  activity.map((a: any) => (
-                    <div key={a.id} className="rounded-lg border bg-muted/20 px-3 py-2 text-xs">
-                      <span className="font-semibold text-foreground">{a.actor_name || 'System'}</span>
-                      <span className="text-muted-foreground"> · {a.type.toLowerCase().replace(/_/g, ' ')} · {timeAgo(a.created_at)}</span>
-                    </div>
-                  ))
-                )}
+          {showActivity && (
+            <div className="flex h-44 shrink-0 flex-col overflow-hidden border-b">
+              <PanelHeader title="Activity" />
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="space-y-2 p-4">
+                  {activity.length === 0 ? (
+                    <div className="py-6 text-center text-sm text-muted-foreground">No activity yet.</div>
+                  ) : (
+                    activity.map((a: any) => (
+                      <div key={a.id} className="rounded-lg border bg-muted/20 px-3 py-2 text-xs">
+                        <span className="font-semibold text-foreground">{a.actor_name || 'System'}</span>
+                        <span className="text-muted-foreground"> · {a.type.toLowerCase().replace(/_/g, ' ')} · {timeAgo(a.created_at)}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <PanelHeader title="Comments" />

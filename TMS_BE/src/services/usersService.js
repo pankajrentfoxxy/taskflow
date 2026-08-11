@@ -78,7 +78,7 @@ export const deleteUser = async (actorId, id) => {
   }
 
   const [{ task_count: taskCount }] = await sequelize.query(
-    "SELECT COUNT(*)::int AS task_count FROM tasks WHERE creator_id = :id OR assignee_id = :id",
+    "SELECT COUNT(*)::int AS task_count FROM tasks WHERE (creator_id = :id OR assignee_id = :id) AND deleted = false",
     { replacements: { id: user.id }, type: QueryTypes.SELECT }
   );
 

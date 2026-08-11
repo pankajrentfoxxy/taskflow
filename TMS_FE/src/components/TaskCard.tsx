@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { MessageSquare } from 'lucide-react';
 import { fmtShortDate, countdown, STATUS_LABEL, STATUS_COLOR, isTaskOverdue } from '@/lib/util';
 import { IconClock, IconFlag, IconTag } from './Icons';
+import TaskActionsMenu from './TaskActionsMenu';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -15,10 +16,16 @@ const initials = (n?: string) => (n || '?').split(' ').map((w) => w[0]).slice(0,
 export default function TaskCard({
   task,
   onOpenComments,
+  onStatusClick,
+  onCreateSubtask,
+  onTaskDeleted,
   renderAction,
 }: {
   task: any;
   onOpenComments?: (task: any) => void;
+  onStatusClick?: (task: any) => void;
+  onCreateSubtask?: (task: any) => void;
+  onTaskDeleted?: () => void;
   renderAction?: (task: any) => React.ReactNode;
 }) {
   const overdue = isTaskOverdue(task.due_at, task.status);
@@ -28,41 +35,48 @@ export default function TaskCard({
   return (
     <Card className="gap-0 py-0 transition-all hover:shadow-[0_4px_12px_rgba(16,24,40,0.07)]">
       <CardContent className="p-4">
-        <Link href={`/tasks/${task.id}`} className="group block">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Badge className={cn('border-0', STATUS_COLOR[task.status] || 'bg-gray-100')}>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            className="rounded-md outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
+            title="Change status"
+            onClick={() => onStatusClick?.(task)}
+          >
+            <Badge className={cn('cursor-pointer border-0', STATUS_COLOR[task.status] || 'bg-gray-100')}>
               <span className="size-1.5 rounded-full bg-current opacity-60" />
               {STATUS_LABEL[task.status] || task.status}
             </Badge>
-            {task.sla_breached_at && task.status === 'ASSIGNED' && (
-              <Badge className="border-0 bg-red-600 text-white hover:bg-red-600">No response</Badge>
-            )}
-            {slaRunning && (
-              <Badge className="border-amber-200 bg-amber-50 text-amber-700">
-                <IconClock className="size-3" /> {countdown(task.sla_deadline_at)}
-              </Badge>
-            )}
-            {task.blocked_reason && (
-              <Badge className="border-purple-200 bg-purple-50 text-purple-700">Blocked</Badge>
-            )}
-            {task.type_name && (
-              <Badge className="border-gray-200 bg-gray-50 text-gray-500">
-                <IconTag className="size-3" /> {task.type_name}
-              </Badge>
-            )}
-            {['URGENT', 'HIGH'].includes(task.priority) && (
-              <Badge
-                className={
-                  task.priority === 'URGENT'
-                    ? 'border-red-200 bg-red-50 text-red-600'
-                    : 'border-orange-200 bg-orange-50 text-orange-600'
-                }
-              >
-                <IconFlag className="size-3" /> {task.priority.toLowerCase()}
-              </Badge>
-            )}
-          </div>
+          </button>
+          {task.sla_breached_at && task.status === 'ASSIGNED' && (
+            <Badge className="border-0 bg-red-600 text-white hover:bg-red-600">No response</Badge>
+          )}
+          {slaRunning && (
+            <Badge className="border-amber-200 bg-amber-50 text-amber-700">
+              <IconClock className="size-3" /> {countdown(task.sla_deadline_at)}
+            </Badge>
+          )}
+          {task.blocked_reason && (
+            <Badge className="border-purple-200 bg-purple-50 text-purple-700">Blocked</Badge>
+          )}
+          {task.type_name && (
+            <Badge className="border-gray-200 bg-gray-50 text-gray-500">
+              <IconTag className="size-3" /> {task.type_name}
+            </Badge>
+          )}
+          {['URGENT', 'HIGH'].includes(task.priority) && (
+            <Badge
+              className={
+                task.priority === 'URGENT'
+                  ? 'border-red-200 bg-red-50 text-red-600'
+                  : 'border-orange-200 bg-orange-50 text-orange-600'
+              }
+            >
+              <IconFlag className="size-3" /> {task.priority.toLowerCase()}
+            </Badge>
+          )}
+        </div>
 
+        <Link href={`/tasks/${task.id}`} className="group block">
           <div className="mt-2 truncate text-[14.5px] font-semibold leading-snug text-gray-900 group-hover:text-brand-700">
             {task.title}
           </div>
@@ -119,7 +133,7 @@ export default function TaskCard({
           )}
         </Link>
 
-        {(onOpenComments || renderAction) && (
+        {(onOpenComments || renderAction || onCreateSubtask) && (
           <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3">
             {onOpenComments ? (
               <Button
@@ -140,7 +154,12 @@ export default function TaskCard({
             ) : (
               <span />
             )}
-            {renderAction?.(task)}
+            <div className="flex items-center gap-1">
+              {renderAction?.(task)}
+              {onCreateSubtask && (
+                <TaskActionsMenu task={task} onCreateSubtask={onCreateSubtask} onDeleted={onTaskDeleted} />
+              )}
+            </div>
           </div>
         )}
       </CardContent>

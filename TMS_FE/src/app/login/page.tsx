@@ -89,17 +89,6 @@ export default function LoginPage() {
             </form>
           </CardContent>
         </Card>
-
-        <Card size="sm">
-          <CardContent className="text-xs leading-relaxed text-muted-foreground">
-            <div className="mb-1 font-semibold text-foreground">Demo logins (password: password123)</div>
-            admin@rentfoxxy.com (CTO) · ceo@rentfoxxy.com
-            <br />
-            Heads: suresh (Sales) · manoj (Warehouse) · deepak (Support) · meena (Accounts)
-            <br />
-            Members: neha, amit, sunil, rekha, anjali, vikas, ravi — all @rentfoxxy.com
-          </CardContent>
-        </Card>
       </div>
     </div>
   );

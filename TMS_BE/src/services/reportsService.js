@@ -13,14 +13,14 @@ export const getReports = async (user, { days = 0, teamId, taskTypeId, listMetri
   const teamFilter = teamId ? Number(teamId) : null;
   const typeFilter = taskTypeId ? Number(taskTypeId) : null;
 
-  let scope = "1=1";
+  let scope = "t.deleted = false";
   const sp = {};
 
   if (user.role === "MEMBER") {
-    scope = "t.assignee_id = :scopeUid";
+    scope += " AND t.assignee_id = :scopeUid";
     sp.scopeUid = user.id;
   } else if (user.role === "MANAGER" && user.team_id) {
-    scope = "(t.assignee_id IN (SELECT id FROM users WHERE team_id = :scopeTeamId) OR t.assigned_team_id = :scopeTeamId2)";
+    scope += " AND (t.assignee_id IN (SELECT id FROM users WHERE team_id = :scopeTeamId) OR t.assigned_team_id = :scopeTeamId2)";
     sp.scopeTeamId = user.team_id;
     sp.scopeTeamId2 = user.team_id;
   }

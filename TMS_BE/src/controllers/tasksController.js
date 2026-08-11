@@ -24,6 +24,10 @@ export const patchTask = catchAsync(async (req, res) => {
   res.json(await taskService.patchTask(req.user, Number(req.params.id), req.body));
 });
 
+export const deleteTask = catchAsync(async (req, res) => {
+  res.json(await taskService.deleteTask(req.user, Number(req.params.id)));
+});
+
 export const listComments = catchAsync(async (req, res) => {
   res.json(await taskService.listComments(req.user, Number(req.params.id)));
 });
@@ -47,13 +51,24 @@ export const handleEscalation = catchAsync(async (req, res) => {
   res.json(await taskService.handleEscalation(req.user, Number(req.params.id), req.body));
 });
 
+export const getTemplateData = catchAsync(async (req, res) => {
+  res.json(await taskService.getTemplateData(req.user));
+});
+
+export const importTasks = catchAsync(async (req, res) => {
+  res.json(await taskService.importTasks(req.user, req.body));
+});
+
 export default {
   listTasks,
   createTask,
   getTask,
   patchTask,
+  deleteTask,
   listComments,
   createComment,
   toggleReaction,
   handleEscalation,
+  getTemplateData,
+  importTasks,
 };

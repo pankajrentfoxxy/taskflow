@@ -6,6 +6,7 @@ import TaskTable from '@/components/TaskTable';
 import CommentsModal from '@/components/CommentsModal';
 import AckModal from '@/components/AckModal';
 import Composer from '@/components/Composer';
+import TaskTemplateButton from '@/components/TaskTemplateButton';
 import { api, isDueInWindow } from '@/lib/util';
 import { IconZap, IconAlert, IconActivity, IconCalendar, IconPlus, IconPen, IconSend, IconCheckCircle } from '@/components/Icons';
 import { Button } from '@/components/ui/button';
@@ -27,10 +28,11 @@ function Metric({ icon, chip, value, label, hot }: { icon: React.ReactNode; chip
   );
 }
 
-function Section({ accent, icon, title, tasks, extra, onOpenComments }: {
+function Section({ accent, icon, title, tasks, extra, onOpenComments, onTaskUpdated }: {
   accent: string; icon: React.ReactNode; title: string; tasks: any[];
   extra?: (t: any) => React.ReactNode;
   onOpenComments: (task: any) => void;
+  onTaskUpdated?: () => void;
 }) {
   if (!tasks.length) return null;
   return (
@@ -41,7 +43,7 @@ function Section({ accent, icon, title, tasks, extra, onOpenComments }: {
         <Badge variant="secondary" className="tnum text-[11px]">{tasks.length}</Badge>
         <div className="ml-1 h-px flex-1 bg-gray-200/70" />
       </div>
-      <TaskTable tasks={tasks} onOpenComments={onOpenComments} renderAction={extra} />
+      <TaskTable tasks={tasks} onOpenComments={onOpenComments} onTaskUpdated={onTaskUpdated} renderAction={extra} />
     </section>
   );
 }
@@ -89,7 +91,8 @@ function HomeInner() {
             {clock?.greeting ?? 'Hello'}{me ? `, ${me.name.split(' ')[0]}` : ''}
           </h1>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <TaskTemplateButton size="sm" onImported={load} />
           <Button variant="outline" asChild>
             <Link href="/scribble">
               <IconPen className="h-4 w-4" /> Scribble
@@ -114,6 +117,7 @@ function HomeInner() {
           accent="bg-red-50 text-red-500" icon={<IconZap className="h-3.5 w-3.5" />}
           title="Needs your response · 30-min SLA" tasks={needsAck}
           onOpenComments={setCommentsTask}
+          onTaskUpdated={load}
           extra={(t) => (
             <Button size="xs" onClick={() => setAckTask(t)}>
               Acknowledge + ETA
@@ -122,11 +126,11 @@ function HomeInner() {
         />
       )}
 
-      <Section accent="bg-red-50 text-red-500" icon={<IconAlert className="h-3.5 w-3.5" />} title="Escalated · explanation required" tasks={escalated} onOpenComments={setCommentsTask} />
-      <Section accent="bg-orange-50 text-orange-500" icon={<IconCalendar className="h-3.5 w-3.5" />} title="Due today" tasks={dueToday} onOpenComments={setCommentsTask} />
-      <Section accent="bg-brand-50 text-brand-500" icon={<IconActivity className="h-3.5 w-3.5" />} title="In progress" tasks={inProgress.filter((t) => !dueToday.includes(t))} onOpenComments={setCommentsTask} />
-      <Section accent="bg-violet-50 text-violet-500" icon={<IconSend className="h-3.5 w-3.5" />} title="Assigned by me · open" tasks={createdOpen} onOpenComments={setCommentsTask} />
-      <Section accent="bg-emerald-50 text-emerald-500" icon={<IconCheckCircle className="h-3.5 w-3.5" />} title="Recently done" tasks={doneRecent} onOpenComments={setCommentsTask} />
+      <Section accent="bg-red-50 text-red-500" icon={<IconAlert className="h-3.5 w-3.5" />} title="Escalated · explanation required" tasks={escalated} onOpenComments={setCommentsTask} onTaskUpdated={load} />
+      <Section accent="bg-orange-50 text-orange-500" icon={<IconCalendar className="h-3.5 w-3.5" />} title="Due today" tasks={dueToday} onOpenComments={setCommentsTask} onTaskUpdated={load} />
+      <Section accent="bg-brand-50 text-brand-500" icon={<IconActivity className="h-3.5 w-3.5" />} title="In progress" tasks={inProgress.filter((t) => !dueToday.includes(t))} onOpenComments={setCommentsTask} onTaskUpdated={load} />
+      <Section accent="bg-violet-50 text-violet-500" icon={<IconSend className="h-3.5 w-3.5" />} title="Assigned by me · open" tasks={createdOpen} onOpenComments={setCommentsTask} onTaskUpdated={load} />
+      <Section accent="bg-emerald-50 text-emerald-500" icon={<IconCheckCircle className="h-3.5 w-3.5" />} title="Recently done" tasks={doneRecent} onOpenComments={setCommentsTask} onTaskUpdated={load} />
 
       {mine.length === 0 && created.length === 0 && (
         <Card className="py-0">

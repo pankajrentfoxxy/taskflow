@@ -25,11 +25,12 @@ import { runSlaSweep } from "../lib/cron.js";
 import { now } from "../lib/time.js";
 
 const SUB_COUNTS = `
-  (SELECT COUNT(*)::int FROM tasks s WHERE s.parent_id = t.id) AS subtask_count,
-  (SELECT COUNT(*)::int FROM tasks s WHERE s.parent_id = t.id AND s.status = 'DONE') AS subtask_done,
+  (SELECT COUNT(*)::int FROM tasks s WHERE s.parent_id = t.id AND s.deleted = false) AS subtask_count,
+  (SELECT COUNT(*)::int FROM tasks s WHERE s.parent_id = t.id AND s.status = 'DONE' AND s.deleted = false) AS subtask_done,
   (SELECT COUNT(*)::int FROM comments c WHERE c.task_id = t.id) AS comment_count`;
 
-export async function loadTask(id) {
+export async function loadTask(id, { includeDeleted = false } = {}) {
+  const deletedClause = includeDeleted ? "" : " AND t.deleted = false";
   const [task] = await sequelize.query(
     `SELECT t.*, ua.name AS assignee_name, uc.name AS creator_name, tm.name AS team_name, p.name AS project_name,
       tt.name AS type_name
@@ -39,7 +40,7 @@ export async function loadTask(id) {
      LEFT JOIN users uc ON uc.id = t.creator_id
      LEFT JOIN teams tm ON tm.id = t.assigned_team_id
      LEFT JOIN projects p ON p.id = t.project_id
-     WHERE t.id = :id`,
+     WHERE t.id = :id${deletedClause}`,
     { replacements: { id }, type: QueryTypes.SELECT }
   );
   return task ?? null;
@@ -97,6 +98,7 @@ export const listTasks = async (user, { filter = "mine", status, q, projectId })
   } else {
     where += " AND t.parent_id IS NULL";
   }
+  where += " AND t.deleted = false";
 
   const tasks = await sequelize.query(
     `SELECT t.*, ${SUB_COUNTS},
@@ -144,7 +146,7 @@ export const createTask = async (user, body) => {
 
   if (parentId) {
     parent = await Task.findByPk(parentId);
-    if (!parent) throw new ApiError(httpStatus.BAD_REQUEST, "Parent task not found");
+    if (!parent || parent.deleted) throw new ApiError(httpStatus.BAD_REQUEST, "Parent task not found");
     if (parent.parent_id) throw new ApiError(httpStatus.BAD_REQUEST, "Subtasks cannot have their own subtasks");
     effProject = parent.project_id;
   }
@@ -252,10 +254,12 @@ export const getTaskDetail = async (user, taskId) => {
   if (!task) throw new ApiError(httpStatus.NOT_FOUND, "Not found");
   if (!(await canSeeTask(user, task))) throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
 
+  const isBoss = ["ADMIN", "CEO"].includes(user.role);
+
   const subtasks = await sequelize.query(
     `SELECT t.*, ua.name AS assignee_name FROM tasks t
      LEFT JOIN users ua ON ua.id = t.assignee_id
-     WHERE t.parent_id = :taskId ORDER BY t.id`,
+     WHERE t.parent_id = :taskId AND t.deleted = false ORDER BY t.id`,
     { replacements: { taskId: task.id }, type: QueryTypes.SELECT }
   );
 
@@ -268,11 +272,13 @@ export const getTaskDetail = async (user, taskId) => {
     { replacements: { taskId: task.id }, type: QueryTypes.SELECT }
   );
 
-  const activity = await sequelize.query(
-    `SELECT a.*, u.name AS actor_name FROM activity a LEFT JOIN users u ON u.id = a.actor_id
-     WHERE a.task_id = :taskId ORDER BY a.id DESC LIMIT 100`,
-    { replacements: { taskId: task.id }, type: QueryTypes.SELECT }
-  );
+  const activity = isBoss
+    ? await sequelize.query(
+        `SELECT a.*, u.name AS actor_name FROM activity a LEFT JOIN users u ON u.id = a.actor_id
+         WHERE a.task_id = :taskId ORDER BY a.id DESC LIMIT 100`,
+        { replacements: { taskId: task.id }, type: QueryTypes.SELECT }
+      )
+    : [];
 
   const attachments = await sequelize.query(
     "SELECT id, file_name, mime_type, size, uploader_id, created_at FROM attachments WHERE task_id = :taskId",
@@ -286,14 +292,13 @@ export const getTaskDetail = async (user, taskId) => {
 
   const batchTasks = task.batch_id
     ? await sequelize.query(
-        "SELECT id, title, status FROM tasks WHERE batch_id = :batchId AND id != :taskId",
+        "SELECT id, title, status FROM tasks WHERE batch_id = :batchId AND id != :taskId AND deleted = false",
         { replacements: { batchId: task.batch_id, taskId: task.id }, type: QueryTypes.SELECT }
       )
     : [];
 
   const isAssignee = task.assignee_id === user.id;
   const isCreator = task.creator_id === user.id;
-  const isBoss = ["ADMIN", "CEO"].includes(user.role);
   const isMgr = await isManagerOf(user, task.assignee_id);
   const expPending = await explanationPending(task);
   const openSubs = subtasks.filter((s) => !["DONE", "CANCELLED"].includes(s.status)).length;
@@ -323,6 +328,8 @@ export const getTaskDetail = async (user, taskId) => {
       escalation?.review_status === "PENDING" &&
       (await canReviewEscalation(user, task)),
     canAddSubtask: !["DONE", "CANCELLED"].includes(task.status) && !task.parent_id,
+    canDelete: isBoss,
+    canViewActivity: isBoss,
     openSubtasks: openSubs,
   };
 
@@ -386,7 +393,7 @@ export const patchTask = async (user, taskId, body) => {
         throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
       }
       const [countRow] = await sequelize.query(
-        "SELECT COUNT(*)::int AS c FROM tasks WHERE parent_id = :id AND status NOT IN ('DONE','CANCELLED')",
+        "SELECT COUNT(*)::int AS c FROM tasks WHERE parent_id = :id AND status NOT IN ('DONE','CANCELLED') AND deleted = false",
         { replacements: { id: task.id }, type: QueryTypes.SELECT }
       );
       const openSubs = countRow?.c ?? 0;
@@ -419,7 +426,7 @@ export const patchTask = async (user, taskId, body) => {
       if (task.parent_id) {
         const parent = await Task.findByPk(task.parent_id);
         const [counts] = await sequelize.query(
-          "SELECT COUNT(*)::int AS total, SUM(CASE WHEN status='DONE' THEN 1 ELSE 0 END)::int AS done FROM tasks WHERE parent_id = :pid",
+          "SELECT COUNT(*)::int AS total, SUM(CASE WHEN status='DONE' THEN 1 ELSE 0 END)::int AS done FROM tasks WHERE parent_id = :pid AND deleted = false",
           { replacements: { pid: task.parent_id }, type: QueryTypes.SELECT }
         );
         await notify(
@@ -520,6 +527,31 @@ export const patchTask = async (user, taskId, body) => {
   return { ok: true, task: await loadTask(task.id) };
 };
 
+export const deleteTask = async (user, taskId) => {
+  if (!["ADMIN", "CEO"].includes(user.role)) {
+    throw new ApiError(httpStatus.FORBIDDEN, "Admin or CEO only");
+  }
+
+  const task = await loadTask(taskId, { includeDeleted: true });
+  if (!task) throw new ApiError(httpStatus.NOT_FOUND, "Not found");
+  if (task.deleted) throw new ApiError(httpStatus.BAD_REQUEST, "Task already deleted");
+
+  const t = now();
+  await sequelize.query(
+    `UPDATE tasks SET deleted = true, updated_at = :t
+     WHERE id = :id OR parent_id = :id`,
+    { replacements: { t, id: taskId } }
+  );
+  await logActivity(taskId, user.id, "DELETED", {});
+
+  return { ok: true };
+};
+
+async function assertActiveTask(task) {
+  if (!task || task.deleted) throw new ApiError(httpStatus.NOT_FOUND, "Not found");
+  return task;
+}
+
 async function loadCommentsWithReactions(taskId, userId) {
   const rows = await sequelize.query(
     `SELECT c.id, c.task_id, c.author_id, c.parent_comment_id, c.body AS content,
@@ -556,8 +588,7 @@ async function loadCommentsWithReactions(taskId, userId) {
 }
 
 export const listComments = async (user, taskId) => {
-  const task = await Task.findByPk(taskId);
-  if (!task) throw new ApiError(httpStatus.NOT_FOUND, "Not found");
+  const task = await assertActiveTask(await Task.findByPk(taskId));
   if (!(await canSeeTask(user, task))) throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
 
   const comments = await loadCommentsWithReactions(task.id, user.id);
@@ -565,8 +596,7 @@ export const listComments = async (user, taskId) => {
 };
 
 export const createComment = async (user, taskId, body) => {
-  const task = await Task.findByPk(taskId);
-  if (!task) throw new ApiError(httpStatus.NOT_FOUND, "Not found");
+  const task = await assertActiveTask(await Task.findByPk(taskId));
   if (!(await canSeeTask(user, task))) throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
 
   const content = String(body.content || body.body || "").trim();
@@ -606,8 +636,7 @@ export const createComment = async (user, taskId, body) => {
 };
 
 export const toggleReaction = async (user, taskId, commentId, emoji) => {
-  const task = await Task.findByPk(taskId);
-  if (!task) throw new ApiError(httpStatus.NOT_FOUND, "Not found");
+  const task = await assertActiveTask(await Task.findByPk(taskId));
   if (!(await canSeeTask(user, task))) throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
 
   const comment = await Comment.findOne({ where: { id: commentId, task_id: taskId } });
@@ -638,8 +667,7 @@ export const toggleReaction = async (user, taskId, commentId, emoji) => {
 
 export const handleEscalation = async (user, taskId, body) => {
   const t = now();
-  const task = await Task.findByPk(taskId);
-  if (!task) throw new ApiError(httpStatus.NOT_FOUND, "Not found");
+  const task = await assertActiveTask(await Task.findByPk(taskId));
   if (!(await canSeeTask(user, task))) throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
 
   const [esc] = await sequelize.query(
@@ -731,12 +759,215 @@ export const handleEscalation = async (user, taskId, body) => {
   throw new ApiError(httpStatus.BAD_REQUEST, "Nothing to do");
 };
 
+export const getTemplateData = async (user) => {
+  if (!["ADMIN", "CEO"].includes(user.role)) {
+    throw new ApiError(httpStatus.FORBIDDEN, "Admin or CEO only");
+  }
+
+  const users = await sequelize.query(
+    `SELECT u.id, u.name, u.email, u.role, u.team_id, u.is_active, tm.name AS team_name
+     FROM users u
+     LEFT JOIN teams tm ON tm.id = u.team_id
+     WHERE u.is_active = true
+     ORDER BY u.name`,
+    { type: QueryTypes.SELECT }
+  );
+
+  const teams = await sequelize.query(
+    `SELECT id, name FROM teams ORDER BY name`,
+    { type: QueryTypes.SELECT }
+  );
+
+  const taskTypes = await sequelize.query(
+    `SELECT tt.id, tt.team_id, tt.name, tm.name AS team_name
+     FROM task_types tt
+     JOIN teams tm ON tm.id = tt.team_id
+     WHERE tt.is_active = true
+     ORDER BY tm.name, tt.name`,
+    { type: QueryTypes.SELECT }
+  );
+
+  const projects = await sequelize.query(
+    `SELECT p.id, p.name, p.owner_id FROM projects p ORDER BY p.name`,
+    { type: QueryTypes.SELECT }
+  );
+
+  const memberships = await sequelize.query(
+    `SELECT pm.user_id, p.id AS project_id, p.name AS project_name, p.owner_id
+     FROM project_members pm
+     JOIN projects p ON p.id = pm.project_id`,
+    { type: QueryTypes.SELECT }
+  );
+
+  const userProjects = {};
+  for (const u of users) userProjects[u.id] = [];
+
+  for (const p of projects) {
+    if (p.owner_id && userProjects[p.owner_id]) {
+      userProjects[p.owner_id].push(p.name);
+    }
+  }
+  for (const m of memberships) {
+    if (!userProjects[m.user_id]) userProjects[m.user_id] = [];
+    if (!userProjects[m.user_id].includes(m.project_name)) {
+      userProjects[m.user_id].push(m.project_name);
+    }
+  }
+  for (const uid of Object.keys(userProjects)) {
+    userProjects[uid].sort((a, b) => a.localeCompare(b));
+  }
+
+  const teamProjects = {};
+  for (const t of teams) teamProjects[t.id] = [];
+  for (const u of users) {
+    if (!u.team_id) continue;
+    for (const name of userProjects[u.id] ?? []) {
+      if (!teamProjects[u.team_id].includes(name)) {
+        teamProjects[u.team_id].push(name);
+      }
+    }
+  }
+  for (const tid of Object.keys(teamProjects)) {
+    teamProjects[tid].sort((a, b) => a.localeCompare(b));
+  }
+
+  return { users, teams, projects, taskTypes, userProjects, teamProjects };
+};
+
+function assigneeLabelForUser(u) {
+  return `${u.name}${u.team_name ? ` (${u.team_name})` : ''}`;
+}
+
+function parseDueLabel(label) {
+  const s = String(label || "").trim();
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/);
+  if (!m) return null;
+  const d = new Date(
+    Number(m[1]),
+    Number(m[2]) - 1,
+    Number(m[3]),
+    Number(m[4]),
+    Number(m[5]),
+    0,
+    0
+  );
+  const ts = d.getTime();
+  return Number.isNaN(ts) ? null : ts;
+}
+
+export const importTasks = async (user, { rows }) => {
+  if (!["ADMIN", "CEO"].includes(user.role)) {
+    throw new ApiError(httpStatus.FORBIDDEN, "Admin or CEO only");
+  }
+  if (!Array.isArray(rows) || rows.length === 0) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "No rows to import");
+  }
+  if (rows.length > 200) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Maximum 200 tasks per import");
+  }
+
+  const { users, teams, taskTypes, projects } = await getTemplateData(user);
+
+  const userByLabel = new Map(users.map((u) => [assigneeLabelForUser(u), u]));
+  const teamByLabel = new Map(teams.map((t) => [`Team: ${t.name}`, t]));
+  const projectByName = new Map(projects.map((p) => [p.name, p]));
+
+  const createdIds = [];
+  const errors = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const excelRow = i + 2;
+    const row = rows[i];
+    try {
+      const assigneeLabel = String(row.assigneeLabel || "").trim();
+      if (!assigneeLabel) throw new ApiError(httpStatus.BAD_REQUEST, "Assign to is required");
+
+      let assigneeId = null;
+      let teamId = null;
+      let assigneeTeamId = null;
+
+      if (teamByLabel.has(assigneeLabel)) {
+        teamId = teamByLabel.get(assigneeLabel).id;
+        assigneeTeamId = teamId;
+      } else if (userByLabel.has(assigneeLabel)) {
+        const u = userByLabel.get(assigneeLabel);
+        assigneeId = u.id;
+        assigneeTeamId = u.team_id;
+      } else {
+        throw new ApiError(httpStatus.BAD_REQUEST, `Unknown assignee "${assigneeLabel}"`);
+      }
+
+      const dueAt = parseDueLabel(row.dueAtLabel);
+      if (!dueAt) {
+        throw new ApiError(
+          httpStatus.BAD_REQUEST,
+          `Invalid due date "${row.dueAtLabel}" — use YYYY-MM-DD HH:MM`
+        );
+      }
+
+      let taskTypeId = null;
+      const typeName = String(row.taskTypeName || "").trim();
+      if (typeName && typeName.toLowerCase() !== "(optional)") {
+        const match = taskTypes.find(
+          (t) => t.name === typeName && t.team_id === assigneeTeamId
+        );
+        if (!match) {
+          throw new ApiError(
+            httpStatus.BAD_REQUEST,
+            `Unknown task type "${typeName}" for this assignee`
+          );
+        }
+        taskTypeId = match.id;
+      }
+
+      let projectId = null;
+      const projectName = String(row.projectName || "").trim();
+      if (projectName && projectName.toLowerCase() !== "none") {
+        const project = projectByName.get(projectName);
+        if (!project) {
+          throw new ApiError(httpStatus.BAD_REQUEST, `Unknown project "${projectName}"`);
+        }
+        projectId = project.id;
+      }
+
+      const pri = String(row.priority || "NORMAL").trim().toUpperCase();
+      const priority = ["URGENT", "HIGH", "NORMAL", "LOW"].includes(pri) ? pri : "NORMAL";
+
+      const result = await createTask(user, {
+        title: String(row.title || "").trim(),
+        description: String(row.description || ""),
+        assigneeId,
+        teamId,
+        priority,
+        dueAt,
+        projectId,
+        taskTypeId,
+      });
+      createdIds.push(...(result.ids || []));
+    } catch (e) {
+      errors.push({
+        row: excelRow,
+        message: e instanceof ApiError ? e.message : e?.message || "Import failed",
+      });
+    }
+  }
+
+  if (createdIds.length === 0 && errors.length > 0) {
+    throw new ApiError(httpStatus.BAD_REQUEST, errors[0].message);
+  }
+
+  return { created: createdIds.length, ids: createdIds, errors };
+};
+
 export default {
   listTasks,
   createTask,
   getTaskDetail,
   patchTask,
+  deleteTask,
   listComments,
+  getTemplateData,
+  importTasks,
   createComment,
   toggleReaction,
   handleEscalation,

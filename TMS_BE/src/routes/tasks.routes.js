@@ -10,6 +10,32 @@ router.use(auth());
 
 router.get("/", tasksController.listTasks);
 
+router.get("/template-data", tasksController.getTemplateData);
+
+router.post(
+  "/import",
+  validate({
+    body: Joi.object({
+      rows: Joi.array()
+        .min(1)
+        .max(200)
+        .items(
+          Joi.object({
+            title: Joi.string().required(),
+            assigneeLabel: Joi.string().allow("").required(),
+            taskTypeName: Joi.string().allow("").optional(),
+            dueAtLabel: Joi.string().required(),
+            priority: Joi.string().allow("").optional(),
+            projectName: Joi.string().allow("").optional(),
+            description: Joi.string().allow("").optional(),
+          })
+        )
+        .required(),
+    }),
+  }),
+  tasksController.importTasks
+);
+
 router.post(
   "/",
   validate({
@@ -47,6 +73,8 @@ router.patch(
   }),
   tasksController.patchTask
 );
+
+router.delete("/:id", tasksController.deleteTask);
 
 router.get("/:id/comments", tasksController.listComments);
 

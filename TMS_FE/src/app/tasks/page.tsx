@@ -5,11 +5,13 @@ import Shell, { useMe } from '@/components/Shell';
 import TaskTable, { TaskTableSkeleton } from '@/components/TaskTable';
 import CommentsModal from '@/components/CommentsModal';
 import Composer from '@/components/Composer';
+import TaskTemplateButton from '@/components/TaskTemplateButton';
 import { api, STATUS_LABEL } from '@/lib/util';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 function TasksInner() {
   const me = useMe();
@@ -40,33 +42,51 @@ function TasksInner() {
 
   return (
     <>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-bold">Tasks</h1>
-        <Button onClick={() => setComposerOpen(true)}>+ New task</Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <TaskTemplateButton size="sm" onImported={load} />
+          <Button onClick={() => setComposerOpen(true)}>+ New task</Button>
+        </div>
       </div>
 
-      <div className="mb-4 flex flex-nowrap items-center gap-2 overflow-x-auto pb-1">
-        <div className="flex shrink-0 gap-1.5">
+      <div className="mb-4 flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
+        <div
+          className={cn(
+            'grid gap-1.5',
+            segments.length <= 3 ? 'grid-cols-3' : 'grid-cols-2',
+            'md:flex md:w-auto md:flex-wrap'
+          )}
+        >
           {segments.map((s) => (
             <Button
               key={s.key}
               size="sm"
               variant={filter === s.key ? 'default' : 'outline'}
-              className="rounded-full whitespace-nowrap"
-              onClick={() => setFilter(s.key)}>
+              className="h-8 w-full rounded-full px-2 text-xs sm:px-3 sm:text-sm md:w-auto"
+              onClick={() => setFilter(s.key)}
+            >
               {s.label}
             </Button>
           ))}
         </div>
         <Input
-          className="min-w-[140px] flex-1"
+          className="h-8 w-full md:min-w-[140px] md:flex-1"
           placeholder="Search tasks…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <NativeSelect className="w-auto shrink-0" value={status} onChange={(e) => setStatus(e.target.value)}>
+        <NativeSelect
+          className="h-8 w-full md:w-auto md:shrink-0"
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+        >
           <option value="">All statuses</option>
-          {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          {Object.entries(STATUS_LABEL).map(([k, v]) => (
+            <option key={k} value={k}>
+              {v}
+            </option>
+          ))}
         </NativeSelect>
       </div>
 
@@ -77,7 +97,7 @@ function TasksInner() {
           <CardContent className="p-10 text-center text-muted-foreground">No tasks match.</CardContent>
         </Card>
       ) : (
-        <TaskTable tasks={tasks} onOpenComments={setCommentsTask} />
+        <TaskTable tasks={tasks} onOpenComments={setCommentsTask} onTaskUpdated={load} />
       )}
 
       <CommentsModal

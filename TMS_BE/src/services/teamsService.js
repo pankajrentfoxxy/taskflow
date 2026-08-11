@@ -96,7 +96,7 @@ export const deleteTeam = async (id) => {
   }
 
   const [{ task_count: taskCount }] = await sequelize.query(
-    "SELECT COUNT(*)::int AS task_count FROM tasks WHERE assigned_team_id = :id",
+    "SELECT COUNT(*)::int AS task_count FROM tasks WHERE assigned_team_id = :id AND deleted = false",
     { replacements: { id: team.id }, type: QueryTypes.SELECT }
   );
   if (taskCount > 0) {
@@ -106,7 +106,7 @@ export const deleteTeam = async (id) => {
   const [{ type_count: typeCount }] = await sequelize.query(
     `SELECT COUNT(*)::int AS type_count FROM task_types tt
      WHERE tt.team_id = :id
-       AND EXISTS (SELECT 1 FROM tasks t WHERE t.task_type_id = tt.id)`,
+       AND EXISTS (SELECT 1 FROM tasks t WHERE t.task_type_id = tt.id AND t.deleted = false)`,
     { replacements: { id: team.id }, type: QueryTypes.SELECT }
   );
   if (typeCount > 0) {

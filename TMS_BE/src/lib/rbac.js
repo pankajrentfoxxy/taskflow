@@ -36,7 +36,7 @@ export function taskVisibilityWhere(user) {
 export async function canSeeTask(user, task) {
   const { sql, replacements } = taskVisibilityWhere(user);
   const rows = await sequelize.query(
-    `SELECT 1 FROM tasks t WHERE t.id = :taskId AND ${sql}`,
+    `SELECT 1 FROM tasks t WHERE t.id = :taskId AND t.deleted = false AND ${sql}`,
     {
       replacements: { ...replacements, taskId: task.id },
       type: QueryTypes.SELECT,

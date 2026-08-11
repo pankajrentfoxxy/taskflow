@@ -25,6 +25,7 @@ export async function runSlaSweep(force = false) {
   // 1) Response-SLA breaches (assigned, never acknowledged, deadline passed)
   const toBreach = await Task.findAll({
     where: {
+      deleted: false,
       status: "ASSIGNED",
       acknowledged_at: null,
       sla_deadline_at: { [Op.lt]: t },
@@ -48,6 +49,7 @@ export async function runSlaSweep(force = false) {
   // 2) 15-minutes-left warnings
   const toWarn = await Task.findAll({
     where: {
+      deleted: false,
       status: "ASSIGNED",
       acknowledged_at: null,
       warn_sent: false,
@@ -74,6 +76,7 @@ export async function runSlaSweep(force = false) {
   // 3) Escalate past-due open tasks
   const toEscalate = await Task.findAll({
     where: {
+      deleted: false,
       status: { [Op.notIn]: ["DONE", "CANCELLED", "ESCALATED"] },
       due_at: { [Op.lt]: t },
     },
@@ -101,6 +104,7 @@ export async function runSlaSweep(force = false) {
   // 4) Due-soon reminders (24h window, once)
   const dueSoon = await Task.findAll({
     where: {
+      deleted: false,
       status: { [Op.notIn]: ["DONE", "CANCELLED", "ESCALATED"] },
       due_soon_sent: false,
       due_at: {

@@ -156,7 +156,7 @@ function ProjectInner({ id }: { id: string }) {
               <CardContent className="py-8 text-center text-muted-foreground">No tasks in this project yet.</CardContent>
             </Card>
           ) : (
-            <TaskTable tasks={tasks} onOpenComments={setCommentsTask} />
+            <TaskTable tasks={tasks} onOpenComments={setCommentsTask} onTaskUpdated={load} />
           )}
         </TabsContent>
 

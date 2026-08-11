@@ -1,9 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { ChevronRight, Flag, MessageSquare, User } from 'lucide-react';
 import { STATUS_LABEL, STATUS_COLOR, PRIORITY_COLOR, fmtShortDate, isTaskOverdue } from '@/lib/util';
 import TaskCard from '@/components/TaskCard';
+import TaskStatusModal from '@/components/TaskStatusModal';
+import TaskActionsMenu from '@/components/TaskActionsMenu';
+import Composer from '@/components/Composer';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -32,10 +36,16 @@ const initials = (n?: string | null) =>
 function TaskRow({
   task,
   onOpenComments,
+  onStatusClick,
+  onCreateSubtask,
+  onTaskDeleted,
   renderAction,
 }: {
   task: any;
   onOpenComments: (task: any) => void;
+  onStatusClick: (task: any) => void;
+  onCreateSubtask: (task: any) => void;
+  onTaskDeleted?: () => void;
   renderAction?: (task: any) => React.ReactNode;
 }) {
   const overdue = isTaskOverdue(task.due_at, task.status);
@@ -81,6 +91,10 @@ function TaskRow({
         {fmtShortDate(task.eta_at)}
       </TableCell>
 
+      <TableCell className="max-w-[140px] truncate py-3 text-sm text-muted-foreground">
+        {task.type_name || '—'}
+      </TableCell>
+
       <TableCell className="py-3">
         <span className={cn('inline-flex items-center gap-1.5 text-sm font-medium capitalize', PRIORITY_COLOR[task.priority])}>
           <Flag className="size-3.5 fill-current" />
@@ -89,10 +103,17 @@ function TaskRow({
       </TableCell>
 
       <TableCell className="py-3">
-        <Badge className={cn('border-0 font-semibold uppercase tracking-wide', STATUS_COLOR[task.status] || 'bg-gray-100')}>
-          <span className="mr-1.5 size-1.5 rounded-full bg-current opacity-70" />
-          {STATUS_LABEL[task.status] || task.status}
-        </Badge>
+        <button
+          type="button"
+          className="rounded-md outline-none ring-offset-background transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
+          title="Change status"
+          onClick={() => onStatusClick(task)}
+        >
+          <Badge className={cn('cursor-pointer border-0 font-semibold uppercase tracking-wide', STATUS_COLOR[task.status] || 'bg-gray-100')}>
+            <span className="mr-1.5 size-1.5 rounded-full bg-current opacity-70" />
+            {STATUS_LABEL[task.status] || task.status}
+          </Badge>
+        </button>
       </TableCell>
 
       <TableCell className={cn('hidden py-3 md:table-cell', !renderAction && 'pr-3')}>
@@ -112,6 +133,9 @@ function TaskRow({
           )}
         </Button>
       </TableCell>
+      <TableCell className={cn('py-3 text-right', renderAction ? '' : 'pr-3')}>
+        <TaskActionsMenu task={task} onCreateSubtask={onCreateSubtask} onDeleted={onTaskDeleted} />
+      </TableCell>
       {renderAction && (
         <TableCell className="py-3 pr-3 text-right">{renderAction(task)}</TableCell>
       )}
@@ -122,12 +146,17 @@ function TaskRow({
 export default function TaskTable({
   tasks,
   onOpenComments,
+  onTaskUpdated,
   renderAction,
 }: {
   tasks: any[];
   onOpenComments: (task: any) => void;
+  onTaskUpdated?: () => void;
   renderAction?: (task: any) => React.ReactNode;
 }) {
+  const [statusTask, setStatusTask] = useState<any>(null);
+  const [subtaskParent, setSubtaskParent] = useState<any>(null);
+
   return (
     <>
       <div className="space-y-3 md:hidden">
@@ -136,6 +165,9 @@ export default function TaskTable({
             key={task.id}
             task={task}
             onOpenComments={onOpenComments}
+            onStatusClick={setStatusTask}
+            onCreateSubtask={setSubtaskParent}
+            onTaskDeleted={onTaskUpdated}
             renderAction={renderAction}
           />
         ))}
@@ -149,21 +181,48 @@ export default function TaskTable({
             <TableHead className="h-11 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Assignee</TableHead>
             <TableHead className="h-11 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Due date</TableHead>
             <TableHead className="h-11 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">ETA</TableHead>
+            <TableHead className="h-11 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Task type</TableHead>
             <TableHead className="h-11 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Priority</TableHead>
             <TableHead className="h-11 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status</TableHead>
             <TableHead className="hidden h-11 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground md:table-cell">Comments</TableHead>
+            <TableHead className="h-11 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Action</TableHead>
             {renderAction && (
-              <TableHead className="h-11 pr-3 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Action</TableHead>
+              <TableHead className="h-11 w-36 pr-3 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground" />
             )}
           </TableRow>
         </TableHeader>
         <TableBody>
           {tasks.map((task) => (
-            <TaskRow key={task.id} task={task} onOpenComments={onOpenComments} renderAction={renderAction} />
+            <TaskRow
+              key={task.id}
+              task={task}
+              onOpenComments={onOpenComments}
+              onStatusClick={setStatusTask}
+              onCreateSubtask={setSubtaskParent}
+              onTaskDeleted={onTaskUpdated}
+              renderAction={renderAction}
+            />
           ))}
         </TableBody>
         </Table>
       </div>
+
+      <TaskStatusModal
+        task={statusTask}
+        open={!!statusTask}
+        onClose={() => setStatusTask(null)}
+        onDone={() => onTaskUpdated?.()}
+      />
+      <Composer
+        open={!!subtaskParent}
+        onClose={() => setSubtaskParent(null)}
+        onCreated={() => {
+          setSubtaskParent(null);
+          onTaskUpdated?.();
+        }}
+        presetParentId={subtaskParent?.id ?? null}
+        presetProjectId={subtaskParent?.project_id ?? null}
+      />
     </>
   );
 }

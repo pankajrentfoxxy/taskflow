@@ -33,6 +33,7 @@ const Task = sequelize.define(
     due_soon_sent: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     escalated_at: { type: DataTypes.BIGINT, allowNull: true },
     reopen_count: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    deleted: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     created_at: { type: DataTypes.BIGINT, allowNull: false },
     updated_at: { type: DataTypes.BIGINT, allowNull: false },
   },

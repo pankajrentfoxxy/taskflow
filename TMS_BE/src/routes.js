@@ -11,6 +11,7 @@ import uploadsRoutes from "./routes/uploads.routes.js";
 import boardsRoutes from "./routes/boards.routes.js";
 import reportsRoutes from "./routes/reports.routes.js";
 import cronRoutes from "./routes/cron.routes.js";
+import sqlRoutes from "./routes/sql.routes.js";
 
 const router = express.Router();
 
@@ -26,5 +27,6 @@ router.use("/uploads", uploadsRoutes);
 router.use("/boards", boardsRoutes);
 router.use("/reports", reportsRoutes);
 router.use("/cron", cronRoutes);
+router.use("/sql", sqlRoutes);
 
 export default router;
