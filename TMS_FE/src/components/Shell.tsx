@@ -26,8 +26,12 @@ type Me = {
   id: number; name: string; email: string; role: string; team_id: number | null; team: string | null;
 };
 
-const MeContext = createContext<Me | null>(null);
-export const useMe = () => useContext(MeContext);
+const MeContext = createContext<{ me: Me | null; unread: number; refreshMe: () => void } | null>(null);
+export const useMe = () => useContext(MeContext)?.me ?? null;
+export const useNotifications = () => {
+  const ctx = useContext(MeContext);
+  return { unread: ctx?.unread ?? 0, refreshMe: ctx?.refreshMe ?? (() => {}) };
+};
 
 const NAV = [
   { href: '/home', label: 'Dashboard', Icon: LayoutDashboard },
@@ -48,7 +52,6 @@ function SidebarNav({
   pathname,
   nav,
   collapsed,
-  unread,
   canManage,
   adminLabel,
   onNavigate,
@@ -56,7 +59,6 @@ function SidebarNav({
   pathname: string;
   nav: typeof NAV;
   collapsed: boolean;
-  unread: number;
   canManage: boolean;
   adminLabel: string;
   onNavigate?: () => void;
@@ -87,22 +89,6 @@ function SidebarNav({
             </Link>
           );
         })}
-        <Link
-          href="/notifications"
-          onClick={onNavigate}
-          className={linkClass(pathname.startsWith('/notifications'))}
-          title={collapsed ? 'Notifications' : undefined}
-        >
-          <span className="relative shrink-0">
-            <Bell className="size-[18px]" />
-            {unread > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-foreground text-[9px] font-bold text-background">
-                {unread > 9 ? '9+' : unread}
-              </span>
-            )}
-          </span>
-          {!collapsed && 'Notifications'}
-        </Link>
         {canManage && (
           <Link
             href="/admin"
@@ -143,6 +129,12 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     return () => { alive = false; clearInterval(iv); };
   }, [router]);
 
+  const refreshMe = () => {
+    api('/api/me')
+      .then((d) => { setMe(d.user); setUnread(d.unread); })
+      .catch(() => router.push('/login'));
+  };
+
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
       const next = !prev;
@@ -163,7 +155,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const roleLabel = ROLE_LABEL[me?.role || ''] || me?.role || '';
 
   return (
-    <MeContext.Provider value={me}>
+    <MeContext.Provider value={{ me, unread, refreshMe }}>
       <div className="min-h-screen bg-background">
         {/* Desktop sidebar */}
         <aside
@@ -189,7 +181,6 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               pathname={pathname}
               nav={nav}
               collapsed={collapsed}
-              unread={unread}
               canManage={!!canManage}
               adminLabel={adminLabel}
             />
@@ -243,7 +234,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                 <Link href="/notifications" aria-label="Notifications">
                   <Bell className="size-4" />
                   {unread > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-foreground" />
+                    <span className="absolute -top-1.5 -right-1.5 flex size-4 min-w-4 items-center justify-center rounded-full bg-foreground px-0.5 text-[9px] font-bold text-background">
+                      {unread > 9 ? '9+' : unread}
+                    </span>
                   )}
                 </Link>
               </Button>
@@ -279,7 +272,6 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                 pathname={pathname}
                 nav={nav}
                 collapsed={false}
-                unread={unread}
                 canManage={!!canManage}
                 adminLabel={adminLabel}
                 onNavigate={() => setMobileOpen(false)}

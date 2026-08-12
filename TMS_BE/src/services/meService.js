@@ -6,7 +6,7 @@ export const getMe = async (user) => {
   await runSlaSweep();
 
   const [unreadRow] = await sequelize.query(
-    "SELECT COUNT(*)::int AS c FROM notifications WHERE user_id = :userId AND read_at IS NULL",
+    "SELECT COUNT(*)::int AS c FROM notifications WHERE user_id = :userId AND is_visible = true AND read_at IS NULL",
     { replacements: { userId: user.id }, type: QueryTypes.SELECT }
   );
 

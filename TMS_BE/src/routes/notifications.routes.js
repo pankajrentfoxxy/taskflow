@@ -21,4 +21,6 @@ router.post(
   notificationsController.markRead
 );
 
+router.post("/clear", notificationsController.clearAll);
+
 export default router;

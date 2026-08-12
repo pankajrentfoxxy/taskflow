@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Modal from './Modal';
-import { api, fromLocalInput, toLocalInput } from '@/lib/util';
+import { api, fromLocalInput, toast, toLocalInput } from '@/lib/util';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -23,12 +23,13 @@ export default function AckModal({
 
   const submit = async () => {
     const etaAt = fromLocalInput(eta);
-    if (!etaAt) { setErr('Set your ETA — it is mandatory'); return; }
+    if (!etaAt) { const msg = 'Set your ETA — it is mandatory'; setErr(msg); toast.error(msg); return; }
     setBusy(true); setErr('');
     try {
       await api(`/api/tasks/${task.id}`, { method: 'PATCH', body: JSON.stringify({ action: 'acknowledge', etaAt }) });
+      toast.success('Task acknowledged');
       onDone(); onClose();
-    } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+    } catch (e: any) { setErr(e.message); toast.errorFrom(e); } finally { setBusy(false); }
   };
 
   return (

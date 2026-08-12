@@ -3,6 +3,7 @@
 import { parseTimestamp, toDate } from './timestamp';
 
 export { parseTimestamp, toDate, isTaskOverdue, isDueInWindow } from './timestamp';
+export { toast, getErrorMessage, TASK_ACTION_TOAST } from './toast';
 /** @deprecated use parseTimestamp */
 export const toTimestamp = parseTimestamp;
 
@@ -104,13 +105,26 @@ export const STATUS_LABEL: Record<string, string> = {
 };
 
 export const STATUS_COLOR: Record<string, string> = {
-  ASSIGNED: 'bg-amber-100 text-amber-800',
-  ACKNOWLEDGED: 'bg-sky-100 text-sky-800',
-  IN_PROGRESS: 'bg-blue-100 text-blue-800',
-  DONE: 'bg-emerald-100 text-emerald-800',
-  CANCELLED: 'bg-gray-200 text-gray-600',
-  ESCALATED: 'bg-red-100 text-red-800',
+  ASSIGNED: 'status-badge status-assigned',
+  ACKNOWLEDGED: 'status-badge status-acknowledged',
+  IN_PROGRESS: 'status-badge status-progress',
+  DONE: 'status-badge status-done',
+  CANCELLED: 'status-badge status-cancelled',
+  ESCALATED: 'status-badge status-escalated',
 };
+
+export const STATUS_COLOR_FALLBACK = 'status-badge status-fallback';
+
+export const STATUS_DOT: Record<string, string> = {
+  ASSIGNED: 'status-dot-assigned',
+  ACKNOWLEDGED: 'status-dot-acknowledged',
+  IN_PROGRESS: 'status-dot-progress',
+  DONE: 'status-dot-done',
+  CANCELLED: 'status-dot-cancelled',
+  ESCALATED: 'status-dot-escalated',
+};
+
+export const SLA_BREACH_BADGE = 'status-badge status-sla';
 
 export const PRIORITY_COLOR: Record<string, string> = {
   URGENT: 'text-red-600',
@@ -119,7 +133,54 @@ export const PRIORITY_COLOR: Record<string, string> = {
   LOW: 'text-gray-400',
 };
 
-export async function api(path: string, opts?: RequestInit) {
+const AUTH_NO_RETRY = new Set(['/auth/login', '/auth/logout', '/auth/reset-password', '/auth/refresh']);
+
+function normalizeApiPath(path: string): string {
+  const normalized = path.startsWith('/api') ? path.slice(4) : path;
+  return normalized.startsWith('/') ? normalized : `/${normalized}`;
+}
+
+function shouldRetryAuth(path: string): boolean {
+  return !AUTH_NO_RETRY.has(normalizeApiPath(path));
+}
+
+let refreshPromise: Promise<boolean> | null = null;
+
+async function refreshAccessToken(): Promise<boolean> {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    try {
+      const res = await fetch(apiUrl('/auth/refresh'), {
+        method: 'POST',
+        credentials: 'include',
+      });
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
+
+async function logoutClient() {
+  clearLoggedIn();
+  try {
+    await fetch(apiUrl('/auth/logout'), { method: 'POST', credentials: 'include' });
+  } catch {
+    // ignore
+  }
+  if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+    window.location.href = '/login';
+  }
+}
+
+type ApiResult = { res: Response; data: Record<string, unknown> };
+
+async function request(path: string, opts?: RequestInit): Promise<ApiResult> {
   const headers = new Headers(opts?.headers);
   if (!headers.has('Content-Type') && opts?.body && typeof opts.body === 'string') {
     headers.set('Content-Type', 'application/json');
@@ -130,17 +191,60 @@ export async function api(path: string, opts?: RequestInit) {
     headers,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.error || `Request failed (${res.status})`), { code: data.code, status: res.status });
+  return { res, data };
+}
+
+function throwApiError(res: Response, data: Record<string, unknown>): never {
+  throw Object.assign(new Error(String(data.error || `Request failed (${res.status})`)), {
+    code: data.code,
+    status: res.status,
+  });
+}
+
+async function requestWithRefresh(path: string, opts?: RequestInit): Promise<ApiResult> {
+  let result = await request(path, opts);
+
+  if (result.res.status === 401 && shouldRetryAuth(path)) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      result = await request(path, opts);
+      if (result.res.status === 401) {
+        await logoutClient();
+        throwApiError(result.res, result.data);
+      }
+    } else {
+      await logoutClient();
+      throwApiError(result.res, result.data);
+    }
+  }
+
+  return result;
+}
+
+export async function api(path: string, opts?: RequestInit) {
+  const { res, data } = await requestWithRefresh(path, opts);
+  if (!res.ok) throwApiError(res, data);
   return data;
 }
 
 export async function apiUpload(path: string, formData: FormData) {
-  const res = await fetch(apiUrl(path), {
-    method: 'POST',
-    credentials: 'include',
-    body: formData,
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data.error || `Upload failed (${res.status})`), { code: data.code, status: res.status });
+  let result = await request(path, { method: 'POST', body: formData });
+
+  if (result.res.status === 401 && shouldRetryAuth(path)) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      result = await request(path, { method: 'POST', body: formData });
+      if (result.res.status === 401) {
+        await logoutClient();
+        throwApiError(result.res, result.data);
+      }
+    } else {
+      await logoutClient();
+      throwApiError(result.res, result.data);
+    }
+  }
+
+  const { res, data } = result;
+  if (!res.ok) throwApiError(res, data);
   return data;
 }

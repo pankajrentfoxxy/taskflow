@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Modal from '@/components/Modal';
 import Composer from '@/components/Composer';
-import { api, apiUpload, timeAgo } from '@/lib/util';
+import { api, apiUpload, timeAgo, toast } from '@/lib/util';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import '@excalidraw/excalidraw/index.css';
@@ -60,6 +60,9 @@ export default function ScribblePage() {
       setBoardId(d.id);
       dirty.current = false;
       loadBoards();
+      toast.success(boardId ? 'Board saved' : 'Board created');
+    } catch (e) {
+      toast.errorFrom(e);
     } finally { setSaving(false); }
   };
 
@@ -106,7 +109,7 @@ export default function ScribblePage() {
   const sendAsTask = async () => {
     const { elements, appState, files } = sceneRef.current;
     if (!elements || elements.filter((e: any) => !e.isDeleted).length === 0) {
-      alert('Draw something first 🙂');
+      toast.error('Draw something first 🙂');
       return;
     }
     setExporting(true);
@@ -126,7 +129,7 @@ export default function ScribblePage() {
       setAttachId(d.id);
       setComposerOpen(true);
     } catch (e: any) {
-      alert(e.message || 'Export failed');
+      toast.errorFrom(e, 'Export failed');
     } finally { setExporting(false); }
   };
 
@@ -187,7 +190,7 @@ export default function ScribblePage() {
                 variant="ghost"
                 size="xs"
                 className="text-red-400 hover:text-red-600"
-                onClick={() => api(`/api/boards?id=${b.id}`, { method: 'DELETE' }).then(loadBoards)}
+                onClick={() => api(`/api/boards?id=${b.id}`, { method: 'DELETE' }).then(() => { toast.success('Board deleted'); loadBoards(); }).catch((e) => toast.errorFrom(e))}
               >
                 Delete
               </Button>

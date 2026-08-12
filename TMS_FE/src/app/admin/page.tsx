@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import Shell, { useMe } from '@/components/Shell';
 import Modal from '@/components/Modal';
-import { api } from '@/lib/util';
+import { api, getErrorMessage, toast } from '@/lib/util';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -34,6 +34,11 @@ function AdminInner() {
   const [savingType, setSavingType] = useState(false);
   const [err, setErr] = useState('');
 
+  const notifyErr = (e: unknown) => {
+    setErr(getErrorMessage(e));
+    toast.errorFrom(e);
+  };
+
   const load = () => {
     api('/api/users').then((d) => setUsers(d.users)).catch(() => {});
     api('/api/teams').then((d) => setTeams(d.teams)).catch(() => {});
@@ -58,8 +63,9 @@ function AdminInner() {
     try {
       const teamId = isAdmin || me?.role === 'CEO' ? Number(typeForm.teamId) : me?.team_id;
       await api('/api/task-types', { method: 'POST', body: JSON.stringify({ teamId, name: typeForm.name }) });
+      toast.success('Task type created');
       setTypeForm({ teamId: '', name: '' }); load();
-    } catch (e: any) { setErr(e.message); }
+    } catch (e: any) { notifyErr(e); }
   };
 
   const createUser = async () => {
@@ -70,7 +76,8 @@ function AdminInner() {
         body: JSON.stringify({ ...form, teamId: form.teamId ? Number(form.teamId) : null }),
       });
       setUserOpen(false); setForm({ name: '', email: '', password: '', role: 'MEMBER', teamId: '' }); load();
-    } catch (e: any) { setErr(e.message); }
+      toast.success('User created');
+    } catch (e: any) { notifyErr(e); }
   };
 
   const createTeam = async () => {
@@ -81,24 +88,30 @@ function AdminInner() {
         body: JSON.stringify({ name: teamForm.name, managerId: teamForm.managerId ? Number(teamForm.managerId) : null }),
       });
       setTeamOpen(false); setTeamForm({ name: '', managerId: '' }); load();
-    } catch (e: any) { setErr(e.message); }
+      toast.success('Team created');
+    } catch (e: any) { notifyErr(e); }
   };
 
   const patchUser = (id: number, body: any) =>
-    api('/api/users', { method: 'PATCH', body: JSON.stringify({ id, ...body }) }).then(load).catch((e) => setErr(e.message));
+    api('/api/users', { method: 'PATCH', body: JSON.stringify({ id, ...body }) })
+      .then(() => { toast.success('User updated'); load(); })
+      .catch((e) => notifyErr(e));
 
   const deleteType = async (tt: any) => {
     if (Number(tt.used_count) > 0) {
-      setErr('Cannot delete a task type that is in use — deactivate it instead');
+      const msg = 'Cannot delete a task type that is in use — deactivate it instead';
+      setErr(msg);
+      toast.error(msg);
       return;
     }
     if (!confirm(`Delete task type "${tt.name}"? This cannot be undone.`)) return;
     setErr('');
     try {
       await api(`/api/task-types?id=${tt.id}`, { method: 'DELETE' });
+      toast.success('Task type deleted');
       load();
     } catch (e: any) {
-      setErr(e.message);
+      notifyErr(e);
     }
   };
 
@@ -118,9 +131,10 @@ function AdminInner() {
         body: JSON.stringify({ id: editType.id, name: editTypeForm.name.trim() }),
       });
       setEditType(null);
+      toast.success('Task type updated');
       load();
     } catch (e: any) {
-      setErr(e.message);
+      notifyErr(e);
     } finally {
       setSavingType(false);
     }
@@ -128,16 +142,19 @@ function AdminInner() {
 
   const deleteUser = async (u: any) => {
     if (u.id === me?.id) {
-      setErr('You cannot delete your own account');
+      const msg = 'You cannot delete your own account';
+      setErr(msg);
+      toast.error(msg);
       return;
     }
     if (!confirm(`Delete user "${u.name}"? Users with tasks will be deactivated instead.`)) return;
     setErr('');
     try {
       await api(`/api/users?id=${u.id}`, { method: 'DELETE' });
+      toast.success('User removed');
       load();
     } catch (e: any) {
-      setErr(e.message);
+      notifyErr(e);
     }
   };
 
@@ -146,9 +163,10 @@ function AdminInner() {
     setErr('');
     try {
       await api(`/api/teams?id=${t.id}`, { method: 'DELETE' });
+      toast.success('Team deleted');
       load();
     } catch (e: any) {
-      setErr(e.message);
+      notifyErr(e);
     }
   };
 
@@ -191,9 +209,10 @@ function AdminInner() {
         }),
       });
       setEditTeam(null);
+      toast.success('Team updated');
       load();
     } catch (e: any) {
-      setErr(e.message);
+      notifyErr(e);
     } finally {
       setSavingTeam(false);
     }
@@ -235,7 +254,7 @@ function AdminInner() {
                     <Badge
                       role="button"
                       className={`cursor-pointer ${tt.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'}`}
-                      onClick={() => api('/api/task-types', { method: 'PATCH', body: JSON.stringify({ id: tt.id, isActive: !tt.is_active }) }).then(load).catch((e) => setErr(e.message))}
+                      onClick={() => api('/api/task-types', { method: 'PATCH', body: JSON.stringify({ id: tt.id, isActive: !tt.is_active }) }).then(() => { toast.success(tt.is_active ? 'Task type deactivated' : 'Task type activated'); load(); }).catch((e) => notifyErr(e))}
                     >
                       {tt.is_active ? 'Active' : 'Inactive'}
                     </Badge>

@@ -1,10 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { MessageSquare } from 'lucide-react';
-import { fmtShortDate, countdown, STATUS_LABEL, STATUS_COLOR, isTaskOverdue } from '@/lib/util';
+import { ChevronRight, MessageSquare } from 'lucide-react';
+import { fmtShortDate, countdown, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, SLA_BREACH_BADGE, isTaskOverdue } from '@/lib/util';
 import { IconClock, IconFlag, IconTag } from './Icons';
 import TaskActionsMenu from './TaskActionsMenu';
+import TaskDetailAccordion from './TaskDetailAccordion';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -15,6 +16,8 @@ const initials = (n?: string) => (n || '?').split(' ').map((w) => w[0]).slice(0,
 
 export default function TaskCard({
   task,
+  expanded,
+  onToggleExpand,
   onOpenComments,
   onStatusClick,
   onCreateSubtask,
@@ -22,6 +25,8 @@ export default function TaskCard({
   renderAction,
 }: {
   task: any;
+  expanded?: boolean;
+  onToggleExpand?: () => void;
   onOpenComments?: (task: any) => void;
   onStatusClick?: (task: any) => void;
   onCreateSubtask?: (task: any) => void;
@@ -33,8 +38,32 @@ export default function TaskCard({
   const who = task.assignee_name || (task.team_name ? `Team ${task.team_name}` : 'Unassigned');
 
   return (
-    <Card className="gap-0 py-0 transition-all hover:shadow-[0_4px_12px_rgba(16,24,40,0.07)]">
+    <Card className={cn('gap-0 overflow-hidden py-0 transition-all hover:shadow-[0_4px_12px_rgba(16,24,40,0.07)]', expanded && 'ring-1 ring-foreground/10')}>
       <CardContent className="p-4">
+        <div className="flex gap-2">
+          {onToggleExpand && (
+            <button
+              type="button"
+              className="group relative mt-0.5 shrink-0 rounded-md p-0.5 text-muted-foreground/50 outline-none ring-offset-background transition hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              aria-expanded={expanded}
+              aria-label={expanded ? 'Collapse task details' : 'Expand task details'}
+              onClick={onToggleExpand}
+            >
+              {task.subtask_count > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 z-10 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-indigo-600 px-1 text-[9px] font-bold leading-none text-white shadow-sm ring-2 ring-background">
+                  {task.subtask_count > 9 ? '9+' : task.subtask_count}
+                </span>
+              )}
+              <ChevronRight
+                className={cn(
+                  'size-4 transition-transform',
+                  expanded && 'rotate-90 text-muted-foreground',
+                  !expanded && task.subtask_count > 0 && 'text-muted-foreground group-hover:translate-x-0.5'
+                )}
+              />
+            </button>
+          )}
+          <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
           <button
             type="button"
@@ -42,16 +71,16 @@ export default function TaskCard({
             title="Change status"
             onClick={() => onStatusClick?.(task)}
           >
-            <Badge className={cn('cursor-pointer border-0', STATUS_COLOR[task.status] || 'bg-gray-100')}>
+            <Badge className={cn('cursor-pointer', STATUS_COLOR[task.status] || STATUS_COLOR_FALLBACK)}>
               <span className="size-1.5 rounded-full bg-current opacity-60" />
               {STATUS_LABEL[task.status] || task.status}
             </Badge>
           </button>
           {task.sla_breached_at && task.status === 'ASSIGNED' && (
-            <Badge className="border-0 bg-red-600 text-white hover:bg-red-600">No response</Badge>
+            <Badge className={SLA_BREACH_BADGE}>No response</Badge>
           )}
           {slaRunning && (
-            <Badge className="border-amber-200 bg-amber-50 text-amber-700">
+            <Badge className="status-badge status-assigned">
               <IconClock className="size-3" /> {countdown(task.sla_deadline_at)}
             </Badge>
           )}
@@ -162,7 +191,12 @@ export default function TaskCard({
             </div>
           </div>
         )}
+          </div>
+        </div>
       </CardContent>
+      {expanded && onToggleExpand && (
+        <TaskDetailAccordion taskId={task.id} onUpdated={onTaskDeleted} />
+      )}
     </Card>
   );
 }

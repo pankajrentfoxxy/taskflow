@@ -8,7 +8,7 @@ import AckModal from '@/components/AckModal';
 import CommentsPanel from '@/components/CommentsPanel';
 import AuthImage from '@/components/AuthImage';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { api, fmtDateTime, timeAgo, countdown, toLocalInput, fromLocalInput, STATUS_LABEL, STATUS_COLOR, PRIORITY_COLOR, uploadUrl, isTaskOverdue } from '@/lib/util';
+import { api, fmtDateTime, timeAgo, countdown, toLocalInput, fromLocalInput, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, SLA_BREACH_BADGE, PRIORITY_COLOR, uploadUrl, isTaskOverdue, TASK_ACTION_TOAST, toast } from '@/lib/util';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -69,12 +69,18 @@ function TaskDetailInner({ id }: { id: string }) {
     setErr('');
     try {
       await api(`/api/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      const action = String(body.action || '');
+      if (TASK_ACTION_TOAST[action]) toast.success(TASK_ACTION_TOAST[action]);
+      else toast.success('Task updated');
       load();
     } catch (e: any) {
       if (e.code === 'OPEN_SUBTASKS') {
         const reason = prompt(`${e.message}\n\nCreator/Admin override — enter a reason:`);
         if (reason) act({ ...body, overrideReason: reason });
-      } else setErr(e.message);
+      } else {
+        setErr(e.message);
+        toast.errorFrom(e);
+      }
     }
   };
 
@@ -92,15 +98,17 @@ function TaskDetailInner({ id }: { id: string }) {
         body: JSON.stringify({ explanation, proposedEtaAt: fromLocalInput(propEta) }),
       });
       setExplanation(''); setPropEta(''); load();
-    } catch (e: any) { setErr(e.message); }
+      toast.success('Explanation submitted');
+    } catch (e: any) { setErr(e.message); toast.errorFrom(e); }
   };
 
   const review = async (result: string) => {
     setErr('');
     try {
       await api(`/api/tasks/${id}/escalation`, { method: 'POST', body: JSON.stringify({ review: result }) });
+      toast.success(result === 'ACCEPTED' ? 'Escalation accepted' : 'Escalation rejected');
       load();
-    } catch (e: any) { setErr(e.message); }
+    } catch (e: any) { setErr(e.message); toast.errorFrom(e); }
   };
 
   const submitEta = () => {
@@ -124,8 +132,8 @@ function TaskDetailInner({ id }: { id: string }) {
             <div className="space-y-4 p-4">
               <div>
                 <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <Badge className={STATUS_COLOR[task.status]}>{STATUS_LABEL[task.status]}</Badge>
-                  {task.sla_breached_at && task.status === 'ASSIGNED' && <Badge className="bg-red-600 text-white">NO RESPONSE</Badge>}
+                  <Badge className={STATUS_COLOR[task.status] || STATUS_COLOR_FALLBACK}>{STATUS_LABEL[task.status]}</Badge>
+                  {task.sla_breached_at && task.status === 'ASSIGNED' && <Badge className={SLA_BREACH_BADGE}>NO RESPONSE</Badge>}
                   {task.status === 'ASSIGNED' && !task.sla_breached_at && task.sla_deadline_at && (
                     <Badge className="bg-amber-500 text-white">⏱ Respond: {countdown(task.sla_deadline_at)}</Badge>
                   )}
@@ -277,7 +285,11 @@ function TaskDetailInner({ id }: { id: string }) {
                         <Checkbox
                           checked={s.status === 'DONE'}
                           disabled={s.status === 'DONE'}
-                          onCheckedChange={() => api(`/api/tasks/${s.id}`, { method: 'PATCH', body: JSON.stringify({ action: 'done' }) }).then(load).catch((e) => setErr(e.message))}
+                          onCheckedChange={() =>
+                            api(`/api/tasks/${s.id}`, { method: 'PATCH', body: JSON.stringify({ action: 'done' }) })
+                              .then(() => { load(); toast.success('Subtask marked done'); })
+                              .catch((e) => { setErr(e.message); toast.errorFrom(e); })
+                          }
                           className="size-5"
                         />
                         <div className="min-w-0 flex-1">

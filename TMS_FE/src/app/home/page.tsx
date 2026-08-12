@@ -12,6 +12,7 @@ import { IconZap, IconAlert, IconActivity, IconCalendar, IconPlus, IconPen, Icon
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { NativeSelect } from '@/components/ui/native-select';
 import { cn } from '@/lib/utils';
 
 function Metric({ icon, chip, value, label, hot }: { icon: React.ReactNode; chip: string; value: number; label: string; hot?: boolean }) {
@@ -50,12 +51,22 @@ function Section({ accent, icon, title, tasks, extra, onOpenComments, onTaskUpda
 
 function HomeInner() {
   const me = useMe();
+  const canFilter = me && ['ADMIN', 'CEO'].includes(me.role);
   const [mine, setMine] = useState<any[]>([]);
   const [created, setCreated] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
+  const [filterAssignee, setFilterAssignee] = useState('');
   const [ackTask, setAckTask] = useState<any>(null);
   const [commentsTask, setCommentsTask] = useState<any>(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [clock, setClock] = useState<{ greeting: string; date: string } | null>(null);
+
+  useEffect(() => {
+    if (!canFilter) return;
+    api('/api/users').then((d) => setUsers(d.users.filter((u: any) => u.is_active)));
+    api('/api/teams').then((d) => setTeams(d.teams));
+  }, [canFilter]);
 
   useEffect(() => {
     const d = new Date();
@@ -66,10 +77,23 @@ function HomeInner() {
     });
   }, []);
 
+  const viewingFiltered = canFilter && !!filterAssignee;
+
   const load = useCallback(() => {
+    if (viewingFiltered) {
+      const sp = new URLSearchParams({ filter: 'all' });
+      const [kind, idStr] = filterAssignee.split(':');
+      if (kind === 'u') sp.set('assigneeId', idStr);
+      else if (kind === 't') sp.set('teamId', idStr);
+      api(`/api/tasks?${sp}`).then((d) => {
+        setMine(d.tasks);
+        setCreated([]);
+      });
+      return;
+    }
     api('/api/tasks?filter=mine').then((d) => setMine(d.tasks));
     api('/api/tasks?filter=created').then((d) => setCreated(d.tasks));
-  }, []);
+  }, [viewingFiltered, filterAssignee]);
   useEffect(() => { load(); const iv = setInterval(load, 30000); return () => clearInterval(iv); }, [load]);
 
   const now = Date.now();
@@ -79,20 +103,51 @@ function HomeInner() {
   const inProgress = mine.filter((t) => ['ACKNOWLEDGED', 'IN_PROGRESS'].includes(t.status));
   const dueToday = inProgress.filter((t) => isDueInWindow(t.due_at, now, dayEnd.getTime()));
   const doneRecent = mine.filter((t) => t.status === 'DONE').slice(0, 5);
-  const createdOpen = created.filter((t) => !['DONE', 'CANCELLED'].includes(t.status) && t.assignee_id !== me?.id);
+  const createdOpen = viewingFiltered
+    ? []
+    : created.filter((t) => !['DONE', 'CANCELLED'].includes(t.status) && t.assignee_id !== me?.id);
 
   return (
     <>
       {/* Header */}
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-[11px] font-semibold tracking-widest text-gray-400 uppercase">{clock?.date ?? ' '}</p>
           <h1 className="mt-1 text-[24px] font-bold tracking-tight">
             {clock?.greeting ?? 'Hello'}{me ? `, ${me.name.split(' ')[0]}` : ''}
           </h1>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <TaskTemplateButton size="sm" onImported={load} />
+        <div className="flex flex-wrap items-center gap-2">
+          {canFilter && (
+            <>
+              <NativeSelect
+                className="h-8 min-w-[200px] max-w-[280px] text-sm"
+                value={filterAssignee}
+                onChange={(e) => setFilterAssignee(e.target.value)}
+                aria-label="View tasks for user or team"
+              >
+                <option value="">Everyone (my dashboard)</option>
+                <optgroup label="Users">
+                  {users.map((u) => (
+                    <option key={u.id} value={`u:${u.id}`}>
+                      {u.name}{u.team_name ? ` (${u.team_name})` : ''}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Teams">
+                  {teams.map((t) => (
+                    <option key={t.id} value={`t:${t.id}`}>Team: {t.name}</option>
+                  ))}
+                </optgroup>
+              </NativeSelect>
+              {viewingFiltered && (
+                <Button type="button" variant="ghost" size="sm" onClick={() => setFilterAssignee('')}>
+                  Clear
+                </Button>
+              )}
+            </>
+          )}
+          <TaskTemplateButton onImported={load} />
           <Button variant="outline" asChild>
             <Link href="/scribble">
               <IconPen className="h-4 w-4" /> Scribble
@@ -115,7 +170,7 @@ function HomeInner() {
       {needsAck.length > 0 && (
         <Section
           accent="bg-red-50 text-red-500" icon={<IconZap className="h-3.5 w-3.5" />}
-          title="Needs your response · 30-min SLA" tasks={needsAck}
+          title={viewingFiltered ? 'Needs response · 30-min SLA' : 'Needs your response · 30-min SLA'} tasks={needsAck}
           onOpenComments={setCommentsTask}
           onTaskUpdated={load}
           extra={(t) => (
@@ -138,14 +193,20 @@ function HomeInner() {
             <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-500">
               <IconCheckCircle className="h-7 w-7" />
             </span>
-            <div className="font-bold text-gray-800">All clear</div>
-            <p className="mt-1 mb-6 text-[13px] text-gray-400">Nothing on your plate. Create a task or sketch one on the board.</p>
+            <div className="font-bold text-gray-800">{viewingFiltered ? 'No matching tasks' : 'All clear'}</div>
+            <p className="mt-1 mb-6 text-[13px] text-gray-400">
+              {viewingFiltered
+                ? 'Try another person or team.'
+                : 'Nothing on your plate. Create a task or sketch one on the board.'}
+            </p>
+            {!viewingFiltered && (
             <div className="flex justify-center gap-2.5">
               <Button onClick={() => setComposerOpen(true)}><IconPlus className="h-4 w-4" /> New task</Button>
               <Button variant="outline" asChild>
                 <Link href="/scribble"><IconPen className="h-4 w-4" /> Open Scribble</Link>
               </Button>
             </div>
+            )}
           </CardContent>
         </Card>
       )}

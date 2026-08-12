@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useMe } from '@/components/Shell';
-import { api } from '@/lib/util';
+import { api, toast } from '@/lib/util';
 
 export function canCreateSubtask(task: { parent_id?: number | null; status?: string }) {
   return !task.parent_id && !['DONE', 'CANCELLED'].includes(task.status || '');
@@ -52,9 +52,10 @@ export default function TaskActionsMenu({
     setBusy(true);
     try {
       await api(`/api/tasks/${task.id}`, { method: 'DELETE' });
+      toast.success('Task deleted');
       onDeleted?.();
     } catch (e: unknown) {
-      window.alert(e instanceof Error ? e.message : 'Delete failed');
+      toast.errorFrom(e, 'Delete failed');
     } finally {
       setBusy(false);
     }

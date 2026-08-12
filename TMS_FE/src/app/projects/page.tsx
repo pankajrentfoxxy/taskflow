@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Shell from '@/components/Shell';
 import Modal from '@/components/Modal';
-import { api } from '@/lib/util';
+import { api, toast } from '@/lib/util';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -25,8 +25,9 @@ function ProjectsInner() {
     setErr('');
     try {
       await api('/api/projects', { method: 'POST', body: JSON.stringify({ name, description: desc }) });
+      toast.success('Project created');
       setOpen(false); setName(''); setDesc(''); load();
-    } catch (e: any) { setErr(e.message); }
+    } catch (e: any) { setErr(e.message); toast.errorFrom(e); }
   };
 
   return (

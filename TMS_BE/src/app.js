@@ -96,6 +96,9 @@ const syncModels = async () => {
   await Escalation.sync();
   await Notification.sync();
   await Attachment.sync();
+  await sequelize.query(
+    "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS is_visible BOOLEAN NOT NULL DEFAULT true"
+  );
 };
 
 export const initApp = async () => {

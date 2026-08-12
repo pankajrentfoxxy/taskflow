@@ -8,6 +8,8 @@ export const listTasks = catchAsync(async (req, res) => {
       status: req.query.status,
       q: req.query.q,
       projectId: req.query.projectId,
+      assigneeId: req.query.assigneeId,
+      teamId: req.query.teamId,
     })
   );
 });

@@ -11,6 +11,7 @@ const Notification = sequelize.define(
     body: { type: DataTypes.TEXT, allowNull: false, defaultValue: "" },
     task_id: { type: DataTypes.INTEGER, allowNull: true },
     read_at: { type: DataTypes.BIGINT, allowNull: true },
+    is_visible: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
     created_at: { type: DataTypes.BIGINT, allowNull: false },
   },
   { tableName: "notifications" }

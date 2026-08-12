@@ -5,7 +5,7 @@ import { Send, SmilePlus, ThumbsUp } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { api, fmtTime } from '@/lib/util';
+import { api, fmtTime, toast } from '@/lib/util';
 import { cn } from '@/lib/utils';
 
 type Reaction = { emoji: string; count: number; mine: boolean };
@@ -193,11 +193,15 @@ export default function CommentsPanel({
   const roots = byParent.get(null) || [];
 
   const toggleReaction = async (commentId: number, emoji: string) => {
-    await api(`/api/tasks/${taskId}/comments/${commentId}/reactions`, {
-      method: 'POST',
-      body: JSON.stringify({ emoji }),
-    });
-    await load();
+    try {
+      await api(`/api/tasks/${taskId}/comments/${commentId}/reactions`, {
+        method: 'POST',
+        body: JSON.stringify({ emoji }),
+      });
+      await load();
+    } catch (e) {
+      toast.errorFrom(e);
+    }
   };
 
   const send = async () => {
@@ -215,6 +219,9 @@ export default function CommentsPanel({
       setReplyTo(null);
       await load();
       onChanged?.();
+      toast.success(replyTo ? 'Reply posted' : 'Comment posted');
+    } catch (e) {
+      toast.errorFrom(e);
     } finally {
       setBusy(false);
     }

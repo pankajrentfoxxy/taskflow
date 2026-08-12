@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Modal from './Modal';
-import { api, apiUpload, fromLocalInput, toLocalInput } from '@/lib/util';
+import { api, apiUpload, fromLocalInput, toLocalInput, toast } from '@/lib/util';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -78,8 +78,14 @@ export default function Composer({
   const submit = async () => {
     setErr('');
     const dueAt = fromLocalInput(due);
-    if (!dueAt) { setErr('Pick a due date & time'); return; }
-    if (!assignee) { setErr('Pick an assignee'); return; }
+    if (!dueAt) { const msg = 'Pick a due date & time'; setErr(msg); toast.error(msg); return; }
+    if (!assignee) { const msg = 'Pick an assignee'; setErr(msg); toast.error(msg); return; }
+    if (multiple) {
+      const lines = linesText.split('\n').map((l) => l.trim()).filter(Boolean);
+      if (lines.length === 0) { const msg = 'Enter at least one task title'; setErr(msg); toast.error(msg); return; }
+    } else if (!title.trim()) {
+      const msg = 'Title is required'; setErr(msg); toast.error(msg); return;
+    }
     setBusy(true);
     try {
       // upload files first
@@ -101,14 +107,23 @@ export default function Composer({
         attachmentIds,
         taskTypeId: taskTypeId ? Number(taskTypeId) : null,
         multiple,
-        lines: multiple ? linesText.split('\n') : [],
+        lines: multiple ? linesText.split('\n').map((l) => l.trim()).filter(Boolean) : [],
       };
       const d = await api('/api/tasks', { method: 'POST', body: JSON.stringify(payload) });
+      const count = Array.isArray(d.ids) ? d.ids.length : 1;
+      if (presetParentId) {
+        toast.success(count > 1 ? `${count} subtasks created` : 'Subtask created');
+      } else if (multiple) {
+        toast.success(`${count} task${count > 1 ? 's' : ''} created`);
+      } else {
+        toast.success('Task created');
+      }
       onCreated?.(d.ids);
       onClose();
       setTitle(''); setDescription(''); setLinesText(''); setFiles([]); setMultiple(false); setDue(''); setTaskTypeId('');
     } catch (e: any) {
       setErr(e.message);
+      toast.errorFrom(e);
     } finally {
       setBusy(false);
     }

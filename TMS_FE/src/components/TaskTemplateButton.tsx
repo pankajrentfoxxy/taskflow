@@ -12,6 +12,7 @@ import {
 import { downloadTaskTemplate, fetchTaskTemplateData } from '@/lib/taskTemplate';
 import { importTaskRows, parseTaskImportFile } from '@/lib/taskImport';
 import { cn } from '@/lib/utils';
+import { toast } from '@/lib/util';
 import { useMe } from '@/components/Shell';
 
 const TEMPLATE_ROLES = new Set(['ADMIN', 'CEO']);
@@ -43,8 +44,11 @@ export default function TaskBulkMenu({
       const data = await fetchTaskTemplateData();
       await downloadTaskTemplate(data);
       setMsg('Template downloaded');
+      toast.success('Template downloaded');
     } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : 'Download failed');
+      const message = e instanceof Error ? e.message : 'Download failed';
+      setErr(message);
+      toast.error(message);
     } finally {
       setBusy(null);
     }
@@ -70,13 +74,19 @@ export default function TaskBulkMenu({
           .slice(0, 3)
           .map((x) => `row ${x.row}: ${x.message}`)
           .join('; ');
-        setMsg(`Created ${result.created} task${result.created === 1 ? '' : 's'}. ${result.errors.length} row(s) skipped — ${detail}`);
+        const msg = `Created ${result.created} task${result.created === 1 ? '' : 's'}. ${result.errors.length} row(s) skipped — ${detail}`;
+        setMsg(msg);
+        toast.info(msg);
       } else {
-        setMsg(`Created ${result.created} task${result.created === 1 ? '' : 's'}`);
+        const msg = `Created ${result.created} task${result.created === 1 ? '' : 's'}`;
+        setMsg(msg);
+        toast.success(msg);
       }
       onImported?.();
     } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : 'Import failed');
+      const message = e instanceof Error ? e.message : 'Import failed';
+      setErr(message);
+      toast.error(message);
     } finally {
       setBusy(null);
     }
@@ -95,7 +105,7 @@ export default function TaskBulkMenu({
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button type="button" variant={variant} size={size} disabled={disabled}>
+          <Button type="button" variant={variant} size={size} disabled={disabled} className="gap-1.5">
             {busy === 'download' ? 'Preparing…' : busy === 'import' ? 'Importing…' : 'Bulk tasks'}
             <ChevronDown className="size-4 opacity-60" />
           </Button>

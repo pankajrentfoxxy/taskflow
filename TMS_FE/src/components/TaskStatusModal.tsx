@@ -6,7 +6,10 @@ import {
   api,
   fromLocalInput,
   STATUS_COLOR,
+  STATUS_COLOR_FALLBACK,
   STATUS_LABEL,
+  TASK_ACTION_TOAST,
+  toast,
   toLocalInput,
 } from '@/lib/util';
 import { Button } from '@/components/ui/button';
@@ -55,6 +58,7 @@ export default function TaskStatusModal({
       setDetail(data);
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : 'Failed to load task');
+      toast.errorFrom(e, 'Failed to load task');
       setDetail(null);
     } finally {
       setLoading(false);
@@ -77,6 +81,8 @@ export default function TaskStatusModal({
     setErr('');
     try {
       await api(`/api/tasks/${task.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      const action = String(body.action || '');
+      toast.success(TASK_ACTION_TOAST[action] || 'Task updated');
       onDone();
       onClose();
     } catch (e: any) {
@@ -85,6 +91,7 @@ export default function TaskStatusModal({
         if (reason) await act({ ...body, overrideReason: reason });
       } else {
         setErr(e.message || 'Action failed');
+        toast.errorFrom(e, 'Action failed');
       }
     } finally {
       setBusy(false);
@@ -101,7 +108,9 @@ export default function TaskStatusModal({
   const submitAck = () => {
     const etaAt = fromLocalInput(eta);
     if (!etaAt) {
-      setErr('Set your ETA — it is mandatory');
+      const msg = 'Set your ETA — it is mandatory';
+      setErr(msg);
+      toast.error(msg);
       return;
     }
     act({ action: 'acknowledge', etaAt });
@@ -109,7 +118,9 @@ export default function TaskStatusModal({
 
   const submitReason = () => {
     if (!reasonText.trim()) {
-      setErr('A reason is required');
+      const msg = 'A reason is required';
+      setErr(msg);
+      toast.error(msg);
       return;
     }
     act({ action: pendingAction, reason: reasonText.trim() });
@@ -118,7 +129,9 @@ export default function TaskStatusModal({
   const submitEta = () => {
     const etaAt = fromLocalInput(eta);
     if (!etaAt) {
-      setErr('Pick an ETA');
+      const msg = 'Pick an ETA';
+      setErr(msg);
+      toast.error(msg);
       return;
     }
     act({ action: 'update_eta', etaAt });
@@ -220,7 +233,7 @@ export default function TaskStatusModal({
           <div className="mt-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Current status</span>
             <div className="mt-1">
-              <Badge className={cn('border-0 font-semibold uppercase tracking-wide', STATUS_COLOR[status] || 'bg-gray-100')}>
+              <Badge className={cn(STATUS_COLOR[status] || STATUS_COLOR_FALLBACK)}>
                 <span className="mr-1.5 size-1.5 rounded-full bg-current opacity-70" />
                 {STATUS_LABEL[status] || status}
               </Badge>

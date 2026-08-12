@@ -40,7 +40,7 @@ router.post(
   "/",
   validate({
     body: Joi.object({
-      title: Joi.string(),
+      title: Joi.string().allow(""),
       description: Joi.string().allow(""),
       assigneeId: Joi.number().integer().allow(null),
       teamId: Joi.number().integer().allow(null),
@@ -49,7 +49,11 @@ router.post(
       projectId: Joi.number().integer().allow(null),
       parentId: Joi.number().integer().allow(null),
       multiple: Joi.boolean(),
-      lines: Joi.array().items(Joi.string()),
+      lines: Joi.when("multiple", {
+        is: true,
+        then: Joi.array().items(Joi.string().allow("")).min(1).required(),
+        otherwise: Joi.array().items(Joi.string().allow("")),
+      }),
       attachmentIds: Joi.array().items(Joi.number().integer()),
       boardId: Joi.number().integer().allow(null),
       taskTypeId: Joi.number().integer().allow(null),

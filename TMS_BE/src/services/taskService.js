@@ -55,12 +55,30 @@ async function explanationPending(task) {
   return esc && !esc.explanation;
 }
 
-export const listTasks = async (user, { filter = "mine", status, q, projectId }) => {
+export const listTasks = async (user, { filter = "mine", status, q, projectId, assigneeId, teamId }) => {
   await runSlaSweep();
 
   const { sql, replacements } = taskVisibilityWhere(user);
   let where = `(${sql})`;
   const repl = { ...replacements };
+
+  if (assigneeId || teamId) {
+    if (!["ADMIN", "CEO"].includes(user.role)) {
+      throw new ApiError(httpStatus.FORBIDDEN, "Admin or CEO only");
+    }
+    if (assigneeId) {
+      where += ` AND (t.assignee_id = :filterAssigneeId OR (
+        t.assignee_id IS NULL AND t.assigned_team_id = (SELECT team_id FROM users WHERE id = :filterAssigneeId2 LIMIT 1)
+      ))`;
+      repl.filterAssigneeId = Number(assigneeId);
+      repl.filterAssigneeId2 = Number(assigneeId);
+    }
+    if (teamId) {
+      where += " AND (t.assignee_id IN (SELECT id FROM users WHERE team_id = :filterTeamId) OR t.assigned_team_id = :filterTeamId2)";
+      repl.filterTeamId = Number(teamId);
+      repl.filterTeamId2 = Number(teamId);
+    }
+  }
 
   if (filter === "mine") {
     where += " AND (t.assignee_id = :mineUid";
@@ -257,8 +275,12 @@ export const getTaskDetail = async (user, taskId) => {
   const isBoss = ["ADMIN", "CEO"].includes(user.role);
 
   const subtasks = await sequelize.query(
-    `SELECT t.*, ua.name AS assignee_name FROM tasks t
+    `SELECT t.*, ua.name AS assignee_name, tm.name AS team_name, tt.name AS type_name,
+      (SELECT COUNT(*)::int FROM comments c WHERE c.task_id = t.id) AS comment_count
+     FROM tasks t
      LEFT JOIN users ua ON ua.id = t.assignee_id
+     LEFT JOIN teams tm ON tm.id = t.assigned_team_id
+     LEFT JOIN task_types tt ON tt.id = t.task_type_id
      WHERE t.parent_id = :taskId AND t.deleted = false ORDER BY t.id`,
     { replacements: { taskId: task.id }, type: QueryTypes.SELECT }
   );

@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ChevronRight, Flag, MessageSquare, User } from 'lucide-react';
-import { STATUS_LABEL, STATUS_COLOR, PRIORITY_COLOR, fmtShortDate, isTaskOverdue } from '@/lib/util';
+import { STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, STATUS_DOT, PRIORITY_COLOR, fmtShortDate, isTaskOverdue } from '@/lib/util';
 import TaskCard from '@/components/TaskCard';
 import TaskStatusModal from '@/components/TaskStatusModal';
 import TaskActionsMenu from '@/components/TaskActionsMenu';
+import TaskDetailAccordion from '@/components/TaskDetailAccordion';
 import Composer from '@/components/Composer';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -21,20 +22,14 @@ import {
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 
-const STATUS_DOT: Record<string, string> = {
-  ASSIGNED: 'bg-sky-500',
-  ACKNOWLEDGED: 'bg-sky-500',
-  IN_PROGRESS: 'bg-blue-500',
-  DONE: 'bg-emerald-500',
-  CANCELLED: 'bg-gray-400',
-  ESCALATED: 'bg-red-500',
-};
-
 const initials = (n?: string | null) =>
   (n || '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 
 function TaskRow({
   task,
+  expanded,
+  onToggleExpand,
+  colSpan,
   onOpenComments,
   onStatusClick,
   onCreateSubtask,
@@ -42,6 +37,9 @@ function TaskRow({
   renderAction,
 }: {
   task: any;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  colSpan: number;
   onOpenComments: (task: any) => void;
   onStatusClick: (task: any) => void;
   onCreateSubtask: (task: any) => void;
@@ -52,18 +50,35 @@ function TaskRow({
   const assignee = task.assignee_name || (task.team_name ? `Team ${task.team_name}` : null);
 
   return (
-    <TableRow className="group hover:bg-muted/40">
+    <>
+    <TableRow className={cn('group hover:bg-muted/40', expanded && 'bg-muted/20')}>
       <TableCell className="min-w-[280px] max-w-[420px] whitespace-normal py-3 pl-3">
-        <Link href={`/tasks/${task.id}`} className="flex items-center gap-2.5">
-          <ChevronRight
-            className={cn(
-              'size-4 shrink-0 text-muted-foreground/50 transition-transform',
-              task.subtask_count > 0 && 'text-muted-foreground group-hover:translate-x-0.5'
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            className="group relative shrink-0 rounded-md p-0.5 text-muted-foreground/50 outline-none ring-offset-background transition hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            aria-expanded={expanded}
+            aria-label={expanded ? 'Collapse task details' : 'Expand task details'}
+            onClick={onToggleExpand}
+          >
+            {task.subtask_count > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 z-10 flex min-h-4 min-w-4 items-center justify-center rounded-full bg-indigo-600 px-1 text-[9px] font-bold leading-none text-white shadow-sm ring-2 ring-background">
+                {task.subtask_count > 9 ? '9+' : task.subtask_count}
+              </span>
             )}
-          />
-          <span className={cn('size-2 shrink-0 rounded-full', STATUS_DOT[task.status] || 'bg-gray-400')} />
-          <span className="truncate font-medium text-foreground group-hover:text-primary">{task.title}</span>
-        </Link>
+            <ChevronRight
+              className={cn(
+                'size-4 transition-transform',
+                expanded && 'rotate-90 text-muted-foreground',
+                !expanded && task.subtask_count > 0 && 'text-muted-foreground group-hover:translate-x-0.5'
+              )}
+            />
+          </button>
+          <Link href={`/tasks/${task.id}`} className="flex min-w-0 flex-1 items-center gap-2.5">
+            <span className={cn('size-2 shrink-0 rounded-full', STATUS_DOT[task.status] || 'status-dot-cancelled')} />
+            <span className="truncate font-medium text-foreground group-hover:text-primary">{task.title}</span>
+          </Link>
+        </div>
       </TableCell>
 
       <TableCell className="py-3">
@@ -109,7 +124,7 @@ function TaskRow({
           title="Change status"
           onClick={() => onStatusClick(task)}
         >
-          <Badge className={cn('cursor-pointer border-0 font-semibold uppercase tracking-wide', STATUS_COLOR[task.status] || 'bg-gray-100')}>
+          <Badge className={cn('cursor-pointer', STATUS_COLOR[task.status] || STATUS_COLOR_FALLBACK)}>
             <span className="mr-1.5 size-1.5 rounded-full bg-current opacity-70" />
             {STATUS_LABEL[task.status] || task.status}
           </Badge>
@@ -140,6 +155,14 @@ function TaskRow({
         <TableCell className="py-3 pr-3 text-right">{renderAction(task)}</TableCell>
       )}
     </TableRow>
+    {expanded && (
+      <TableRow className="hover:bg-transparent">
+        <TableCell colSpan={colSpan} className="p-0">
+          <TaskDetailAccordion taskId={task.id} onUpdated={onTaskDeleted} />
+        </TableCell>
+      </TableRow>
+    )}
+    </>
   );
 }
 
@@ -156,6 +179,8 @@ export default function TaskTable({
 }) {
   const [statusTask, setStatusTask] = useState<any>(null);
   const [subtaskParent, setSubtaskParent] = useState<any>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const colSpan = renderAction ? 10 : 9;
 
   return (
     <>
@@ -164,6 +189,8 @@ export default function TaskTable({
           <TaskCard
             key={task.id}
             task={task}
+            expanded={expandedId === task.id}
+            onToggleExpand={() => setExpandedId((id) => (id === task.id ? null : task.id))}
             onOpenComments={onOpenComments}
             onStatusClick={setStatusTask}
             onCreateSubtask={setSubtaskParent}
@@ -196,6 +223,9 @@ export default function TaskTable({
             <TaskRow
               key={task.id}
               task={task}
+              expanded={expandedId === task.id}
+              onToggleExpand={() => setExpandedId((id) => (id === task.id ? null : task.id))}
+              colSpan={colSpan}
               onOpenComments={onOpenComments}
               onStatusClick={setStatusTask}
               onCreateSubtask={setSubtaskParent}

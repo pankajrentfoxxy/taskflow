@@ -9,4 +9,8 @@ export const markRead = catchAsync(async (req, res) => {
   res.json(await notificationsService.markNotificationsRead(req.user, req.body));
 });
 
-export default { listNotifications, markRead };
+export const clearAll = catchAsync(async (req, res) => {
+  res.json(await notificationsService.clearNotifications(req.user));
+});
+
+export default { listNotifications, markRead, clearAll };

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Shell, { useMe } from '@/components/Shell';
 import Modal from '@/components/Modal';
-import { api, fmtDateTime, STATUS_LABEL, STATUS_COLOR } from '@/lib/util';
+import { api, fmtDateTime, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, SLA_BREACH_BADGE } from '@/lib/util';
 import { IconInbox, IconClock, IconMute, IconAlert, IconScale, IconCalendar, IconCheckCircle, IconZap, IconActivity, IconTag, IconUsers, IconDownload } from '@/components/Icons';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -301,8 +301,8 @@ function ReportsInner() {
                 onClick={() => setDrill(null)}>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[11px] font-bold text-gray-400">#{tk.id}</span>
-                  <Badge className={STATUS_COLOR[tk.status] || 'bg-gray-100'}>{STATUS_LABEL[tk.status] || tk.status}</Badge>
-                  {tk.sla_breached_at && tk.status === 'ASSIGNED' && <Badge className="bg-red-600 text-white">NO RESPONSE</Badge>}
+                  <Badge className={STATUS_COLOR[tk.status] || STATUS_COLOR_FALLBACK}>{STATUS_LABEL[tk.status] || tk.status}</Badge>
+                  {tk.sla_breached_at && tk.status === 'ASSIGNED' && <Badge className={SLA_BREACH_BADGE}>NO RESPONSE</Badge>}
                 </div>
                 <div className="font-semibold text-sm mt-1.5">{tk.title}</div>
                 <div className="text-[11px] text-gray-500 mt-1">

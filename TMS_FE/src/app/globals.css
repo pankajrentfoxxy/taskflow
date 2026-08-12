@@ -52,8 +52,30 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --font-sans: var(--font-sans);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
+
+  --color-status-assigned-bg: var(--status-assigned-bg);
+  --color-status-assigned-fg: var(--status-assigned-fg);
+  --color-status-assigned-dot: var(--status-assigned-dot);
+  --color-status-acknowledged-bg: var(--status-acknowledged-bg);
+  --color-status-acknowledged-fg: var(--status-acknowledged-fg);
+  --color-status-acknowledged-dot: var(--status-acknowledged-dot);
+  --color-status-progress-bg: var(--status-progress-bg);
+  --color-status-progress-fg: var(--status-progress-fg);
+  --color-status-progress-dot: var(--status-progress-dot);
+  --color-status-done-bg: var(--status-done-bg);
+  --color-status-done-fg: var(--status-done-fg);
+  --color-status-done-dot: var(--status-done-dot);
+  --color-status-cancelled-bg: var(--status-cancelled-bg);
+  --color-status-cancelled-fg: var(--status-cancelled-fg);
+  --color-status-cancelled-dot: var(--status-cancelled-dot);
+  --color-status-escalated-bg: var(--status-escalated-bg);
+  --color-status-escalated-fg: var(--status-escalated-fg);
+  --color-status-escalated-dot: var(--status-escalated-dot);
+  --color-status-sla-bg: var(--status-sla-bg);
+  --color-status-sla-fg: var(--status-sla-fg);
 }
 
 :root {
@@ -89,6 +111,27 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  --status-assigned-bg: #fff4e5;
+  --status-assigned-fg: #9a3412;
+  --status-assigned-dot: #ea580c;
+  --status-acknowledged-bg: #ecfeff;
+  --status-acknowledged-fg: #0e7490;
+  --status-acknowledged-dot: #0891b2;
+  --status-progress-bg: #eff6ff;
+  --status-progress-fg: #1d4ed8;
+  --status-progress-dot: #2563eb;
+  --status-done-bg: #ecfdf5;
+  --status-done-fg: #047857;
+  --status-done-dot: #059669;
+  --status-cancelled-bg: #f4f4f5;
+  --status-cancelled-fg: #52525b;
+  --status-cancelled-dot: #a1a1aa;
+  --status-escalated-bg: #fef2f2;
+  --status-escalated-fg: #b91c1c;
+  --status-escalated-dot: #dc2626;
+  --status-sla-bg: #dc2626;
+  --status-sla-fg: #ffffff;
 }
 
 .dark {
@@ -123,6 +166,27 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.68 0.18 277);
+
+  --status-assigned-bg: color-mix(in oklab, #ea580c 18%, transparent);
+  --status-assigned-fg: #fdba74;
+  --status-assigned-dot: #fb923c;
+  --status-acknowledged-bg: color-mix(in oklab, #0891b2 18%, transparent);
+  --status-acknowledged-fg: #67e8f9;
+  --status-acknowledged-dot: #22d3ee;
+  --status-progress-bg: color-mix(in oklab, #2563eb 18%, transparent);
+  --status-progress-fg: #93c5fd;
+  --status-progress-dot: #60a5fa;
+  --status-done-bg: color-mix(in oklab, #059669 18%, transparent);
+  --status-done-fg: #6ee7b7;
+  --status-done-dot: #34d399;
+  --status-cancelled-bg: color-mix(in oklab, #71717a 16%, transparent);
+  --status-cancelled-fg: #d4d4d8;
+  --status-cancelled-dot: #a1a1aa;
+  --status-escalated-bg: color-mix(in oklab, #dc2626 18%, transparent);
+  --status-escalated-fg: #fca5a5;
+  --status-escalated-dot: #f87171;
+  --status-sla-bg: #ef4444;
+  --status-sla-fg: #ffffff;
 }
 
 @layer base {
@@ -146,5 +210,65 @@
 @layer utilities {
   .tnum {
     font-variant-numeric: tabular-nums;
+  }
+
+  .status-badge {
+    @apply border-0 font-medium shadow-none;
+  }
+
+  .status-assigned {
+    @apply bg-status-assigned-bg text-status-assigned-fg;
+  }
+
+  .status-acknowledged {
+    @apply bg-status-acknowledged-bg text-status-acknowledged-fg;
+  }
+
+  .status-progress {
+    @apply bg-status-progress-bg text-status-progress-fg;
+  }
+
+  .status-done {
+    @apply bg-status-done-bg text-status-done-fg;
+  }
+
+  .status-cancelled {
+    @apply bg-status-cancelled-bg text-status-cancelled-fg;
+  }
+
+  .status-escalated {
+    @apply bg-status-escalated-bg text-status-escalated-fg;
+  }
+
+  .status-fallback {
+    @apply bg-status-cancelled-bg text-status-cancelled-fg;
+  }
+
+  .status-sla {
+    @apply bg-status-sla-bg text-status-sla-fg hover:bg-status-sla-bg;
+  }
+
+  .status-dot-assigned {
+    @apply bg-status-assigned-dot;
+  }
+
+  .status-dot-acknowledged {
+    @apply bg-status-acknowledged-dot;
+  }
+
+  .status-dot-progress {
+    @apply bg-status-progress-dot;
+  }
+
+  .status-dot-done {
+    @apply bg-status-done-dot;
+  }
+
+  .status-dot-cancelled {
+    @apply bg-status-cancelled-dot;
+  }
+
+  .status-dot-escalated {
+    @apply bg-status-escalated-dot;
   }
 }

@@ -1,8 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import Shell from '@/components/Shell';
-import { api, timeAgo } from '@/lib/util';
+import Shell, { useNotifications } from '@/components/Shell';
+import { api, timeAgo, toast } from '@/lib/util';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
@@ -15,17 +15,39 @@ const ICONS: Record<string, string> = {
 };
 
 function NotificationsInner() {
+  const { refreshMe } = useNotifications();
   const [items, setItems] = useState<any[]>([]);
   const load = () => api('/api/notifications').then((d) => setItems(d.notifications));
   useEffect(() => { load(); }, []);
 
-  const markAll = () => api('/api/notifications', { method: 'POST', body: JSON.stringify({ all: true }) }).then(load);
+  const afterAction = (message: string) => {
+    load();
+    refreshMe();
+    toast.success(message);
+  };
+
+  const markAll = () =>
+    api('/api/notifications', { method: 'POST', body: JSON.stringify({ all: true }) })
+      .then(() => afterAction('All notifications marked read'))
+      .catch((e) => toast.errorFrom(e));
+
+  const clearAll = () =>
+    api('/api/notifications/clear', { method: 'POST' })
+      .then(() => afterAction('Notifications cleared'))
+      .catch((e) => toast.errorFrom(e));
 
   return (
     <>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-bold">Notifications</h1>
-        <Button variant="outline" onClick={markAll}>Mark all read</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={markAll} disabled={items.length === 0}>
+            Mark all read
+          </Button>
+          <Button variant="outline" onClick={clearAll} disabled={items.length === 0}>
+            Clear all
+          </Button>
+        </div>
       </div>
       <div className="space-y-2">
         {items.map((n) => {
@@ -43,7 +65,9 @@ function NotificationsInner() {
           );
           return n.task_id ? (
             <Link key={n.id} href={`/tasks/${n.task_id}`} className="block"
-              onClick={() => api('/api/notifications', { method: 'POST', body: JSON.stringify({ ids: [n.id] }) })}>
+              onClick={() =>
+                api('/api/notifications', { method: 'POST', body: JSON.stringify({ ids: [n.id] }) }).then(refreshMe)
+              }>
               {inner}
             </Link>
           ) : <div key={n.id}>{inner}</div>;

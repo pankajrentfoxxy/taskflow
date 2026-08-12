@@ -6,7 +6,7 @@ import TaskTable from '@/components/TaskTable';
 import CommentsModal from '@/components/CommentsModal';
 import AuthImage from '@/components/AuthImage';
 import Composer from '@/components/Composer';
-import { api, apiUpload, timeAgo, fmtDate, uploadUrl } from '@/lib/util';
+import { api, apiUpload, timeAgo, fmtDate, uploadUrl, toast } from '@/lib/util';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -27,7 +27,7 @@ function ProjectInner({ id }: { id: string }) {
   const [uploading, setUploading] = useState(false);
 
   const load = useCallback(() => {
-    api(`/api/projects/${id}`).then(setData).catch((e) => setErr(e.message));
+    api(`/api/projects/${id}`).then(setData).catch((e) => { setErr(e.message); toast.errorFrom(e); });
   }, [id]);
   useEffect(() => { load(); api('/api/users').then((d) => setUsers(d.users.filter((u: any) => u.is_active))); }, [load]);
 
@@ -41,7 +41,10 @@ function ProjectInner({ id }: { id: string }) {
   if (!data) return <Card className="h-60 animate-pulse" />;
   const { project, members, notes, tasks, files, activity, canManage } = data;
 
-  const patch = (body: any) => api(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }).then(load).catch((e) => setErr(e.message));
+  const patch = (body: any, successMsg = 'Project updated') =>
+    api(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) })
+      .then(() => { toast.success(successMsg); load(); })
+      .catch((e) => { setErr(e.message); toast.errorFrom(e); });
 
   const uploadFile = async (f: File) => {
     setUploading(true);
@@ -50,7 +53,10 @@ function ProjectInner({ id }: { id: string }) {
       fd.append('file', f);
       fd.append('projectId', id);
       await apiUpload('/api/uploads', fd);
+      toast.success('File uploaded');
       load();
+    } catch (e) {
+      toast.errorFrom(e);
     } finally { setUploading(false); }
   };
 
@@ -97,7 +103,7 @@ function ProjectInner({ id }: { id: string }) {
                           variant="link"
                           size="xs"
                           className="ml-2 h-auto p-0 text-brand-600"
-                          onClick={() => patch({ togglePinNoteId: n.id })}
+                          onClick={() => patch({ togglePinNoteId: n.id }, n.pinned ? 'Note unpinned' : 'Note pinned')}
                         >
                           {n.pinned ? 'unpin' : 'pin'}
                         </Button>
@@ -108,7 +114,7 @@ function ProjectInner({ id }: { id: string }) {
               </div>
               <div className="flex gap-2">
                 <Input className="flex-1" placeholder="Add a note for the team…" value={note} onChange={(e) => setNote(e.target.value)} />
-                <Button disabled={!note.trim()} onClick={() => { patch({ note }); setNote(''); }}>Add</Button>
+                <Button disabled={!note.trim()} onClick={() => { patch({ note }, 'Note added'); setNote(''); }}>Add</Button>
               </div>
             </CardContent>
           </Card>
@@ -126,7 +132,7 @@ function ProjectInner({ id }: { id: string }) {
                         variant="ghost"
                         size="xs"
                         className="text-red-400 hover:text-red-600"
-                        onClick={() => patch({ removeMemberId: m.id })}
+                        onClick={() => patch({ removeMemberId: m.id }, 'Member removed')}
                       >
                         Remove
                       </Button>
@@ -142,7 +148,7 @@ function ProjectInner({ id }: { id: string }) {
                       <option key={u.id} value={u.id}>{u.name}</option>
                     ))}
                   </NativeSelect>
-                  <Button disabled={!addUserId} onClick={() => { patch({ addMemberId: Number(addUserId) }); setAddUserId(''); }}>Add</Button>
+                  <Button disabled={!addUserId} onClick={() => { patch({ addMemberId: Number(addUserId) }, 'Member added'); setAddUserId(''); }}>Add</Button>
                 </div>
               )}
             </CardContent>
