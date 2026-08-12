@@ -26,6 +26,7 @@ const Task = sequelize.define(
     done_at: { type: DataTypes.BIGINT, allowNull: true },
     cancelled_at: { type: DataTypes.BIGINT, allowNull: true },
     cancel_reason: { type: DataTypes.TEXT, allowNull: true },
+    discuss_reason: { type: DataTypes.TEXT, allowNull: true },
     blocked_reason: { type: DataTypes.TEXT, allowNull: true },
     sla_deadline_at: { type: DataTypes.BIGINT, allowNull: true },
     sla_breached_at: { type: DataTypes.BIGINT, allowNull: true },

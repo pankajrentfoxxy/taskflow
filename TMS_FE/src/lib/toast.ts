@@ -22,7 +22,9 @@ export const toast = {
 };
 
 export const TASK_ACTION_TOAST: Record<string, string> = {
-  acknowledge: 'Task acknowledged',
+  acknowledge: 'Task accepted',
+  discuss: 'Marked for discussion',
+  reject: 'Task rejected',
   start: 'Task started',
   done: 'Task marked done',
   block: 'Task marked blocked',

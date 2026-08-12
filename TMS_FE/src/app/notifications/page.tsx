@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 const ICONS: Record<string, string> = {
-  ASSIGNED: '📥', SLA_WARNING: '⏰', SLA_BREACH: '🚨', ESCALATED: '🔺', EXPLANATION: '📝',
+  ASSIGNED: '📥', DISCUSS: '💬', REJECTED: '✖️', SLA_WARNING: '⏰', SLA_BREACH: '🚨', ESCALATED: '🔺', EXPLANATION: '📝',
   REVIEW: '⚖️', DONE: '✅', SUBTASK_DONE: '☑️', COMMENT: '💬', ETA_CHANGED: '🕒',
   DUE_CHANGED: '📅', DUE_SOON: '⏳', REOPENED: '↩️', CANCELLED: '🚫', BLOCKED: '🚧',
   ACKNOWLEDGED: '👍', PROJECT: '📁', SUBTASK: '➕',

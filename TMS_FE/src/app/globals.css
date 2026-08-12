@@ -74,6 +74,12 @@
   --color-status-escalated-bg: var(--status-escalated-bg);
   --color-status-escalated-fg: var(--status-escalated-fg);
   --color-status-escalated-dot: var(--status-escalated-dot);
+  --color-status-discuss-bg: var(--status-discuss-bg);
+  --color-status-discuss-fg: var(--status-discuss-fg);
+  --color-status-discuss-dot: var(--status-discuss-dot);
+  --color-status-rejected-bg: var(--status-rejected-bg);
+  --color-status-rejected-fg: var(--status-rejected-fg);
+  --color-status-rejected-dot: var(--status-rejected-dot);
   --color-status-sla-bg: var(--status-sla-bg);
   --color-status-sla-fg: var(--status-sla-fg);
 }
@@ -130,6 +136,12 @@
   --status-escalated-bg: #fef2f2;
   --status-escalated-fg: #b91c1c;
   --status-escalated-dot: #dc2626;
+  --status-discuss-bg: #f5f3ff;
+  --status-discuss-fg: #6d28d9;
+  --status-discuss-dot: #7c3aed;
+  --status-rejected-bg: #fff1f2;
+  --status-rejected-fg: #be123c;
+  --status-rejected-dot: #e11d48;
   --status-sla-bg: #dc2626;
   --status-sla-fg: #ffffff;
 }
@@ -185,6 +197,12 @@
   --status-escalated-bg: color-mix(in oklab, #dc2626 18%, transparent);
   --status-escalated-fg: #fca5a5;
   --status-escalated-dot: #f87171;
+  --status-discuss-bg: color-mix(in oklab, #7c3aed 18%, transparent);
+  --status-discuss-fg: #c4b5fd;
+  --status-discuss-dot: #a78bfa;
+  --status-rejected-bg: color-mix(in oklab, #e11d48 18%, transparent);
+  --status-rejected-fg: #fda4af;
+  --status-rejected-dot: #fb7185;
   --status-sla-bg: #ef4444;
   --status-sla-fg: #ffffff;
 }
@@ -240,6 +258,14 @@
     @apply bg-status-escalated-bg text-status-escalated-fg;
   }
 
+  .status-discuss {
+    @apply bg-status-discuss-bg text-status-discuss-fg;
+  }
+
+  .status-rejected {
+    @apply bg-status-rejected-bg text-status-rejected-fg;
+  }
+
   .status-fallback {
     @apply bg-status-cancelled-bg text-status-cancelled-fg;
   }
@@ -270,5 +296,13 @@
 
   .status-dot-escalated {
     @apply bg-status-escalated-dot;
+  }
+
+  .status-dot-discuss {
+    @apply bg-status-discuss-dot;
+  }
+
+  .status-dot-rejected {
+    @apply bg-status-rejected-dot;
   }
 }

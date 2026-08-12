@@ -14,7 +14,7 @@ import { useMe } from '@/components/Shell';
 import { api, toast } from '@/lib/util';
 
 export function canCreateSubtask(task: { parent_id?: number | null; status?: string }) {
-  return !task.parent_id && !['DONE', 'CANCELLED'].includes(task.status || '');
+  return !task.parent_id && !['DONE', 'CANCELLED', 'REJECTED'].includes(task.status || '');
 }
 
 export function canDeleteTask(role?: string) {

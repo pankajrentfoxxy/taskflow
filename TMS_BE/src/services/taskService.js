@@ -129,7 +129,7 @@ export const listTasks = async (user, { filter = "mine", status, q, projectId, a
      LEFT JOIN teams tm ON tm.id = t.assigned_team_id
      LEFT JOIN projects p ON p.id = t.project_id
      WHERE ${where}
-     ORDER BY CASE t.status WHEN 'ESCALATED' THEN 0 WHEN 'ASSIGNED' THEN 1 ELSE 2 END, t.due_at ASC
+     ORDER BY CASE t.status WHEN 'ESCALATED' THEN 0 WHEN 'ASSIGNED' THEN 1 WHEN 'DISCUSS' THEN 2 ELSE 3 END, t.due_at ASC
      LIMIT 300`,
     { replacements: repl, type: QueryTypes.SELECT }
   );
@@ -236,7 +236,7 @@ export const createTask = async (user, body) => {
       [Number(assigneeId)],
       "ASSIGNED",
       label,
-      `Assigned by ${user.name}. Acknowledge within 30 working minutes.`,
+      `Assigned by ${user.name}. Accept within 30 working minutes.`,
       created[0],
       user.id
     );
@@ -323,25 +323,34 @@ export const getTaskDetail = async (user, taskId) => {
   const isCreator = task.creator_id === user.id;
   const isMgr = await isManagerOf(user, task.assignee_id);
   const expPending = await explanationPending(task);
-  const openSubs = subtasks.filter((s) => !["DONE", "CANCELLED"].includes(s.status)).length;
+  const openSubs = subtasks.filter((s) => !["DONE", "CANCELLED", "REJECTED"].includes(s.status)).length;
+  const claimable = task.assigned_team_id && task.assigned_team_id === user.team_id;
+  const canRespond = isAssignee || claimable || isBoss;
+  const awaitingAccept = ["ASSIGNED", "DISCUSS"].includes(task.status);
+  const isEscalated = task.status === "ESCALATED";
 
   const permissions = {
     isAssignee,
-    canAcknowledge:
-      task.status === "ASSIGNED" &&
-      (isAssignee || (task.assigned_team_id && task.assigned_team_id === user.team_id)),
+    canAcknowledge: awaitingAccept && canRespond && !expPending,
+    canDiscuss: task.status === "ASSIGNED" && canRespond && !expPending,
+    canReject: awaitingAccept && canRespond && !expPending,
     canStart: task.status === "ACKNOWLEDGED" && isAssignee && !expPending,
     canDone:
-      ["ACKNOWLEDGED", "IN_PROGRESS", "ESCALATED"].includes(task.status) &&
+      !isEscalated &&
+      ["ACKNOWLEDGED", "IN_PROGRESS"].includes(task.status) &&
       (isAssignee || isBoss || isCreator) &&
       !expPending,
-    canEditEta:
-      (await canEditEta(user, task)) && !["DONE", "CANCELLED"].includes(task.status) && !expPending,
+    canEditEta: isEscalated
+      ? isBoss
+      : (await canEditEta(user, task)) &&
+        !["DONE", "CANCELLED", "REJECTED"].includes(task.status) &&
+        !expPending,
     canReopen:
       task.status === "DONE" &&
       (isCreator || isBoss || isMgr) &&
       now() - (task.done_at || 0) < 7 * 24 * 3600 * 1000,
-    canCancel: !["DONE", "CANCELLED"].includes(task.status) && (isCreator || isBoss),
+    canCancel:
+      !isEscalated && !["DONE", "CANCELLED", "REJECTED"].includes(task.status) && (isCreator || isBoss),
     canBlock: ["ACKNOWLEDGED", "IN_PROGRESS"].includes(task.status) && isAssignee,
     mustExplain: expPending && isAssignee,
     canReview:
@@ -349,7 +358,7 @@ export const getTaskDetail = async (user, taskId) => {
       escalation?.explanation &&
       escalation?.review_status === "PENDING" &&
       (await canReviewEscalation(user, task)),
-    canAddSubtask: !["DONE", "CANCELLED"].includes(task.status) && !task.parent_id,
+    canAddSubtask: !["DONE", "CANCELLED", "REJECTED"].includes(task.status) && !task.parent_id,
     canDelete: isBoss,
     canViewActivity: isBoss,
     openSubtasks: openSubs,
@@ -357,6 +366,39 @@ export const getTaskDetail = async (user, taskId) => {
 
   return { task, subtasks, comments, activity, attachments, escalation: escalation ?? null, batchTasks, permissions };
 };
+
+async function maybeAutoCompleteParent(parentId, actorId, lastSubtaskId) {
+  const parent = await Task.findByPk(parentId);
+  if (!parent || parent.deleted || ["DONE", "CANCELLED"].includes(parent.status)) return;
+
+  const [counts] = await sequelize.query(
+    `SELECT COUNT(*)::int AS total,
+            SUM(CASE WHEN status = 'DONE' THEN 1 ELSE 0 END)::int AS done
+     FROM tasks WHERE parent_id = :pid AND deleted = false`,
+    { replacements: { pid: parentId }, type: QueryTypes.SELECT }
+  );
+
+  if (!counts?.total || counts.done !== counts.total) return;
+
+  const t = now();
+  await Task.update(
+    { status: "DONE", done_at: t, blocked_reason: null, updated_at: t },
+    { where: { id: parentId } }
+  );
+  await logActivity(parentId, actorId, "DONE", {
+    autoFromSubtasks: true,
+    subtaskId: lastSubtaskId,
+    subtaskTotal: counts.total,
+  });
+  await notify(
+    [parent.creator_id, parent.assignee_id, await managerOf(parent.assignee_id)],
+    "DONE",
+    `Done: "${parent.title}"`,
+    "All subtasks are complete.",
+    parent.id,
+    actorId
+  );
+}
 
 export const patchTask = async (user, taskId, body) => {
   const task = await loadTask(taskId);
@@ -382,40 +424,98 @@ export const patchTask = async (user, taskId, body) => {
 
   switch (action) {
     case "acknowledge": {
-      if (task.status !== "ASSIGNED") throw new ApiError(httpStatus.BAD_REQUEST, "Task is not awaiting acknowledgment");
+      if (!["ASSIGNED", "DISCUSS"].includes(task.status)) {
+        throw new ApiError(httpStatus.BAD_REQUEST, "Task is not awaiting acceptance");
+      }
       const claimable = task.assigned_team_id && task.assigned_team_id === user.team_id;
       if (!isAssignee && !claimable && !isBoss) {
-        throw new ApiError(httpStatus.FORBIDDEN, "Only the assignee can acknowledge");
+        throw new ApiError(httpStatus.FORBIDDEN, "Only the assignee can accept this task");
       }
-      if (!body.etaAt) throw new ApiError(httpStatus.BAD_REQUEST, "ETA is mandatory when acknowledging");
+      if (!body.etaAt) throw new ApiError(httpStatus.BAD_REQUEST, "ETA is mandatory when accepting");
 
       await sequelize.query(
         `UPDATE tasks SET status = 'ACKNOWLEDGED', acknowledged_at = :t, eta_at = :etaAt,
          assignee_id = COALESCE(assignee_id, :uid),
          assigned_team_id = CASE WHEN assignee_id IS NULL THEN NULL ELSE assigned_team_id END,
+         discuss_reason = NULL,
          updated_at = :t2 WHERE id = :id`,
         { replacements: { t, etaAt: body.etaAt, uid: user.id, t2: t, id: task.id } }
       );
       await logActivity(task.id, user.id, "ACKNOWLEDGED", { etaAt: body.etaAt });
-      await notify([task.creator_id], "ACKNOWLEDGED", `${user.name} acknowledged "${task.title}"`, "ETA set.", task.id, user.id);
+      await notify([task.creator_id], "ACKNOWLEDGED", `${user.name} accepted "${task.title}"`, "ETA set.", task.id, user.id);
+      break;
+    }
+    case "discuss": {
+      if (task.status !== "ASSIGNED") {
+        throw new ApiError(httpStatus.BAD_REQUEST, "Only tasks awaiting acceptance can be marked for discussion");
+      }
+      const claimable = task.assigned_team_id && task.assigned_team_id === user.team_id;
+      if (!isAssignee && !claimable && !isBoss) {
+        throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
+      }
+      const note = String(body.reason || body.note || "").trim();
+      await Task.update(
+        { status: "DISCUSS", discuss_reason: note || null, updated_at: t },
+        { where: { id: task.id } }
+      );
+      await logActivity(task.id, user.id, "DISCUSS", { reason: note || null });
+      await notify(
+        [task.creator_id, await managerOf(task.assignee_id)],
+        "DISCUSS",
+        `Discuss: "${task.title}"`,
+        note || `${user.name} requested a discussion before accepting.`,
+        task.id,
+        user.id
+      );
+      break;
+    }
+    case "reject": {
+      if (!["ASSIGNED", "DISCUSS"].includes(task.status)) {
+        throw new ApiError(httpStatus.BAD_REQUEST, "This task cannot be rejected in its current status");
+      }
+      const claimable = task.assigned_team_id && task.assigned_team_id === user.team_id;
+      if (!isAssignee && !claimable && !isBoss) {
+        throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
+      }
+      if (!body.reason) throw new ApiError(httpStatus.BAD_REQUEST, "A reason is required to reject");
+      await Task.update(
+        {
+          status: "REJECTED",
+          cancelled_at: t,
+          cancel_reason: body.reason,
+          discuss_reason: null,
+          blocked_reason: null,
+          updated_at: t,
+        },
+        { where: { id: task.id } }
+      );
+      await logActivity(task.id, user.id, "REJECTED", { reason: body.reason });
+      await notify(
+        [task.creator_id, await managerOf(task.assignee_id)],
+        "REJECTED",
+        `Rejected: "${task.title}"`,
+        body.reason,
+        task.id,
+        user.id
+      );
       break;
     }
     case "start": {
-      if (task.status !== "ACKNOWLEDGED") throw new ApiError(httpStatus.BAD_REQUEST, "Acknowledge first");
+      if (task.status !== "ACKNOWLEDGED") throw new ApiError(httpStatus.BAD_REQUEST, "Accept the task first");
       if (!isAssignee && !isBoss) throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
       await Task.update({ status: "IN_PROGRESS", started_at: t, updated_at: t }, { where: { id: task.id } });
       await logActivity(task.id, user.id, "STARTED", {});
       break;
     }
     case "done": {
-      if (["DONE", "CANCELLED"].includes(task.status)) {
+      if (["DONE", "CANCELLED", "REJECTED"].includes(task.status)) {
         throw new ApiError(httpStatus.BAD_REQUEST, "Task already closed");
       }
       if (!isAssignee && !isCreator && !isBoss && !(await isManagerOf(user, task.assignee_id))) {
         throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
       }
       const [countRow] = await sequelize.query(
-        "SELECT COUNT(*)::int AS c FROM tasks WHERE parent_id = :id AND status NOT IN ('DONE','CANCELLED') AND deleted = false",
+        "SELECT COUNT(*)::int AS c FROM tasks WHERE parent_id = :id AND status NOT IN ('DONE','CANCELLED','REJECTED') AND deleted = false",
         { replacements: { id: task.id }, type: QueryTypes.SELECT }
       );
       const openSubs = countRow?.c ?? 0;
@@ -464,11 +564,16 @@ export const patchTask = async (user, taskId, body) => {
           done: counts.done,
           total: counts.total,
         });
+        await maybeAutoCompleteParent(task.parent_id, user.id, task.id);
       }
       break;
     }
     case "update_eta": {
-      if (!(await canEditEta(user, task))) {
+      if (task.status === "ESCALATED") {
+        if (!["ADMIN", "CEO"].includes(user.role)) {
+          throw new ApiError(httpStatus.FORBIDDEN, "Only Admin or CEO can update ETA on escalated tasks");
+        }
+      } else if (!(await canEditEta(user, task))) {
         throw new ApiError(httpStatus.FORBIDDEN, "You cannot edit the ETA of this task");
       }
       if (!body.etaAt) throw new ApiError(httpStatus.BAD_REQUEST, "etaAt required");

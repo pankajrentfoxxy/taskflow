@@ -117,6 +117,10 @@ export default function TaskStatusModal({
   };
 
   const submitReason = () => {
+    if (pendingAction === 'discuss') {
+      act({ action: 'discuss', reason: reasonText.trim() || undefined });
+      return;
+    }
     if (!reasonText.trim()) {
       const msg = 'A reason is required';
       setErr(msg);
@@ -149,19 +153,47 @@ export default function TaskStatusModal({
   const status = t?.status || task?.status || '';
   const title = t?.title || task?.title || 'Task';
 
+  const isEscalated = status === 'ESCALATED';
   const actionButtons: { label: string; onClick: () => void; variant?: 'default' | 'outline'; className?: string }[] = [];
 
   if (perm?.mustExplain) {
     // Escalation blocks other actions until explanation is submitted on detail page.
+  } else if (perm && isEscalated) {
+    if (perm.canEditEta) {
+      actionButtons.push({
+        label: 'Update ETA',
+        variant: 'outline',
+        onClick: () => {
+          setEta(t?.eta_at ? toLocalInput(t.eta_at) : '');
+          setErr('');
+          setView('eta');
+        },
+      });
+    }
   } else if (perm) {
     if (perm.canAcknowledge) {
       actionButtons.push({
-        label: 'Acknowledge + ETA',
+        label: 'Accept + ETA',
         onClick: () => {
           setEta('');
           setErr('');
           setView('ack');
         },
+      });
+    }
+    if (perm.canDiscuss) {
+      actionButtons.push({
+        label: 'Discuss',
+        variant: 'outline',
+        onClick: () => openReason('discuss'),
+      });
+    }
+    if (perm.canReject) {
+      actionButtons.push({
+        label: 'Reject',
+        variant: 'outline',
+        className: 'text-red-600',
+        onClick: () => openReason('reject'),
       });
     }
     if (perm.canStart) {
@@ -221,7 +253,11 @@ export default function TaskStatusModal({
       ? 'What is blocking you?'
       : pendingAction === 'reopen'
         ? 'Why reopen this task?'
-        : 'Why cancel this task?';
+        : pendingAction === 'reject'
+          ? 'Why reject this task?'
+          : pendingAction === 'discuss'
+            ? 'What should be discussed? (optional)'
+            : 'Why cancel this task?';
 
   return (
     <Modal open={open} onClose={onClose} title="Change status">
@@ -276,7 +312,7 @@ export default function TaskStatusModal({
 
         {!loading && view === 'ack' && (
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">An ETA is mandatory when acknowledging.</p>
+            <p className="text-sm text-muted-foreground">An ETA is mandatory when accepting this task.</p>
             <div className="flex flex-wrap gap-1.5">
               <Button type="button" variant="outline" size="sm" onClick={() => quickEta(0, true)}>
                 Today EOD
@@ -294,7 +330,7 @@ export default function TaskStatusModal({
                 Back
               </Button>
               <Button type="button" className="flex-1" disabled={busy} onClick={submitAck}>
-                {busy ? 'Saving…' : 'Acknowledge'}
+                {busy ? 'Saving…' : 'Accept'}
               </Button>
             </div>
           </div>

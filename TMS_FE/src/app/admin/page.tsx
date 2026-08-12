@@ -147,7 +147,7 @@ function AdminInner() {
       toast.error(msg);
       return;
     }
-    if (!confirm(`Delete user "${u.name}"? Users with tasks will be deactivated instead.`)) return;
+    if (!confirm(`Permanently delete "${u.name}" and all of their tasks, comments, notifications, projects, and uploads? This cannot be undone.`)) return;
     setErr('');
     try {
       await api(`/api/users?id=${u.id}`, { method: 'DELETE' });

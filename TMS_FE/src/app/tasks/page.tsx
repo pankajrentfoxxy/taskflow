@@ -15,22 +15,44 @@ import { cn } from '@/lib/utils';
 
 function TasksInner() {
   const me = useMe();
+  const canFilter = me && ['ADMIN', 'CEO'].includes(me.role);
   const params = useSearchParams();
   const [filter, setFilter] = useState('mine');
   const [status, setStatus] = useState('');
   const [q, setQ] = useState('');
+  const [users, setUsers] = useState<any[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
+  const [filterAssignee, setFilterAssignee] = useState('');
   const [tasks, setTasks] = useState<any[]>([]);
   const [composerOpen, setComposerOpen] = useState(params.get('new') === '1');
   const [commentsTask, setCommentsTask] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  useEffect(() => {
+    if (!canFilter) return;
+    api('/api/users').then((d) => setUsers(d.users.filter((u: any) => u.is_active)));
+    api('/api/teams').then((d) => setTeams(d.teams));
+  }, [canFilter]);
+
   const load = useCallback(() => {
     setLoading(true);
-    const sp = new URLSearchParams({ filter });
+    const sp = new URLSearchParams();
+    if (canFilter && filterAssignee) {
+      sp.set('filter', 'all');
+      const [kind, idStr] = filterAssignee.split(':');
+      if (kind === 'u') sp.set('assigneeId', idStr);
+      else if (kind === 't') sp.set('teamId', idStr);
+    } else {
+      sp.set('filter', filter);
+    }
     if (status) sp.set('status', status);
     if (q) sp.set('q', q);
-    api(`/api/tasks?${sp}`).then((d) => { setTasks(d.tasks); setLoading(false); });
-  }, [filter, status, q]);
+    api(`/api/tasks?${sp}`).then((d) => {
+      const rows = status ? d.tasks : d.tasks.filter((t: any) => t.status !== 'DONE');
+      setTasks(rows);
+      setLoading(false);
+    });
+  }, [filter, status, q, canFilter, filterAssignee]);
   useEffect(() => { load(); }, [load]);
 
   const segments = [
@@ -81,13 +103,42 @@ function TasksInner() {
           value={status}
           onChange={(e) => setStatus(e.target.value)}
         >
-          <option value="">All statuses</option>
+          <option value="">Open tasks</option>
           {Object.entries(STATUS_LABEL).map(([k, v]) => (
             <option key={k} value={k}>
               {v}
             </option>
           ))}
         </NativeSelect>
+        {canFilter && (
+          <>
+            <NativeSelect
+              className="h-8 w-full md:min-w-[200px] md:max-w-[280px] md:shrink-0 text-sm"
+              value={filterAssignee}
+              onChange={(e) => setFilterAssignee(e.target.value)}
+              aria-label="Filter by user or team"
+            >
+              <option value="">All users / teams</option>
+              <optgroup label="Users">
+                {users.map((u) => (
+                  <option key={u.id} value={`u:${u.id}`}>
+                    {u.name}{u.team_name ? ` (${u.team_name})` : ''}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Teams">
+                {teams.map((t) => (
+                  <option key={t.id} value={`t:${t.id}`}>Team: {t.name}</option>
+                ))}
+              </optgroup>
+            </NativeSelect>
+            {filterAssignee && (
+              <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0" onClick={() => setFilterAssignee('')}>
+                Clear user filter
+              </Button>
+            )}
+          </>
+        )}
       </div>
 
       {loading ? (

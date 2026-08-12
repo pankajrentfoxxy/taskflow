@@ -25,7 +25,7 @@ export function toDate(value: unknown): Date | null {
 
 export function isTaskOverdue(dueAt: unknown, status: string): boolean {
   const ts = parseTimestamp(dueAt);
-  return ts != null && ts < Date.now() && !['DONE', 'CANCELLED'].includes(status);
+  return ts != null && ts < Date.now() && !['DONE', 'CANCELLED', 'REJECTED'].includes(status);
 }
 
 export function isDueInWindow(dueAt: unknown, startMs: number, endMs: number): boolean {

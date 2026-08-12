@@ -8,7 +8,7 @@ import AckModal from '@/components/AckModal';
 import CommentsPanel from '@/components/CommentsPanel';
 import AuthImage from '@/components/AuthImage';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { api, fmtDateTime, timeAgo, countdown, toLocalInput, fromLocalInput, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, SLA_BREACH_BADGE, PRIORITY_COLOR, uploadUrl, isTaskOverdue, TASK_ACTION_TOAST, toast } from '@/lib/util';
+import { api, fmtDateTime, timeAgo, countdown, toLocalInput, fromLocalInput, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, SLA_BREACH_BADGE, PRIORITY_COLOR, uploadUrl, isTaskOverdue, TASK_ACTION_TOAST, activityTypeLabel, toast } from '@/lib/util';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -86,7 +86,16 @@ function TaskDetailInner({ id }: { id: string }) {
 
   const submitReason = () => {
     if (!reasonModal) return;
-    act({ action: reasonModal.action, reason: reasonText });
+    if (reasonModal.action === 'discuss') {
+      act({ action: 'discuss', reason: reasonText.trim() || undefined });
+    } else {
+      if (!reasonText.trim()) {
+        setErr('A reason is required');
+        toast.error('A reason is required');
+        return;
+      }
+      act({ action: reasonModal.action, reason: reasonText.trim() });
+    }
     setReasonModal(null); setReasonText('');
   };
 
@@ -146,6 +155,12 @@ function TaskDetailInner({ id }: { id: string }) {
                 {task.blocked_reason && (
                   <div className="mt-2 rounded-lg bg-purple-50 px-3 py-2 text-sm text-purple-800">🚧 Blocked: {task.blocked_reason}</div>
                 )}
+                {task.status === 'REJECTED' && task.cancel_reason && (
+                  <div className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800">Rejected: {task.cancel_reason}</div>
+                )}
+                {task.status === 'DISCUSS' && task.discuss_reason && (
+                  <div className="mt-2 rounded-lg bg-violet-50 px-3 py-2 text-sm text-violet-800">Discuss: {task.discuss_reason}</div>
+                )}
               </div>
 
               <div className="rounded-lg border p-3">
@@ -173,7 +188,7 @@ function TaskDetailInner({ id }: { id: string }) {
                   );
                 })}
                 {task.type_name && <Row label="Task type">{task.type_name}</Row>}
-                {task.acknowledged_at && <Row label="Acknowledged">{fmtDateTime(task.acknowledged_at)}</Row>}
+                {task.acknowledged_at && <Row label="Accepted">{fmtDateTime(task.acknowledged_at)}</Row>}
                 {task.done_at && <Row label="Done at">{fmtDateTime(task.done_at)}</Row>}
                 {task.project_name && (
                   <Row label="Project"><Link className="underline" href={`/projects/${task.project_id}`}>{task.project_name}</Link></Row>
@@ -224,7 +239,17 @@ function TaskDetailInner({ id }: { id: string }) {
               )}
 
               <div className="flex flex-wrap gap-2">
-                {perm.canAcknowledge && <Button onClick={() => setAckOpen(true)}>✓ Acknowledge + ETA</Button>}
+                {perm.canAcknowledge && <Button onClick={() => setAckOpen(true)}>✓ Accept + ETA</Button>}
+                {perm.canDiscuss && (
+                  <Button variant="outline" onClick={() => setReasonModal({ action: 'discuss', title: 'What should be discussed? (optional)' })}>
+                    Discuss
+                  </Button>
+                )}
+                {perm.canReject && (
+                  <Button variant="outline" className="text-red-600" onClick={() => setReasonModal({ action: 'reject', title: 'Why reject this task?' })}>
+                    Reject
+                  </Button>
+                )}
                 {perm.canStart && <Button onClick={() => act({ action: 'start' })}>▶ Start</Button>}
                 {perm.canDone && (
                   <Button className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => act({ action: 'done' })}>
@@ -319,12 +344,17 @@ function TaskDetailInner({ id }: { id: string }) {
                   {activity.length === 0 ? (
                     <div className="py-6 text-center text-sm text-muted-foreground">No activity yet.</div>
                   ) : (
-                    activity.map((a: any) => (
-                      <div key={a.id} className="rounded-lg border bg-muted/20 px-3 py-2 text-xs">
-                        <span className="font-semibold text-foreground">{a.actor_name || 'System'}</span>
-                        <span className="text-muted-foreground"> · {a.type.toLowerCase().replace(/_/g, ' ')} · {timeAgo(a.created_at)}</span>
-                      </div>
-                    ))
+                    activity.map((a: any) => {
+                      const meta = JSON.parse(a.meta || '{}');
+                      const detail = meta.reason || meta.note || meta.message || '';
+                      return (
+                        <div key={a.id} className="rounded-lg border bg-muted/20 px-3 py-2 text-xs">
+                          <span className="font-semibold text-foreground">{a.actor_name || 'System'}</span>
+                          <span className="text-muted-foreground"> · {activityTypeLabel(a.type)} · {timeAgo(a.created_at)}</span>
+                          {detail && <p className="mt-1 whitespace-pre-wrap text-muted-foreground">{detail}</p>}
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               </div>

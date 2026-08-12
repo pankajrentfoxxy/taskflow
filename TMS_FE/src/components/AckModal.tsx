@@ -27,16 +27,16 @@ export default function AckModal({
     setBusy(true); setErr('');
     try {
       await api(`/api/tasks/${task.id}`, { method: 'PATCH', body: JSON.stringify({ action: 'acknowledge', etaAt }) });
-      toast.success('Task acknowledged');
+      toast.success('Task accepted');
       onDone(); onClose();
     } catch (e: any) { setErr(e.message); toast.errorFrom(e); } finally { setBusy(false); }
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Acknowledge & set ETA">
+    <Modal open={open} onClose={onClose} title="Accept & set ETA">
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
-          You are acknowledging <strong className="text-foreground">&quot;{task?.title}&quot;</strong>. An ETA is mandatory.
+          You are accepting <strong className="text-foreground">&quot;{task?.title}&quot;</strong>. An ETA is mandatory.
         </p>
         <div className="flex flex-wrap gap-1.5">
           <Button type="button" variant="outline" size="sm" onClick={() => quick(0, true)}>Today EOD</Button>
@@ -55,7 +55,7 @@ export default function AckModal({
           </Alert>
         )}
         <Button className="w-full" size="lg" disabled={busy} onClick={submit}>
-          {busy ? 'Saving…' : 'Acknowledge with this ETA'}
+          {busy ? 'Saving…' : 'Accept with this ETA'}
         </Button>
       </div>
     </Modal>

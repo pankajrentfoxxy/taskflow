@@ -96,20 +96,29 @@ export function fromLocalInput(v: string): number | null {
 }
 
 export const STATUS_LABEL: Record<string, string> = {
-  ASSIGNED: 'Awaiting response',
-  ACKNOWLEDGED: 'Acknowledged',
+  ASSIGNED: 'Accept response',
+  DISCUSS: 'Discuss',
+  ACKNOWLEDGED: 'Accepted',
   IN_PROGRESS: 'In progress',
   DONE: 'Done',
   CANCELLED: 'Cancelled',
+  REJECTED: 'Rejected',
   ESCALATED: 'Escalated',
 };
 
+export function activityTypeLabel(type: string): string {
+  if (type === 'ACKNOWLEDGED') return 'accepted';
+  return type.toLowerCase().replace(/_/g, ' ');
+}
+
 export const STATUS_COLOR: Record<string, string> = {
   ASSIGNED: 'status-badge status-assigned',
+  DISCUSS: 'status-badge status-discuss',
   ACKNOWLEDGED: 'status-badge status-acknowledged',
   IN_PROGRESS: 'status-badge status-progress',
   DONE: 'status-badge status-done',
   CANCELLED: 'status-badge status-cancelled',
+  REJECTED: 'status-badge status-rejected',
   ESCALATED: 'status-badge status-escalated',
 };
 
@@ -117,10 +126,12 @@ export const STATUS_COLOR_FALLBACK = 'status-badge status-fallback';
 
 export const STATUS_DOT: Record<string, string> = {
   ASSIGNED: 'status-dot-assigned',
+  DISCUSS: 'status-dot-discuss',
   ACKNOWLEDGED: 'status-dot-acknowledged',
   IN_PROGRESS: 'status-dot-progress',
   DONE: 'status-dot-done',
   CANCELLED: 'status-dot-cancelled',
+  REJECTED: 'status-dot-rejected',
   ESCALATED: 'status-dot-escalated',
 };
 

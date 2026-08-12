@@ -99,6 +99,9 @@ const syncModels = async () => {
   await sequelize.query(
     "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS is_visible BOOLEAN NOT NULL DEFAULT true"
   );
+  await sequelize.query(
+    "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS discuss_reason TEXT"
+  );
 };
 
 export const initApp = async () => {

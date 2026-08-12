@@ -6,7 +6,7 @@ import TaskTable from '@/components/TaskTable';
 import CommentsModal from '@/components/CommentsModal';
 import AuthImage from '@/components/AuthImage';
 import Composer from '@/components/Composer';
-import { api, apiUpload, timeAgo, fmtDate, uploadUrl, toast } from '@/lib/util';
+import { api, apiUpload, timeAgo, fmtDate, uploadUrl, activityTypeLabel, toast } from '@/lib/util';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -203,7 +203,7 @@ function ProjectInner({ id }: { id: string }) {
               {activity.map((a: any) => (
                 <div key={a.id} className="border-b border-border/50 pb-2 text-xs text-muted-foreground last:border-0">
                   <span className="font-semibold text-foreground">{a.actor_name || 'System'}</span>
-                  {' '}{a.type.toLowerCase().replace(/_/g, ' ')}
+                  {' '}{activityTypeLabel(a.type)}
                   {a.task_title && <> on <Link href={`/tasks/${a.task_id}`} className="text-brand-600 underline">{a.task_title}</Link></>}
                   {' · '}{timeAgo(a.created_at)}
                 </div>

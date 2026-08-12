@@ -98,14 +98,14 @@ function HomeInner() {
 
   const now = Date.now();
   const dayEnd = new Date(); dayEnd.setHours(23, 59, 59, 999);
-  const needsAck = mine.filter((t) => t.status === 'ASSIGNED');
+  const needsAck = mine.filter((t) => ['ASSIGNED', 'DISCUSS'].includes(t.status));
   const escalated = mine.filter((t) => t.status === 'ESCALATED');
   const inProgress = mine.filter((t) => ['ACKNOWLEDGED', 'IN_PROGRESS'].includes(t.status));
   const dueToday = inProgress.filter((t) => isDueInWindow(t.due_at, now, dayEnd.getTime()));
   const doneRecent = mine.filter((t) => t.status === 'DONE').slice(0, 5);
   const createdOpen = viewingFiltered
     ? []
-    : created.filter((t) => !['DONE', 'CANCELLED'].includes(t.status) && t.assignee_id !== me?.id);
+    : created.filter((t) => !['DONE', 'CANCELLED', 'REJECTED'].includes(t.status) && t.assignee_id !== me?.id);
 
   return (
     <>
@@ -161,7 +161,7 @@ function HomeInner() {
 
       {/* Focus metrics */}
       <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Metric icon={<IconZap className="h-[18px] w-[18px]" />} chip="bg-red-50 text-red-500" value={needsAck.length} label="Need response" hot={needsAck.length > 0} />
+        <Metric icon={<IconZap className="h-[18px] w-[18px]" />} chip="bg-red-50 text-red-500" value={needsAck.length} label="Accept response" hot={needsAck.length > 0} />
         <Metric icon={<IconAlert className="h-[18px] w-[18px]" />} chip="bg-orange-50 text-orange-500" value={escalated.length} label="Escalated" hot={escalated.length > 0} />
         <Metric icon={<IconActivity className="h-[18px] w-[18px]" />} chip="bg-brand-50 text-brand-500" value={inProgress.length} label="In progress" />
         <Metric icon={<IconCalendar className="h-[18px] w-[18px]" />} chip="bg-sky-50 text-sky-500" value={dueToday.length} label="Due today" />
@@ -170,12 +170,12 @@ function HomeInner() {
       {needsAck.length > 0 && (
         <Section
           accent="bg-red-50 text-red-500" icon={<IconZap className="h-3.5 w-3.5" />}
-          title={viewingFiltered ? 'Needs response · 30-min SLA' : 'Needs your response · 30-min SLA'} tasks={needsAck}
+          title={viewingFiltered ? 'Accept response · 30-min SLA' : 'Accept response · 30-min SLA'} tasks={needsAck}
           onOpenComments={setCommentsTask}
           onTaskUpdated={load}
           extra={(t) => (
             <Button size="xs" onClick={() => setAckTask(t)}>
-              Acknowledge + ETA
+              Accept + ETA
             </Button>
           )}
         />

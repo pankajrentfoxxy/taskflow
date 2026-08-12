@@ -40,7 +40,7 @@ export async function runSlaSweep(force = false) {
       [task.assignee_id, await managerOf(task.assignee_id), task.creator_id],
       "SLA_BREACH",
       `No response: "${task.title}"`,
-      "Task was not acknowledged within 30 working minutes.",
+      "Task was not accepted within 30 working minutes.",
       task.id
     );
     breached++;
@@ -66,7 +66,7 @@ export async function runSlaSweep(force = false) {
     await notify(
       [task.assignee_id],
       "SLA_WARNING",
-      `15 minutes left to acknowledge "${task.title}"`,
+      `15 minutes left to accept "${task.title}"`,
       "",
       task.id
     );
