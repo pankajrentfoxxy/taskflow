@@ -221,13 +221,13 @@ async function requestWithRefresh(path: string, opts?: RequestInit): Promise<Api
   return result;
 }
 
-export async function api(path: string, opts?: RequestInit) {
+export async function api<T = any>(path: string, opts?: RequestInit): Promise<T> {
   const { res, data } = await requestWithRefresh(path, opts);
   if (!res.ok) throwApiError(res, data);
-  return data;
+  return data as T;
 }
 
-export async function apiUpload(path: string, formData: FormData) {
+export async function apiUpload<T = any>(path: string, formData: FormData): Promise<T> {
   let result = await request(path, { method: 'POST', body: formData });
 
   if (result.res.status === 401 && shouldRetryAuth(path)) {
@@ -246,5 +246,5 @@ export async function apiUpload(path: string, formData: FormData) {
 
   const { res, data } = result;
   if (!res.ok) throwApiError(res, data);
-  return data;
+  return data as T;
 }
