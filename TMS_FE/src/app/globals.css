@@ -305,4 +305,40 @@
   .status-dot-rejected {
     @apply bg-status-rejected-dot;
   }
+
+  @keyframes task-row-attention {
+    0%,
+    100% {
+      filter: brightness(1);
+      box-shadow: inset 0 0 0 0 transparent;
+    }
+    50% {
+      filter: brightness(1.08) saturate(1.15);
+      box-shadow: inset 0 0 28px 0 color-mix(in oklab, var(--status-discuss-dot) 22%, transparent);
+    }
+  }
+
+  @keyframes task-urgent-bounce {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-4px);
+    }
+  }
+
+  .task-urgent-notice {
+    @apply inline-flex shrink-0 items-center rounded-md bg-red-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm ring-1 ring-red-400/40;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .task-row-attention {
+      animation: task-row-attention 2s ease-in-out infinite;
+    }
+
+    .task-urgent-notice {
+      animation: task-urgent-bounce 1.1s ease-in-out infinite;
+    }
+  }
 }

@@ -3,11 +3,13 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ChevronRight, Flag, MessageSquare, User } from 'lucide-react';
-import { STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, STATUS_DOT, PRIORITY_COLOR, fmtShortDate, isTaskOverdue } from '@/lib/util';
+import { STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, STATUS_DOT, PRIORITY_COLOR, fmtShortDate, isTaskOverdue, getTaskRowClasses } from '@/lib/util';
+import { useMe } from '@/components/Shell';
 import TaskCard from '@/components/TaskCard';
 import TaskStatusModal from '@/components/TaskStatusModal';
 import TaskActionsMenu from '@/components/TaskActionsMenu';
 import TaskDetailAccordion from '@/components/TaskDetailAccordion';
+import TaskAssignerUrgentBadge from '@/components/TaskAssignerUrgentBadge';
 import Composer from '@/components/Composer';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -35,6 +37,7 @@ function TaskRow({
   onCreateSubtask,
   onTaskDeleted,
   renderAction,
+  viewer,
 }: {
   task: any;
   expanded: boolean;
@@ -45,13 +48,15 @@ function TaskRow({
   onCreateSubtask: (task: any) => void;
   onTaskDeleted?: () => void;
   renderAction?: (task: any) => React.ReactNode;
+  viewer?: { id?: number; role?: string } | null;
 }) {
   const overdue = isTaskOverdue(task.due_at, task.status);
+  const rowHighlight = getTaskRowClasses(task, viewer);
   const assignee = task.assignee_name || (task.team_name ? `Team ${task.team_name}` : null);
 
   return (
     <>
-    <TableRow className={cn('group hover:bg-muted/40', expanded && 'bg-muted/20')}>
+    <TableRow className={cn('group', rowHighlight, expanded && 'ring-1 ring-inset ring-foreground/5')}>
       <TableCell className="min-w-[280px] max-w-[420px] whitespace-normal py-3 pl-3">
         <div className="flex items-center gap-2.5">
           <button
@@ -118,17 +123,20 @@ function TaskRow({
       </TableCell>
 
       <TableCell className="py-3">
-        <button
-          type="button"
-          className="rounded-md outline-none ring-offset-background transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
-          title="Change status"
-          onClick={() => onStatusClick(task)}
-        >
-          <Badge className={cn('cursor-pointer', STATUS_COLOR[task.status] || STATUS_COLOR_FALLBACK)}>
-            <span className="mr-1.5 size-1.5 rounded-full bg-current opacity-70" />
-            {STATUS_LABEL[task.status] || task.status}
-          </Badge>
-        </button>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            className="rounded-md outline-none ring-offset-background transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
+            title="Change status"
+            onClick={() => onStatusClick(task)}
+          >
+            <Badge className={cn('cursor-pointer', STATUS_COLOR[task.status] || STATUS_COLOR_FALLBACK)}>
+              <span className="mr-1.5 size-1.5 rounded-full bg-current opacity-70" />
+              {STATUS_LABEL[task.status] || task.status}
+            </Badge>
+          </button>
+          <TaskAssignerUrgentBadge task={task} viewer={viewer} />
+        </div>
       </TableCell>
 
       <TableCell className={cn('hidden py-3 md:table-cell', !renderAction && 'pr-3')}>
@@ -180,6 +188,8 @@ export default function TaskTable({
   const [statusTask, setStatusTask] = useState<any>(null);
   const [subtaskParent, setSubtaskParent] = useState<any>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const me = useMe();
+  const viewer = me ? { id: me.id, role: me.role } : null;
   const colSpan = renderAction ? 10 : 9;
 
   return (
@@ -189,6 +199,7 @@ export default function TaskTable({
           <TaskCard
             key={task.id}
             task={task}
+            viewer={viewer}
             expanded={expandedId === task.id}
             onToggleExpand={() => setExpandedId((id) => (id === task.id ? null : task.id))}
             onOpenComments={onOpenComments}
@@ -231,6 +242,7 @@ export default function TaskTable({
               onCreateSubtask={setSubtaskParent}
               onTaskDeleted={onTaskUpdated}
               renderAction={renderAction}
+              viewer={viewer}
             />
           ))}
         </TableBody>

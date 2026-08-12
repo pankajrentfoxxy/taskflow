@@ -6,7 +6,9 @@ import { Flag, MessageSquare, Plus, User } from 'lucide-react';
 import Composer from '@/components/Composer';
 import CommentsModal from '@/components/CommentsModal';
 import TaskStatusModal from '@/components/TaskStatusModal';
-import { api, fmtShortDate, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, STATUS_DOT, PRIORITY_COLOR, isTaskOverdue } from '@/lib/util';
+import TaskAssignerUrgentBadge from '@/components/TaskAssignerUrgentBadge';
+import { api, fmtShortDate, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, STATUS_DOT, PRIORITY_COLOR, isTaskOverdue, getTaskRowClasses } from '@/lib/util';
+import { useMe } from '@/components/Shell';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -63,19 +65,22 @@ function SubtaskTable({
   subtasks,
   onStatusClick,
   onOpenComments,
+  viewer,
 }: {
   subtasks: any[];
   onStatusClick: (task: any) => void;
   onOpenComments: (task: any) => void;
+  viewer?: { id?: number; role?: string } | null;
 }) {
   return (
     <>
       <div className="space-y-2 md:hidden">
         {subtasks.map((s) => {
           const overdue = isTaskOverdue(s.due_at, s.status);
+          const rowHighlight = getTaskRowClasses(s, viewer);
           const assignee = s.assignee_name || (s.team_name ? `Team ${s.team_name}` : null);
           return (
-            <div key={s.id} className="rounded-lg border bg-card p-3">
+            <div key={s.id} className={cn('rounded-lg border p-3', rowHighlight)}>
               <Link href={`/tasks/${s.id}`} className="flex items-center gap-2">
                 <span className={cn('size-2 shrink-0 rounded-full', STATUS_DOT[s.status] || 'status-dot-cancelled')} />
                 <span className={cn('min-w-0 flex-1 truncate text-sm font-medium', s.status === 'DONE' && 'text-muted-foreground line-through')}>
@@ -91,9 +96,10 @@ function SubtaskTable({
                 </div>
                 <div><span className="text-muted-foreground">ETA </span>{fmtShortDate(s.eta_at)}</div>
               </div>
-              <div className="mt-2 flex items-center justify-between gap-2">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <StatusButton task={s} onStatusClick={onStatusClick} />
-                <div className="flex items-center gap-2">
+                <TaskAssignerUrgentBadge task={s} viewer={viewer} />
+                <div className="ml-auto flex items-center gap-2">
                   <CommentsButton task={s} onOpenComments={onOpenComments} />
                   <span className={cn('text-xs capitalize', PRIORITY_COLOR[s.priority])}>{s.priority?.toLowerCase()}</span>
                 </div>
@@ -120,9 +126,10 @@ function SubtaskTable({
           <TableBody>
             {subtasks.map((s) => {
               const overdue = isTaskOverdue(s.due_at, s.status);
+              const rowHighlight = getTaskRowClasses(s, viewer);
               const assignee = s.assignee_name || (s.team_name ? `Team ${s.team_name}` : null);
               return (
-                <TableRow key={s.id} className="hover:bg-muted/40">
+                <TableRow key={s.id} className={cn('group', rowHighlight)}>
                   <TableCell className="max-w-[220px] py-2.5 pl-3">
                     <Link href={`/tasks/${s.id}`} className="flex items-center gap-2">
                       <span className={cn('size-2 shrink-0 rounded-full', STATUS_DOT[s.status] || 'status-dot-cancelled')} />
@@ -161,7 +168,10 @@ function SubtaskTable({
                     </span>
                   </TableCell>
                   <TableCell className="py-2.5">
-                    <StatusButton task={s} onStatusClick={onStatusClick} />
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <StatusButton task={s} onStatusClick={onStatusClick} />
+                      <TaskAssignerUrgentBadge task={s} viewer={viewer} />
+                    </div>
                   </TableCell>
                   <TableCell className="py-2.5 pr-3">
                     <CommentsButton task={s} onOpenComments={onOpenComments} />
@@ -189,6 +199,8 @@ export default function TaskDetailAccordion({
   const [subOpen, setSubOpen] = useState(false);
   const [statusTask, setStatusTask] = useState<any>(null);
   const [commentsTask, setCommentsTask] = useState<any>(null);
+  const me = useMe();
+  const viewer = me ? { id: me.id, role: me.role } : null;
 
   const load = useCallback(() => {
     setLoading(true);
@@ -261,7 +273,7 @@ export default function TaskDetailAccordion({
           )}
 
           {subtasks.length > 0 ? (
-            <SubtaskTable subtasks={subtasks} onStatusClick={setStatusTask} onOpenComments={setCommentsTask} />
+            <SubtaskTable subtasks={subtasks} onStatusClick={setStatusTask} onOpenComments={setCommentsTask} viewer={viewer} />
           ) : (
             <div className="rounded-lg border border-dashed bg-card px-4 py-6 text-center text-sm text-muted-foreground">
               No subtasks yet.

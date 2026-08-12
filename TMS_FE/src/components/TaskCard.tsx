@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import { ChevronRight, MessageSquare } from 'lucide-react';
-import { fmtShortDate, countdown, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, SLA_BREACH_BADGE, isTaskOverdue } from '@/lib/util';
+import { fmtShortDate, countdown, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, SLA_BREACH_BADGE, isTaskOverdue, getTaskRowClasses } from '@/lib/util';
 import { IconClock, IconFlag, IconTag } from './Icons';
 import TaskActionsMenu from './TaskActionsMenu';
 import TaskDetailAccordion from './TaskDetailAccordion';
+import TaskAssignerUrgentBadge from './TaskAssignerUrgentBadge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -23,6 +24,7 @@ export default function TaskCard({
   onCreateSubtask,
   onTaskDeleted,
   renderAction,
+  viewer,
 }: {
   task: any;
   expanded?: boolean;
@@ -32,13 +34,15 @@ export default function TaskCard({
   onCreateSubtask?: (task: any) => void;
   onTaskDeleted?: () => void;
   renderAction?: (task: any) => React.ReactNode;
+  viewer?: { id?: number; role?: string } | null;
 }) {
   const overdue = isTaskOverdue(task.due_at, task.status);
+  const rowHighlight = getTaskRowClasses(task, viewer);
   const slaRunning = task.status === 'ASSIGNED' && !task.sla_breached_at && task.sla_deadline_at;
   const who = task.assignee_name || (task.team_name ? `Team ${task.team_name}` : 'Unassigned');
 
   return (
-    <Card className={cn('gap-0 overflow-hidden py-0 transition-all hover:shadow-[0_4px_12px_rgba(16,24,40,0.07)]', expanded && 'ring-1 ring-foreground/10')}>
+    <Card className={cn('gap-0 overflow-hidden py-0 transition-all hover:shadow-[0_4px_12px_rgba(16,24,40,0.07)]', rowHighlight, expanded && 'ring-1 ring-foreground/10')}>
       <CardContent className="p-4">
         <div className="flex gap-2">
           {onToggleExpand && (
@@ -76,6 +80,7 @@ export default function TaskCard({
               {STATUS_LABEL[task.status] || task.status}
             </Badge>
           </button>
+          <TaskAssignerUrgentBadge task={task} viewer={viewer} />
           {task.sla_breached_at && task.status === 'ASSIGNED' && (
             <Badge className={SLA_BREACH_BADGE}>No response</Badge>
           )}
