@@ -57,6 +57,8 @@ router.post(
       attachmentIds: Joi.array().items(Joi.number().integer()),
       boardId: Joi.number().integer().allow(null),
       taskTypeId: Joi.number().integer().allow(null),
+      collaboratorIds: Joi.array().items(Joi.number().integer()),
+      watcherIds: Joi.array().items(Joi.number().integer()),
     }),
   }),
   tasksController.createTask
@@ -69,6 +71,11 @@ router.patch(
   validate({
     body: Joi.object({
       action: Joi.string().required(),
+      assigneeId: Joi.number().integer(),
+      userId: Joi.number().integer(),
+      role: Joi.string().valid("COLLABORATOR", "WATCHER"),
+      inputRequestNote: Joi.string(),
+      inputPayload: Joi.string(),
       etaAt: Joi.number().integer(),
       dueAt: Joi.number().integer(),
       reason: Joi.string(),

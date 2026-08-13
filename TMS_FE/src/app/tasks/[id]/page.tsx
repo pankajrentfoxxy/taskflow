@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { NativeSelect } from '@/components/ui/native-select';
 import { cn } from '@/lib/utils';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -48,11 +49,20 @@ function TaskDetailInner({ id }: { id: string }) {
   const [explanation, setExplanation] = useState('');
   const [propEta, setPropEta] = useState('');
   const [showEtaHistory, setShowEtaHistory] = useState(false);
+  const [inputRequestOpen, setInputRequestOpen] = useState(false);
+  const [inputRequestText, setInputRequestText] = useState('');
+  const [inputPayloadText, setInputPayloadText] = useState('');
+  const [addMemberUserId, setAddMemberUserId] = useState('');
+  const [addMemberRole, setAddMemberRole] = useState<'COLLABORATOR' | 'WATCHER'>('COLLABORATOR');
+  const [users, setUsers] = useState<any[]>([]);
 
   const load = useCallback(() => {
     api(`/api/tasks/${id}`).then(setData).catch((e) => setErr(e.message));
   }, [id]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    api('/api/users').then((d) => setUsers(d.users.filter((u: any) => u.is_active))).catch(() => {});
+  }, []);
 
   if (err) {
     return (
@@ -63,7 +73,7 @@ function TaskDetailInner({ id }: { id: string }) {
   }
   if (!data) return <Card className="h-60 animate-pulse" />;
 
-  const { task, subtasks, activity, attachments, escalation, batchTasks, permissions: perm } = data;
+  const { task, members = [], subtasks, activity, attachments, escalation, batchTasks, permissions: perm } = data;
 
   const act = async (body: any) => {
     setErr('');
@@ -125,6 +135,24 @@ function TaskDetailInner({ id }: { id: string }) {
     if (v) { act({ action: 'update_eta', etaAt: v }); setEtaOpen(false); }
   };
 
+  const memberUserIds = new Set(members.map((m: any) => m.user_id));
+  const addMemberCandidates = users.filter(
+    (u) => u.id !== task.assignee_id && !memberUserIds.has(u.id),
+  );
+
+  const addMember = () => {
+    if (!addMemberUserId) {
+      toast.error('Choose a user');
+      return;
+    }
+    act({ action: 'add_member', userId: Number(addMemberUserId), role: addMemberRole });
+    setAddMemberUserId('');
+  };
+
+  const removeMember = (userId: number) => {
+    act({ action: 'remove_member', userId });
+  };
+
   const etaHistory = activity.filter((a: any) => a.type === 'ETA_CHANGED');
   const overdue = isTaskOverdue(task.due_at, task.status);
   const showActivity = perm.canViewActivity;
@@ -161,10 +189,62 @@ function TaskDetailInner({ id }: { id: string }) {
                 {task.status === 'DISCUSS' && task.discuss_reason && (
                   <div className="mt-2 rounded-lg bg-violet-50 px-3 py-2 text-sm text-violet-800">Discuss: {task.discuss_reason}</div>
                 )}
+                {task.input_request_note && perm.canViewInputRequest && (
+                  <div className="mt-2 rounded-lg bg-cyan-50 px-3 py-2 text-sm text-cyan-900">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-cyan-800">Information requested</p>
+                    <p className="mt-1 whitespace-pre-wrap">{task.input_request_note}</p>
+                  </div>
+                )}
+                {task.input_payload && perm.canViewInputPayload && (
+                  <div className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Provided data</p>
+                    <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap font-mono text-xs">{task.input_payload}</pre>
+                  </div>
+                )}
               </div>
 
               <div className="rounded-lg border p-3">
-                <Row label="Assignee">{task.assignee_name || (task.team_name ? `Team: ${task.team_name}` : '—')}</Row>
+                <Row label="Assignee (primary)">{task.assignee_name || (task.team_name ? `Team: ${task.team_name}` : '—')}</Row>
+                {members.length > 0 && (
+                  <div className="border-b border-gray-50 py-2 last:border-0">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-gray-400">Additional members</div>
+                    <ul className="mt-2 space-y-2">
+                      {members.map((m: any) => (
+                        <li key={m.user_id} className="flex items-center justify-between gap-2 text-sm">
+                          <div className="min-w-0">
+                            <span className="font-medium">{m.user_name}</span>
+                            <Badge variant="secondary" className="ml-2 text-[10px] capitalize">
+                              {String(m.role).toLowerCase()}
+                            </Badge>
+                          </div>
+                          {perm.canManageMembers && (
+                            <Button type="button" variant="ghost" size="xs" className="text-red-600" onClick={() => removeMember(m.user_id)}>
+                              Remove
+                            </Button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {perm.canManageMembers && addMemberCandidates.length > 0 && (
+                  <div className="border-t border-gray-50 pt-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Add member</div>
+                    <div className="flex flex-wrap gap-2">
+                      <NativeSelect className="h-9 min-w-[160px] flex-1" value={addMemberUserId} onChange={(e) => setAddMemberUserId(e.target.value)}>
+                        <option value="">Choose user…</option>
+                        {addMemberCandidates.map((u) => (
+                          <option key={u.id} value={u.id}>{u.name}</option>
+                        ))}
+                      </NativeSelect>
+                      <NativeSelect className="h-9 w-36" value={addMemberRole} onChange={(e) => setAddMemberRole(e.target.value as 'COLLABORATOR' | 'WATCHER')}>
+                        <option value="COLLABORATOR">Collaborator</option>
+                        <option value="WATCHER">Watcher</option>
+                      </NativeSelect>
+                      <Button type="button" size="sm" variant="outline" onClick={addMember}>Add</Button>
+                    </div>
+                  </div>
+                )}
                 <Row label="Created by">{task.creator_name} · {timeAgo(task.created_at)}</Row>
                 <Row label="Due">
                   <span className={overdue ? 'font-bold text-red-600' : ''}>{fmtDateTime(task.due_at)}{overdue ? ' (overdue)' : ''}</span>
@@ -251,6 +331,14 @@ function TaskDetailInner({ id }: { id: string }) {
                   </Button>
                 )}
                 {perm.canStart && <Button onClick={() => act({ action: 'start' })}>▶ Start</Button>}
+                {perm.canRequestInput && (
+                  <Button variant="outline" onClick={() => { setInputRequestText(''); setInputRequestOpen(true); }}>
+                    Request information
+                  </Button>
+                )}
+                {perm.canResumeAfterInput && (
+                  <Button onClick={() => act({ action: 'resume_after_input' })}>Continue working</Button>
+                )}
                 {perm.canDone && (
                   <Button className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => act({ action: 'done' })}>
                     ✔ Mark done
@@ -262,6 +350,35 @@ function TaskDetailInner({ id }: { id: string }) {
                 {perm.canReopen && <Button variant="outline" onClick={() => setReasonModal({ action: 'reopen', title: 'Why reopen this task?' })}>↩ Reopen</Button>}
                 {perm.canCancel && <Button variant="outline" className="text-red-600" onClick={() => setReasonModal({ action: 'cancel', title: 'Why cancel this task?' })}>Cancel task</Button>}
               </div>
+
+              {perm.canProvideInput && task.status === 'WAITING_FOR_INPUT' && (
+                <Card className="border-cyan-300 bg-cyan-50">
+                  <CardContent className="p-3">
+                    <h3 className="mb-2 font-bold text-cyan-900">Provide requested information</h3>
+                    {task.input_request_note && (
+                      <p className="mb-3 whitespace-pre-wrap text-sm text-cyan-950">{task.input_request_note}</p>
+                    )}
+                    <Textarea
+                      className="min-h-[120px] bg-white font-mono text-sm"
+                      placeholder="Paste credentials or details here…"
+                      value={inputPayloadText}
+                      onChange={(e) => setInputPayloadText(e.target.value)}
+                    />
+                    <Button
+                      className="mt-3 w-full"
+                      onClick={() => {
+                        if (!inputPayloadText.trim()) {
+                          toast.error('Enter the requested information');
+                          return;
+                        }
+                        act({ action: 'provide_input', inputPayload: inputPayloadText.trim() });
+                      }}
+                    >
+                      Submit information
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
 
               {err && (
                 <Alert variant="destructive">
@@ -373,6 +490,31 @@ function TaskDetailInner({ id }: { id: string }) {
       <Modal open={etaOpen} onClose={() => setEtaOpen(false)} title="Update ETA">
         <Input type="datetime-local" className="mb-3" value={etaVal} onChange={(e) => setEtaVal(e.target.value)} />
         <Button className="w-full" onClick={submitEta}>Save ETA</Button>
+      </Modal>
+      <Modal open={inputRequestOpen} onClose={() => setInputRequestOpen(false)} title="Request information">
+        <p className="mb-3 text-sm text-muted-foreground">
+          Describe what you need. This will be visible to the task creator or Admin.
+        </p>
+        <Textarea
+          className="mb-3 min-h-[100px]"
+          placeholder="Example: Need SMTP host, port, user, and app password"
+          value={inputRequestText}
+          onChange={(e) => setInputRequestText(e.target.value)}
+        />
+        <Button
+          className="w-full"
+          onClick={() => {
+            if (inputRequestText.trim().length < 10) {
+              toast.error('Describe what you need (at least 10 characters)');
+              return;
+            }
+            act({ action: 'request_input', inputRequestNote: inputRequestText.trim() });
+            setInputRequestOpen(false);
+            setInputRequestText('');
+          }}
+        >
+          Send request
+        </Button>
       </Modal>
       <Modal open={!!reasonModal} onClose={() => setReasonModal(null)} title={reasonModal?.title || ''}>
         <Textarea className="mb-3 min-h-[80px]" value={reasonText} onChange={(e) => setReasonText(e.target.value)} />

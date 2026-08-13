@@ -80,6 +80,12 @@
   --color-status-rejected-bg: var(--status-rejected-bg);
   --color-status-rejected-fg: var(--status-rejected-fg);
   --color-status-rejected-dot: var(--status-rejected-dot);
+  --color-status-waiting-input-bg: var(--status-waiting-input-bg);
+  --color-status-waiting-input-fg: var(--status-waiting-input-fg);
+  --color-status-waiting-input-dot: var(--status-waiting-input-dot);
+  --color-status-input-provided-bg: var(--status-input-provided-bg);
+  --color-status-input-provided-fg: var(--status-input-provided-fg);
+  --color-status-input-provided-dot: var(--status-input-provided-dot);
   --color-status-sla-bg: var(--status-sla-bg);
   --color-status-sla-fg: var(--status-sla-fg);
 }
@@ -142,6 +148,12 @@
   --status-rejected-bg: #fff1f2;
   --status-rejected-fg: #be123c;
   --status-rejected-dot: #e11d48;
+  --status-waiting-input-bg: #ecfeff;
+  --status-waiting-input-fg: #0e7490;
+  --status-waiting-input-dot: #0891b2;
+  --status-input-provided-bg: #f0fdf4;
+  --status-input-provided-fg: #15803d;
+  --status-input-provided-dot: #16a34a;
   --status-sla-bg: #dc2626;
   --status-sla-fg: #ffffff;
 }
@@ -203,6 +215,12 @@
   --status-rejected-bg: color-mix(in oklab, #e11d48 18%, transparent);
   --status-rejected-fg: #fda4af;
   --status-rejected-dot: #fb7185;
+  --status-waiting-input-bg: color-mix(in oklab, #0891b2 18%, transparent);
+  --status-waiting-input-fg: #67e8f9;
+  --status-waiting-input-dot: #22d3ee;
+  --status-input-provided-bg: color-mix(in oklab, #16a34a 18%, transparent);
+  --status-input-provided-fg: #86efac;
+  --status-input-provided-dot: #4ade80;
   --status-sla-bg: #ef4444;
   --status-sla-fg: #ffffff;
 }
@@ -266,6 +284,14 @@
     @apply bg-status-rejected-bg text-status-rejected-fg;
   }
 
+  .status-waiting-input {
+    @apply bg-status-waiting-input-bg text-status-waiting-input-fg;
+  }
+
+  .status-input-provided {
+    @apply bg-status-input-provided-bg text-status-input-provided-fg;
+  }
+
   .status-fallback {
     @apply bg-status-cancelled-bg text-status-cancelled-fg;
   }
@@ -304,6 +330,14 @@
 
   .status-dot-rejected {
     @apply bg-status-rejected-dot;
+  }
+
+  .status-dot-waiting-input {
+    @apply bg-status-waiting-input-dot;
+  }
+
+  .status-dot-input-provided {
+    @apply bg-status-input-provided-dot;
   }
 
   @keyframes task-row-attention {

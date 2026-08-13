@@ -3,13 +3,14 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ChevronRight, Flag, MessageSquare, User } from 'lucide-react';
-import { STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, STATUS_DOT, PRIORITY_COLOR, fmtShortDate, isTaskOverdue, getTaskRowClasses } from '@/lib/util';
+import { STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, STATUS_DOT, PRIORITY_COLOR, fmtShortDate, isTaskOverdue, getTaskRowClasses, canReassignTask } from '@/lib/util';
 import { useMe } from '@/components/Shell';
 import TaskCard from '@/components/TaskCard';
 import TaskStatusModal from '@/components/TaskStatusModal';
 import TaskActionsMenu from '@/components/TaskActionsMenu';
 import TaskDetailAccordion from '@/components/TaskDetailAccordion';
 import TaskAssignerUrgentBadge from '@/components/TaskAssignerUrgentBadge';
+import ReassignAssigneeModal from '@/components/ReassignAssigneeModal';
 import Composer from '@/components/Composer';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -37,6 +38,7 @@ function TaskRow({
   onCreateSubtask,
   onTaskDeleted,
   renderAction,
+  onAssigneeClick,
   viewer,
 }: {
   task: any;
@@ -48,11 +50,19 @@ function TaskRow({
   onCreateSubtask: (task: any) => void;
   onTaskDeleted?: () => void;
   renderAction?: (task: any) => React.ReactNode;
+  onAssigneeClick?: (task: any) => void;
   viewer?: { id?: number; role?: string } | null;
 }) {
   const overdue = isTaskOverdue(task.due_at, task.status);
   const rowHighlight = getTaskRowClasses(task, viewer);
   const assignee = task.assignee_name || (task.team_name ? `Team ${task.team_name}` : null);
+  const canEditAssignee = canReassignTask(task, viewer);
+  const memberBadge =
+    task.member_count > 0 ? (
+      <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+        +{task.member_count}
+      </span>
+    ) : null;
 
   return (
     <>
@@ -88,16 +98,45 @@ function TaskRow({
 
       <TableCell className="py-3">
         {assignee ? (
-          <div className="flex items-center gap-2">
-            <Avatar className="size-7 bg-muted">
-              <AvatarFallback className="bg-muted text-[10px] font-semibold text-muted-foreground">
-                {initials(task.assignee_name || task.team_name)}
-              </AvatarFallback>
-            </Avatar>
-            <span className="hidden max-w-[120px] truncate text-sm text-muted-foreground xl:inline">
-              {assignee.split(' (')[0]}
-            </span>
-          </div>
+          canEditAssignee ? (
+            <button
+              type="button"
+              className="flex items-center gap-2 rounded-md outline-none ring-offset-background transition hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
+              title="Change assignee"
+              onClick={() => onAssigneeClick?.(task)}
+            >
+              <Avatar className="size-7 bg-muted">
+                <AvatarFallback className="bg-muted text-[10px] font-semibold text-muted-foreground">
+                  {initials(task.assignee_name || task.team_name)}
+                </AvatarFallback>
+              </Avatar>
+              <span className="hidden max-w-[120px] truncate text-sm text-muted-foreground xl:inline">
+                {assignee.split(' (')[0]}
+              </span>
+              {memberBadge}
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Avatar className="size-7 bg-muted">
+                <AvatarFallback className="bg-muted text-[10px] font-semibold text-muted-foreground">
+                  {initials(task.assignee_name || task.team_name)}
+                </AvatarFallback>
+              </Avatar>
+              <span className="hidden max-w-[120px] truncate text-sm text-muted-foreground xl:inline">
+                {assignee.split(' (')[0]}
+              </span>
+              {memberBadge}
+            </div>
+          )
+        ) : canEditAssignee ? (
+          <button
+            type="button"
+            className="rounded-md p-1 text-muted-foreground/60 outline-none ring-offset-background transition hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            title="Assign someone"
+            onClick={() => onAssigneeClick?.(task)}
+          >
+            <User className="size-5" />
+          </button>
         ) : (
           <User className="size-5 text-muted-foreground/60" />
         )}
@@ -187,6 +226,7 @@ export default function TaskTable({
 }) {
   const [statusTask, setStatusTask] = useState<any>(null);
   const [subtaskParent, setSubtaskParent] = useState<any>(null);
+  const [reassignTask, setReassignTask] = useState<any>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const me = useMe();
   const viewer = me ? { id: me.id, role: me.role } : null;
@@ -206,6 +246,7 @@ export default function TaskTable({
             onStatusClick={setStatusTask}
             onCreateSubtask={setSubtaskParent}
             onTaskDeleted={onTaskUpdated}
+            onAssigneeClick={setReassignTask}
             renderAction={renderAction}
           />
         ))}
@@ -241,6 +282,7 @@ export default function TaskTable({
               onStatusClick={setStatusTask}
               onCreateSubtask={setSubtaskParent}
               onTaskDeleted={onTaskUpdated}
+              onAssigneeClick={setReassignTask}
               renderAction={renderAction}
               viewer={viewer}
             />
@@ -253,6 +295,12 @@ export default function TaskTable({
         task={statusTask}
         open={!!statusTask}
         onClose={() => setStatusTask(null)}
+        onDone={() => onTaskUpdated?.()}
+      />
+      <ReassignAssigneeModal
+        task={reassignTask}
+        open={!!reassignTask}
+        onClose={() => setReassignTask(null)}
         onDone={() => onTaskUpdated?.()}
       />
       <Composer

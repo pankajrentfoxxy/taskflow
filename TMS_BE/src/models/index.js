@@ -15,6 +15,7 @@ import Board from "./Board.js";
 import TaskType from "./TaskType.js";
 import Meta from "./Meta.js";
 import Otp from "./Otp.js";
+import TaskMember from "./TaskMember.js";
 
 // ── Users & Teams ──────────────────────────────────────────────────────────
 // No DB-level FK between users ↔ teams (circular: team_id + manager_id); enforce in app layer.
@@ -40,6 +41,12 @@ Team.hasMany(Task, { foreignKey: "assigned_team_id", as: "tasks" });
 Project.hasMany(Task, { foreignKey: "project_id", as: "tasks" });
 Board.hasMany(Task, { foreignKey: "board_id", as: "tasks" });
 TaskType.hasMany(Task, { foreignKey: "task_type_id", as: "tasks" });
+
+TaskMember.belongsTo(Task, { foreignKey: "task_id", as: "task" });
+TaskMember.belongsTo(User, { foreignKey: "user_id", as: "user" });
+TaskMember.belongsTo(User, { foreignKey: "added_by", as: "addedBy", constraints: false });
+Task.hasMany(TaskMember, { foreignKey: "task_id", as: "taskMembers" });
+User.hasMany(TaskMember, { foreignKey: "user_id", as: "taskMemberships" });
 
 // ── Comments & Reactions ───────────────────────────────────────────────────
 Comment.belongsTo(Task, { foreignKey: "task_id", as: "task" });
@@ -123,6 +130,7 @@ export {
   TaskType,
   Meta,
   Otp,
+  TaskMember,
 };
 
 export default {
@@ -143,4 +151,5 @@ export default {
   TaskType,
   Meta,
   Otp,
+  TaskMember,
 };

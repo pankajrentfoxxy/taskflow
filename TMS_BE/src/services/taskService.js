@@ -17,6 +17,11 @@ import {
   canSeeTask,
   canEditEta,
   canReviewEscalation,
+  canReassignTask,
+  canProvideTaskInput,
+  canViewTaskInputRequest,
+  canViewTaskInputPayload,
+  canManageTaskMembers,
   isManagerOf,
 } from "../lib/rbac.js";
 import { addWorkingMinutes } from "../lib/sla.js";
@@ -37,6 +42,56 @@ const ESCALATION_REVIEW_PENDING = `
     ORDER BY e.id DESC
     LIMIT 1
   ), false) AS escalation_review_pending`;
+
+const MEMBER_COUNT = `(SELECT COUNT(*)::int FROM task_members tm WHERE tm.task_id = t.id) AS member_count`;
+
+const VALID_MEMBER_ROLES = new Set(["COLLABORATOR", "WATCHER"]);
+
+async function loadTaskMembers(taskId) {
+  return sequelize.query(
+    `SELECT tm.task_id, tm.user_id, tm.role, tm.added_by, tm.created_at,
+            u.name AS user_name, u.email AS user_email
+     FROM task_members tm
+     JOIN users u ON u.id = tm.user_id
+     WHERE tm.task_id = :taskId
+     ORDER BY CASE tm.role WHEN 'COLLABORATOR' THEN 0 ELSE 1 END, u.name`,
+    { replacements: { taskId }, type: QueryTypes.SELECT }
+  );
+}
+
+function buildMemberEntries(body, assigneeId) {
+  const primary = assigneeId ? Number(assigneeId) : null;
+  const collaboratorIds = [...new Set((body.collaboratorIds || []).map(Number).filter(Boolean))];
+  const watcherIds = [...new Set((body.watcherIds || []).map(Number).filter(Boolean))];
+  const members = [];
+
+  for (const userId of collaboratorIds) {
+    if (primary && userId === primary) continue;
+    members.push({ userId, role: "COLLABORATOR" });
+  }
+  for (const userId of watcherIds) {
+    if (primary && userId === primary) continue;
+    if (members.some((m) => m.userId === userId)) continue;
+    members.push({ userId, role: "WATCHER" });
+  }
+  return members;
+}
+
+async function insertTaskMembers(taskId, members, addedBy, createdAt) {
+  if (!members.length) return;
+  for (const { userId, role } of members) {
+    const user = await User.findOne({ where: { id: userId, is_active: true }, attributes: ["id"] });
+    if (!user) continue;
+    await sequelize.query(
+      `INSERT INTO task_members (task_id, user_id, role, added_by, created_at)
+       VALUES (:taskId, :userId, :role, :addedBy, :createdAt)
+       ON CONFLICT (task_id, user_id) DO NOTHING`,
+      {
+        replacements: { taskId, userId, role, addedBy, createdAt },
+      }
+    );
+  }
+}
 
 export async function loadTask(id, { includeDeleted = false } = {}) {
   const deletedClause = includeDeleted ? "" : " AND t.deleted = false";
@@ -98,13 +153,15 @@ export const listTasks = async (
   }
 
   if (filter === "mine") {
-    where += " AND (t.assignee_id = :mineUid";
+    where += ` AND (t.assignee_id = :mineUid OR EXISTS (
+      SELECT 1 FROM task_members tmine WHERE tmine.task_id = t.id AND tmine.user_id = :mineMemberUid`;
     repl.mineUid = user.id;
+    repl.mineMemberUid = user.id;
     if (user.team_id) {
-      where += " OR t.assigned_team_id = :mineTeamId)";
+      where += ") OR t.assigned_team_id = :mineTeamId)";
       repl.mineTeamId = user.team_id;
     } else {
-      where += ")";
+      where += "))";
     }
   } else if (filter === "created") {
     where += " AND t.creator_id = :creatorId";
@@ -153,12 +210,12 @@ export const listTasks = async (
   const totalPages = Math.max(1, Math.ceil(total / limit) || 1);
 
   const tasks = await sequelize.query(
-    `SELECT t.*, ${SUB_COUNTS}, ${ESCALATION_REVIEW_PENDING},
+    `SELECT t.*, ${SUB_COUNTS}, ${ESCALATION_REVIEW_PENDING}, ${MEMBER_COUNT},
       ua.name AS assignee_name, uc.name AS creator_name, tm.name AS team_name, p.name AS project_name,
       tt.name AS type_name
      ${fromClause}
      WHERE ${where}
-     ORDER BY CASE t.status WHEN 'ESCALATED' THEN 0 WHEN 'ASSIGNED' THEN 1 WHEN 'DISCUSS' THEN 2 ELSE 3 END, t.due_at ASC
+     ORDER BY CASE t.status WHEN 'ESCALATED' THEN 0 WHEN 'WAITING_FOR_INPUT' THEN 1 WHEN 'ASSIGNED' THEN 2 WHEN 'DISCUSS' THEN 3 WHEN 'INPUT_PROVIDED' THEN 4 ELSE 5 END, t.due_at ASC
      LIMIT :limit OFFSET :offset`,
     { replacements: repl, type: QueryTypes.SELECT }
   );
@@ -181,6 +238,8 @@ export const createTask = async (user, body) => {
     attachmentIds = [],
     boardId = null,
     taskTypeId = null,
+    collaboratorIds = [],
+    watcherIds = [],
   } = body;
 
   if (!dueAt) throw new ApiError(httpStatus.BAD_REQUEST, "Due date is required");
@@ -226,6 +285,7 @@ export const createTask = async (user, body) => {
   const batchId = titles.length > 1 ? randomUUID() : null;
   const sla = addWorkingMinutes(t, 30);
   const created = [];
+  const memberEntries = buildMemberEntries({ collaboratorIds, watcherIds }, assigneeId);
 
   for (const tt of titles) {
     const task = await Task.create({
@@ -248,6 +308,7 @@ export const createTask = async (user, body) => {
     });
     created.push(task.id);
     await logActivity(task.id, user.id, "CREATED", batchId ? { batchId } : {});
+    await insertTaskMembers(task.id, memberEntries, user.id, t);
   }
 
   if (attachmentIds.length && created.length) {
@@ -280,6 +341,18 @@ export const createTask = async (user, body) => {
     );
     const ids = [...members.map((m) => m.id), teamRow?.manager_id].filter(Boolean);
     await notify(ids, "ASSIGNED", `${label} (team task)`, `Assigned by ${user.name} to your team.`, created[0], user.id);
+  }
+
+  if (memberEntries.length && created.length) {
+    const memberIds = memberEntries.map((m) => m.userId);
+    await notify(
+      memberIds,
+      "TASK_MEMBER",
+      `Added to task: "${titles[0]}"`,
+      `Added by ${user.name} as a collaborator or watcher.`,
+      created[0],
+      user.id
+    );
   }
 
   if (parent?.assignee_id) {
@@ -349,6 +422,9 @@ export const getTaskDetail = async (user, taskId) => {
       )
     : [];
 
+  const members = await loadTaskMembers(task.id);
+  const isTaskMember = members.some((m) => m.user_id === user.id);
+
   const isAssignee = task.assignee_id === user.id;
   const isCreator = task.creator_id === user.id;
   const isMgr = await isManagerOf(user, task.assignee_id);
@@ -361,6 +437,8 @@ export const getTaskDetail = async (user, taskId) => {
 
   const permissions = {
     isAssignee,
+    isTaskMember,
+    canManageMembers: canManageTaskMembers(user, task),
     canAcknowledge: awaitingAccept && canRespond && !expPending,
     canDiscuss: task.status === "ASSIGNED" && canRespond && !expPending,
     canReject: awaitingAccept && canRespond && !expPending,
@@ -370,6 +448,14 @@ export const getTaskDetail = async (user, taskId) => {
       ["ACKNOWLEDGED", "IN_PROGRESS"].includes(task.status) &&
       (isAssignee || isBoss || isCreator) &&
       !expPending,
+    canRequestInput:
+      isAssignee &&
+      ["ACKNOWLEDGED", "IN_PROGRESS"].includes(task.status) &&
+      !expPending,
+    canProvideInput: canProvideTaskInput(user, task),
+    canResumeAfterInput: isAssignee && task.status === "INPUT_PROVIDED" && !expPending,
+    canViewInputRequest: canViewTaskInputRequest(user, task),
+    canViewInputPayload: canViewTaskInputPayload(user, task),
     canEditEta: isEscalated
       ? isBoss
       : task.status === "ASSIGNED"
@@ -396,7 +482,21 @@ export const getTaskDetail = async (user, taskId) => {
     openSubtasks: openSubs,
   };
 
-  return { task, subtasks, comments, activity, attachments, escalation: escalation ?? null, batchTasks, permissions };
+  const safeTask = { ...task };
+  if (!permissions.canViewInputRequest) safeTask.input_request_note = null;
+  if (!permissions.canViewInputPayload) safeTask.input_payload = null;
+
+  return {
+    task: safeTask,
+    members,
+    subtasks,
+    comments,
+    activity,
+    attachments,
+    escalation: escalation ?? null,
+    batchTasks,
+    permissions,
+  };
 };
 
 async function maybeAutoCompleteParent(parentId, actorId, lastSubtaskId) {
@@ -684,6 +784,231 @@ export const patchTask = async (user, taskId, body) => {
       if (!isAssignee && !isBoss) throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
       await Task.update({ blocked_reason: null, updated_at: t }, { where: { id: task.id } });
       await logActivity(task.id, user.id, "UNBLOCKED", {});
+      break;
+    }
+    case "reassign": {
+      if (!(await canReassignTask(user, task))) {
+        throw new ApiError(httpStatus.FORBIDDEN, "You cannot reassign this task");
+      }
+
+      const newAssigneeId = Number(body.assigneeId);
+      if (!newAssigneeId) {
+        throw new ApiError(httpStatus.BAD_REQUEST, "Choose an assignee");
+      }
+
+      if (task.assignee_id === newAssigneeId) {
+        break;
+      }
+
+      const newAssignee = await User.findOne({
+        where: { id: newAssigneeId, is_active: true },
+      });
+      if (!newAssignee) {
+        throw new ApiError(httpStatus.BAD_REQUEST, "User not found");
+      }
+
+      if (task.task_type_id) {
+        const type = await TaskType.findOne({
+          where: { id: task.task_type_id, is_active: true },
+        });
+        if (type && type.team_id !== newAssignee.team_id) {
+          throw new ApiError(
+            httpStatus.BAD_REQUEST,
+            "This task type belongs to a different team than the assignee"
+          );
+        }
+      }
+
+      const oldAssigneeId = task.assignee_id;
+      const sla = addWorkingMinutes(t, 30);
+
+      await Task.update(
+        {
+          assignee_id: newAssigneeId,
+          assigned_team_id: null,
+          status: "ASSIGNED",
+          eta_at: null,
+          acknowledged_at: null,
+          started_at: null,
+          discuss_reason: null,
+          blocked_reason: null,
+          escalated_at: null,
+          input_request_note: null,
+          input_requested_at: null,
+          input_provided_at: null,
+          input_provided_by: null,
+          input_payload: null,
+          sla_deadline_at: sla,
+          sla_breached_at: null,
+          warn_sent: false,
+          due_soon_sent: false,
+          updated_at: t,
+        },
+        { where: { id: task.id } }
+      );
+
+      await logActivity(task.id, user.id, "REASSIGNED", {
+        fromAssigneeId: oldAssigneeId,
+        toAssigneeId: newAssigneeId,
+        toName: newAssignee.name,
+      });
+
+      await notify(
+        [newAssigneeId],
+        "ASSIGNED",
+        `Task reassigned: "${task.title}"`,
+        `Reassigned by ${user.name}. Accept within 30 working minutes.`,
+        task.id,
+        user.id
+      );
+
+      if (oldAssigneeId && oldAssigneeId !== newAssigneeId) {
+        await notify(
+          [oldAssigneeId],
+          "REASSIGNED",
+          `Unassigned from "${task.title}"`,
+          `Reassigned by ${user.name}.`,
+          task.id,
+          user.id
+        );
+      }
+      break;
+    }
+    case "add_member": {
+      if (!canManageTaskMembers(user, task)) {
+        throw new ApiError(httpStatus.FORBIDDEN, "You cannot manage members on this task");
+      }
+      const memberUserId = Number(body.userId);
+      const role = VALID_MEMBER_ROLES.has(String(body.role || "").toUpperCase())
+        ? String(body.role).toUpperCase()
+        : "COLLABORATOR";
+      if (!memberUserId) throw new ApiError(httpStatus.BAD_REQUEST, "Choose a user");
+      if (memberUserId === task.assignee_id) {
+        throw new ApiError(httpStatus.BAD_REQUEST, "Primary assignee is already on the task");
+      }
+      const memberUser = await User.findOne({ where: { id: memberUserId, is_active: true } });
+      if (!memberUser) throw new ApiError(httpStatus.BAD_REQUEST, "User not found");
+
+      await sequelize.query(
+        `INSERT INTO task_members (task_id, user_id, role, added_by, created_at)
+         VALUES (:taskId, :userId, :role, :addedBy, :createdAt)
+         ON CONFLICT (task_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
+        {
+          replacements: {
+            taskId: task.id,
+            userId: memberUserId,
+            role,
+            addedBy: user.id,
+            createdAt: t,
+          },
+        }
+      );
+      await logActivity(task.id, user.id, "MEMBER_ADDED", { userId: memberUserId, role, name: memberUser.name });
+      await notify(
+        [memberUserId],
+        "TASK_MEMBER",
+        `Added to task: "${task.title}"`,
+        `You were added as a ${role.toLowerCase()} by ${user.name}.`,
+        task.id,
+        user.id
+      );
+      break;
+    }
+    case "remove_member": {
+      if (!canManageTaskMembers(user, task)) {
+        throw new ApiError(httpStatus.FORBIDDEN, "You cannot manage members on this task");
+      }
+      const memberUserId = Number(body.userId);
+      if (!memberUserId) throw new ApiError(httpStatus.BAD_REQUEST, "Choose a user");
+      const [removed] = await sequelize.query(
+        `DELETE FROM task_members WHERE task_id = :taskId AND user_id = :userId RETURNING user_id`,
+        { replacements: { taskId: task.id, userId: memberUserId }, type: QueryTypes.SELECT }
+      );
+      if (!removed) throw new ApiError(httpStatus.NOT_FOUND, "Member not on this task");
+      await logActivity(task.id, user.id, "MEMBER_REMOVED", { userId: memberUserId });
+      break;
+    }
+    case "request_input": {
+      if (!isAssignee) throw new ApiError(httpStatus.FORBIDDEN, "Only the assignee can request input");
+      if (!["ACKNOWLEDGED", "IN_PROGRESS"].includes(task.status)) {
+        throw new ApiError(httpStatus.BAD_REQUEST, "Input can only be requested on accepted or in-progress tasks");
+      }
+      const note = String(body.inputRequestNote || body.reason || "").trim();
+      if (note.length < 10) {
+        throw new ApiError(httpStatus.BAD_REQUEST, "Describe what you need (at least 10 characters)");
+      }
+      await Task.update(
+        {
+          status: "WAITING_FOR_INPUT",
+          input_request_note: note,
+          input_requested_at: t,
+          input_provided_at: null,
+          input_provided_by: null,
+          input_payload: null,
+          blocked_reason: null,
+          updated_at: t,
+        },
+        { where: { id: task.id } }
+      );
+      await logActivity(task.id, user.id, "INPUT_REQUESTED", { note });
+      await notify(
+        [task.creator_id, ...(await ceoIds())],
+        "INPUT_REQUESTED",
+        `Input needed: "${task.title}"`,
+        note,
+        task.id,
+        user.id
+      );
+      break;
+    }
+    case "provide_input": {
+      if (!canProvideTaskInput(user, task)) {
+        throw new ApiError(httpStatus.FORBIDDEN, "Only the creator or Admin can provide input");
+      }
+      if (task.status !== "WAITING_FOR_INPUT") {
+        throw new ApiError(httpStatus.BAD_REQUEST, "This task is not waiting for input");
+      }
+      const payload = String(body.inputPayload || "").trim();
+      if (payload.length < 1) {
+        throw new ApiError(httpStatus.BAD_REQUEST, "Provide the requested information");
+      }
+      await Task.update(
+        {
+          status: "INPUT_PROVIDED",
+          input_payload: payload,
+          input_provided_at: t,
+          input_provided_by: user.id,
+          updated_at: t,
+        },
+        { where: { id: task.id } }
+      );
+      await logActivity(task.id, user.id, "INPUT_PROVIDED", {});
+      if (task.assignee_id) {
+        await notify(
+          [task.assignee_id],
+          "INPUT_PROVIDED",
+          `Input provided: "${task.title}"`,
+          "Review the data and continue working.",
+          task.id,
+          user.id
+        );
+      }
+      break;
+    }
+    case "resume_after_input": {
+      if (!isAssignee) throw new ApiError(httpStatus.FORBIDDEN, "Only the assignee can continue");
+      if (task.status !== "INPUT_PROVIDED") {
+        throw new ApiError(httpStatus.BAD_REQUEST, "No input has been provided yet");
+      }
+      const nextStatus = task.started_at ? "IN_PROGRESS" : "ACKNOWLEDGED";
+      await Task.update(
+        {
+          status: nextStatus,
+          updated_at: t,
+        },
+        { where: { id: task.id } }
+      );
+      await logActivity(task.id, user.id, "INPUT_ACKNOWLEDGED", { resumedStatus: nextStatus });
       break;
     }
     default:

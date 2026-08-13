@@ -12,6 +12,7 @@ export function taskVisibilityWhere(user) {
   }
 
   const base = `(t.assignee_id = :uid OR t.creator_id = :uid
+    OR EXISTS (SELECT 1 FROM task_members tmv WHERE tmv.task_id = t.id AND tmv.user_id = :uid)
     OR t.project_id IN (SELECT project_id FROM project_members WHERE user_id = :uid)
     OR t.project_id IN (SELECT id FROM projects WHERE owner_id = :uid)
     ${user.team_id ? "OR t.assigned_team_id = :teamId" : ""})`;
@@ -64,6 +65,45 @@ export async function canEditEta(user, task) {
 export async function canReviewEscalation(user, task) {
   if (user.role === "ADMIN" || user.role === "CEO") return true;
   return isManagerOf(user, task.assignee_id);
+}
+
+/** Reassign assignee: creator, Admin/CEO, or assignee's manager. Not on closed tasks. */
+export async function canReassignTask(user, task) {
+  if (["DONE", "CANCELLED", "REJECTED"].includes(task.status)) return false;
+  if (user.role === "ADMIN" || user.role === "CEO") return true;
+  if (task.creator_id === user.id) return true;
+  return isManagerOf(user, task.assignee_id);
+}
+
+export function canProvideTaskInput(user, task) {
+  if (task.status !== "WAITING_FOR_INPUT") return false;
+  if (user.role === "ADMIN" || user.role === "CEO") return true;
+  return task.creator_id === user.id;
+}
+
+export function canViewTaskInputRequest(user, task) {
+  if (!task.input_request_note) return false;
+  if (user.role === "ADMIN" || user.role === "CEO") return true;
+  if (task.creator_id === user.id) return true;
+  if (task.assignee_id === user.id) return true;
+  return false;
+}
+
+export function canViewTaskInputPayload(user, task) {
+  if (!task.input_payload) return false;
+  if (user.role === "ADMIN" || user.role === "CEO") return true;
+  if (task.creator_id === user.id) return true;
+  if (task.assignee_id === user.id) return true;
+  return false;
+}
+
+/** Add/remove collaborators & watchers. Primary assignee stays on tasks.assignee_id. */
+export function canManageTaskMembers(user, task) {
+  if (["DONE", "CANCELLED", "REJECTED"].includes(task.status)) return false;
+  if (user.role === "ADMIN" || user.role === "CEO") return true;
+  if (task.creator_id === user.id) return true;
+  if (task.assignee_id === user.id) return true;
+  return false;
 }
 
 export function canManageProject(user, project) {

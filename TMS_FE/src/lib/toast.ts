@@ -32,4 +32,10 @@ export const TASK_ACTION_TOAST: Record<string, string> = {
   reopen: 'Task reopened',
   cancel: 'Task cancelled',
   update_eta: 'ETA updated',
+  add_member: 'Member added',
+  remove_member: 'Member removed',
+  reassign: 'Assignee updated',
+  request_input: 'Input requested',
+  provide_input: 'Information provided',
+  resume_after_input: 'Continuing work',
 };

@@ -34,6 +34,7 @@ import {
   Notification,
   Attachment,
   Otp,
+  TaskMember,
 } from "./models/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -98,11 +99,37 @@ const syncModels = async () => {
   await Notification.sync();
   await Attachment.sync();
   await Otp.sync();
+  await TaskMember.sync();
+  await sequelize.query(
+    `CREATE TABLE IF NOT EXISTS task_members (
+      task_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      role VARCHAR(32) NOT NULL DEFAULT 'COLLABORATOR',
+      added_by INTEGER,
+      created_at BIGINT NOT NULL,
+      PRIMARY KEY (task_id, user_id)
+    )`
+  );
   await sequelize.query(
     "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS is_visible BOOLEAN NOT NULL DEFAULT true"
   );
   await sequelize.query(
     "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS discuss_reason TEXT"
+  );
+  await sequelize.query(
+    "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS input_request_note TEXT"
+  );
+  await sequelize.query(
+    "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS input_requested_at BIGINT"
+  );
+  await sequelize.query(
+    "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS input_provided_at BIGINT"
+  );
+  await sequelize.query(
+    "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS input_provided_by INTEGER"
+  );
+  await sequelize.query(
+    "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS input_payload TEXT"
   );
 };
 

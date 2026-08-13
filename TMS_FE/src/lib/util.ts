@@ -100,6 +100,8 @@ export const STATUS_LABEL: Record<string, string> = {
   DISCUSS: 'Discuss',
   ACKNOWLEDGED: 'Accepted',
   IN_PROGRESS: 'In progress',
+  WAITING_FOR_INPUT: 'Waiting for input',
+  INPUT_PROVIDED: 'Data provided',
   DONE: 'Done',
   CANCELLED: 'Cancelled',
   REJECTED: 'Rejected',
@@ -116,6 +118,8 @@ export const STATUS_COLOR: Record<string, string> = {
   DISCUSS: 'status-badge status-discuss',
   ACKNOWLEDGED: 'status-badge status-acknowledged',
   IN_PROGRESS: 'status-badge status-progress',
+  WAITING_FOR_INPUT: 'status-badge status-waiting-input',
+  INPUT_PROVIDED: 'status-badge status-input-provided',
   DONE: 'status-badge status-done',
   CANCELLED: 'status-badge status-cancelled',
   REJECTED: 'status-badge status-rejected',
@@ -129,6 +133,8 @@ export const STATUS_DOT: Record<string, string> = {
   DISCUSS: 'status-dot-discuss',
   ACKNOWLEDGED: 'status-dot-acknowledged',
   IN_PROGRESS: 'status-dot-progress',
+  WAITING_FOR_INPUT: 'status-dot-waiting-input',
+  INPUT_PROVIDED: 'status-dot-input-provided',
   DONE: 'status-dot-done',
   CANCELLED: 'status-dot-cancelled',
   REJECTED: 'status-dot-rejected',
@@ -145,6 +151,10 @@ export const TASK_ROW_HIGHLIGHT: Record<string, string> = {
     'border-l-[3px] border-l-status-acknowledged-dot bg-status-acknowledged-bg/45 hover:bg-status-acknowledged-bg/70',
   IN_PROGRESS:
     'border-l-[3px] border-l-status-progress-dot bg-status-progress-bg/45 hover:bg-status-progress-bg/70',
+  WAITING_FOR_INPUT:
+    'border-l-[3px] border-l-status-waiting-input-dot bg-status-waiting-input-bg/50 hover:bg-status-waiting-input-bg/75',
+  INPUT_PROVIDED:
+    'border-l-[3px] border-l-status-input-provided-dot bg-status-input-provided-bg/50 hover:bg-status-input-provided-bg/75',
   DONE:
     'border-l-[3px] border-l-status-done-dot bg-status-done-bg/30 hover:bg-status-done-bg/45',
   CANCELLED:
@@ -165,6 +175,7 @@ export function taskNeedsAssignerAction(task: {
 }): boolean {
   const status = task.status || '';
   if (status === 'DISCUSS') return true;
+  if (status === 'WAITING_FOR_INPUT') return true;
   if (status === 'REJECTED') return true;
   if (task.blocked_reason?.trim()) return true;
   return false;
@@ -180,6 +191,17 @@ export function taskNeedsEscalationReview(task: {
   if (pending === true || pending === 'true' || pending === 't') return true;
   if (pending === false || pending === 'false' || pending === 'f' || pending == null) return false;
   return Boolean(pending);
+}
+
+/** Creator, Admin, or CEO may change assignee from the task list (managers via API). */
+export function canReassignTask(
+  task: { creator_id?: number; status?: string },
+  viewer?: { id?: number; role?: string } | null,
+): boolean {
+  if (!viewer?.id) return false;
+  if (['DONE', 'CANCELLED', 'REJECTED'].includes(task.status || '')) return false;
+  if (viewer.role === 'ADMIN' || viewer.role === 'CEO') return true;
+  return task.creator_id === viewer.id;
 }
 
 /** Pulse + badge for creator (discuss/block/reject) or Admin/CEO (escalation review). */

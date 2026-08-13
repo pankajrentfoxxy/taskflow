@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { ChevronRight, MessageSquare } from 'lucide-react';
-import { fmtShortDate, countdown, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, SLA_BREACH_BADGE, isTaskOverdue, getTaskRowClasses } from '@/lib/util';
+import { fmtShortDate, countdown, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, SLA_BREACH_BADGE, isTaskOverdue, getTaskRowClasses, canReassignTask } from '@/lib/util';
 import { IconClock, IconFlag, IconTag } from './Icons';
 import TaskActionsMenu from './TaskActionsMenu';
 import TaskDetailAccordion from './TaskDetailAccordion';
@@ -23,6 +23,7 @@ export default function TaskCard({
   onStatusClick,
   onCreateSubtask,
   onTaskDeleted,
+  onAssigneeClick,
   renderAction,
   viewer,
 }: {
@@ -33,6 +34,7 @@ export default function TaskCard({
   onStatusClick?: (task: any) => void;
   onCreateSubtask?: (task: any) => void;
   onTaskDeleted?: () => void;
+  onAssigneeClick?: (task: any) => void;
   renderAction?: (task: any) => React.ReactNode;
   viewer?: { id?: number; role?: string } | null;
 }) {
@@ -40,6 +42,7 @@ export default function TaskCard({
   const rowHighlight = getTaskRowClasses(task, viewer);
   const slaRunning = task.status === 'ASSIGNED' && !task.sla_breached_at && task.sla_deadline_at;
   const who = task.assignee_name || (task.team_name ? `Team ${task.team_name}` : 'Unassigned');
+  const canEditAssignee = canReassignTask(task, viewer);
 
   return (
     <Card className={cn('gap-0 overflow-hidden py-0 transition-all hover:shadow-[0_4px_12px_rgba(16,24,40,0.07)]', rowHighlight, expanded && 'ring-1 ring-foreground/10')}>
@@ -114,26 +117,56 @@ export default function TaskCard({
           <div className="mt-2 truncate text-[14.5px] font-semibold leading-snug text-gray-900 group-hover:text-brand-700">
             {task.title}
           </div>
+        </Link>
 
-          <div className="mt-2.5 flex items-center gap-2">
-            <Avatar size="sm" className="bg-gradient-to-br from-brand-100 to-violet-100">
-              <AvatarFallback className="bg-transparent text-[9px] font-bold text-brand-700">
-                {initials(task.assignee_name || task.team_name)}
-              </AvatarFallback>
-            </Avatar>
-            <span className="min-w-0 truncate text-xs text-gray-500">
-              {who}
-              <span className="mx-1 text-gray-300">·</span>
-              <span className="text-gray-400">by {String(task.creator_name || '').split(' (')[0]}</span>
-              {task.project_name && (
-                <>
-                  <span className="mx-1 text-gray-300">·</span>
-                  <span className="font-medium text-brand-600">{task.project_name}</span>
-                </>
-              )}
-            </span>
-          </div>
+        <div className="mt-2.5 flex items-center gap-2">
+          {canEditAssignee ? (
+            <button
+              type="button"
+              className="flex min-w-0 items-center gap-2 rounded-md outline-none ring-offset-background transition hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
+              title="Change assignee"
+              onClick={() => onAssigneeClick?.(task)}
+            >
+              <Avatar size="sm" className="bg-gradient-to-br from-brand-100 to-violet-100">
+                <AvatarFallback className="bg-transparent text-[9px] font-bold text-brand-700">
+                  {initials(task.assignee_name || task.team_name)}
+                </AvatarFallback>
+              </Avatar>
+              <span className="min-w-0 truncate text-xs text-gray-500">
+                {who}
+                <span className="mx-1 text-gray-300">·</span>
+                <span className="text-gray-400">by {String(task.creator_name || '').split(' (')[0]}</span>
+                {task.project_name && (
+                  <>
+                    <span className="mx-1 text-gray-300">·</span>
+                    <span className="font-medium text-brand-600">{task.project_name}</span>
+                  </>
+                )}
+              </span>
+            </button>
+          ) : (
+            <>
+              <Avatar size="sm" className="bg-gradient-to-br from-brand-100 to-violet-100">
+                <AvatarFallback className="bg-transparent text-[9px] font-bold text-brand-700">
+                  {initials(task.assignee_name || task.team_name)}
+                </AvatarFallback>
+              </Avatar>
+              <span className="min-w-0 truncate text-xs text-gray-500">
+                {who}
+                <span className="mx-1 text-gray-300">·</span>
+                <span className="text-gray-400">by {String(task.creator_name || '').split(' (')[0]}</span>
+                {task.project_name && (
+                  <>
+                    <span className="mx-1 text-gray-300">·</span>
+                    <span className="font-medium text-brand-600">{task.project_name}</span>
+                  </>
+                )}
+              </span>
+            </>
+          )}
+        </div>
 
+        <Link href={`/tasks/${task.id}`} className="group block">
           <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
             <div>
               <span className="text-muted-foreground">Due </span>

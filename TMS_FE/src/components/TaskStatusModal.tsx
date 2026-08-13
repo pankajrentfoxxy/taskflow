@@ -23,7 +23,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 
-type View = 'actions' | 'ack' | 'reason' | 'eta';
+type View = 'actions' | 'ack' | 'reason' | 'eta' | 'request_input' | 'provide_input';
 
 export default function TaskStatusModal({
   task,
@@ -46,6 +46,8 @@ export default function TaskStatusModal({
   const [eta, setEta] = useState('');
   const [explanation, setExplanation] = useState('');
   const [propEta, setPropEta] = useState('');
+  const [inputRequestNote, setInputRequestNote] = useState('');
+  const [inputPayload, setInputPayload] = useState('');
 
   const reset = useCallback(() => {
     setErr('');
@@ -55,6 +57,8 @@ export default function TaskStatusModal({
     setEta('');
     setExplanation('');
     setPropEta('');
+    setInputRequestNote('');
+    setInputPayload('');
   }, []);
 
   const load = useCallback(async () => {
@@ -149,6 +153,28 @@ export default function TaskStatusModal({
     act({ action: 'update_eta', etaAt });
   };
 
+  const submitRequestInput = () => {
+    const note = inputRequestNote.trim();
+    if (note.length < 10) {
+      const msg = 'Describe what you need (at least 10 characters)';
+      setErr(msg);
+      toast.error(msg);
+      return;
+    }
+    act({ action: 'request_input', inputRequestNote: note });
+  };
+
+  const submitProvideInput = () => {
+    const payload = inputPayload.trim();
+    if (!payload) {
+      const msg = 'Enter the requested information';
+      setErr(msg);
+      toast.error(msg);
+      return;
+    }
+    act({ action: 'provide_input', inputPayload: payload });
+  };
+
   const submitExplanation = async () => {
     if (!task?.id) return;
     setBusy(true);
@@ -206,11 +232,17 @@ export default function TaskStatusModal({
 
   const isEscalated = status === 'ESCALATED';
   const showReview = Boolean(perm?.canReview && escalation?.explanation && isEscalated);
+  const showProvideInput = Boolean(perm?.canProvideInput && status === 'WAITING_FOR_INPUT');
+  const showResumeInput = Boolean(perm?.canResumeAfterInput && status === 'INPUT_PROVIDED');
   const modalTitle = perm?.mustExplain
     ? 'Explanation required'
     : showReview
       ? 'Review escalation'
-      : 'Change status';
+      : showProvideInput
+        ? 'Provide information'
+        : showResumeInput
+          ? 'Review provided data'
+          : 'Change status';
   const actionButtons: { label: string; onClick: () => void; variant?: 'default' | 'outline'; className?: string }[] = [];
 
   if (perm?.mustExplain) {
@@ -255,6 +287,17 @@ export default function TaskStatusModal({
     }
     if (perm.canStart) {
       actionButtons.push({ label: 'Start', onClick: () => act({ action: 'start' }) });
+    }
+    if (perm.canRequestInput) {
+      actionButtons.push({
+        label: 'Request information',
+        variant: 'outline',
+        onClick: () => {
+          setInputRequestNote('');
+          setErr('');
+          setView('request_input');
+        },
+      });
     }
     if (perm.canDone) {
       actionButtons.push({
@@ -383,7 +426,61 @@ export default function TaskStatusModal({
           </Card>
         )}
 
-        {!loading && view === 'actions' && !perm?.mustExplain && (
+        {!loading && showProvideInput && (
+          <Card className="border-cyan-300 bg-cyan-50 py-0">
+            <CardContent className="p-3">
+              <h3 className="mb-1 font-bold text-cyan-900">Information requested</h3>
+              {t?.input_request_note && (
+                <div className="mb-3 rounded-md border border-cyan-200 bg-white px-3 py-2 text-sm text-gray-800">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-cyan-800">What they need</p>
+                  <p className="whitespace-pre-wrap">{t.input_request_note}</p>
+                </div>
+              )}
+              <Label className="text-cyan-900">Provide the data</Label>
+              <Textarea
+                className="mt-1.5 min-h-[120px] bg-white font-mono text-sm"
+                placeholder={'Example:\nSMTP_HOST=smtp.gmail.com\nSMTP_PORT=587\nSMTP_USER=...\nSMTP_PASS=...'}
+                value={inputPayload}
+                onChange={(e) => setInputPayload(e.target.value)}
+              />
+              <Button className="mt-3 w-full" disabled={busy} onClick={submitProvideInput}>
+                {busy ? 'Saving…' : 'Submit information'}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {!loading && showResumeInput && (
+          <Card className="border-emerald-300 bg-emerald-50 py-0">
+            <CardContent className="p-3">
+              <h3 className="mb-1 font-bold text-emerald-900">Data provided</h3>
+              {t?.input_request_note && (
+                <p className="mb-2 text-xs text-emerald-800">
+                  Request: <span className="whitespace-pre-wrap">{t.input_request_note}</span>
+                </p>
+              )}
+              {t?.input_payload && (
+                <pre className="mb-3 max-h-48 overflow-auto rounded-md border border-emerald-200 bg-white p-3 text-xs whitespace-pre-wrap">
+                  {t.input_payload}
+                </pre>
+              )}
+              <Button className="w-full" disabled={busy} onClick={() => act({ action: 'resume_after_input' })}>
+                {busy ? 'Saving…' : 'Continue working'}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {!loading && status === 'WAITING_FOR_INPUT' && perm?.isAssignee && !showProvideInput && (
+          <Alert>
+            <AlertDescription>
+              Waiting for the task creator or Admin to provide:{' '}
+              <span className="font-medium">{t?.input_request_note || 'requested information'}</span>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {!loading && view === 'actions' && !perm?.mustExplain && !showProvideInput && !showResumeInput && (
           <>
             {actionButtons.length === 0 ? (
               <p className="text-sm text-muted-foreground">No status changes available for you on this task.</p>
@@ -442,6 +539,28 @@ export default function TaskStatusModal({
               </Button>
               <Button type="button" className="flex-1" disabled={busy} onClick={submitReason}>
                 {busy ? 'Saving…' : 'Confirm'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {!loading && view === 'request_input' && (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Describe exactly what you need (credentials, access, files, etc.). This will be visible to the person who provides it.
+            </p>
+            <Textarea
+              rows={4}
+              placeholder="Example: Need SMTP credentials — host, port, user, and app password for noreply@company.com"
+              value={inputRequestNote}
+              onChange={(e) => setInputRequestNote(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={() => setView('actions')} disabled={busy}>
+                Back
+              </Button>
+              <Button type="button" className="flex-1" disabled={busy} onClick={submitRequestInput}>
+                {busy ? 'Sending…' : 'Send request'}
               </Button>
             </div>
           </div>

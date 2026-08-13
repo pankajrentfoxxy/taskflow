@@ -36,6 +36,8 @@ export default function Composer({
   const [files, setFiles] = useState<File[]>([]);
   const [taskTypes, setTaskTypes] = useState<any[]>([]);
   const [taskTypeId, setTaskTypeId] = useState('');
+  const [collaboratorIds, setCollaboratorIds] = useState<number[]>([]);
+  const [watcherIds, setWatcherIds] = useState<number[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
@@ -45,12 +47,16 @@ export default function Composer({
     api('/api/teams').then((d) => setTeams(d.teams));
     api('/api/projects').then((d) => setProjects(d.projects));
     setTitle(presetTitle || '');
+    setCollaboratorIds([]);
+    setWatcherIds([]);
     setErr('');
   }, [open, presetTitle]);
 
   // Task types follow the selected person's team (or the selected team)
   useEffect(() => {
     setTaskTypeId('');
+    setCollaboratorIds([]);
+    setWatcherIds([]);
     if (!assignee) { setTaskTypes([]); return; }
     const [kind, idStr] = assignee.split(':');
     const q = kind === 't' ? `teamId=${idStr}` : `userId=${idStr}`;
@@ -66,6 +72,13 @@ export default function Composer({
   const teamMembers = assignee.startsWith('t:')
     ? users.filter((u) => u.team_id === Number(assignee.split(':')[1]))
     : [];
+  const primaryUserId = assignee.startsWith('u:') ? Number(assignee.split(':')[1]) : null;
+  const extraMemberCandidates = users.filter((u) => u.id !== primaryUserId);
+
+  const toggleId = (list: number[], id: number, other: number[]) => {
+    if (other.includes(id)) return list;
+    return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+  };
 
   const quickDue = (label: string) => {
     const d = new Date();
@@ -106,6 +119,8 @@ export default function Composer({
         boardId: presetBoardId || null,
         attachmentIds,
         taskTypeId: taskTypeId ? Number(taskTypeId) : null,
+        collaboratorIds,
+        watcherIds,
         multiple,
         lines: multiple ? linesText.split('\n').map((l) => l.trim()).filter(Boolean) : [],
       };
@@ -121,6 +136,7 @@ export default function Composer({
       onCreated?.(d.ids);
       onClose();
       setTitle(''); setDescription(''); setLinesText(''); setFiles([]); setMultiple(false); setDue(''); setTaskTypeId('');
+      setCollaboratorIds([]); setWatcherIds([]);
     } catch (e: any) {
       setErr(e.message);
       toast.errorFrom(e);
@@ -195,6 +211,41 @@ export default function Composer({
                   {m.name}
                 </Button>
               ))}
+            </div>
+          </div>
+        )}
+        {primaryUserId && extraMemberCandidates.length > 0 && (
+          <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Additional members (optional)</p>
+            <div className="space-y-2">
+              <Label className="text-xs">Collaborators — can view &amp; comment</Label>
+              <div className="max-h-28 space-y-1 overflow-y-auto">
+                {extraMemberCandidates.map((u) => (
+                  <label key={`c-${u.id}`} className="flex cursor-pointer items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={collaboratorIds.includes(u.id)}
+                      disabled={watcherIds.includes(u.id)}
+                      onCheckedChange={() => setCollaboratorIds((ids) => toggleId(ids, u.id, watcherIds))}
+                    />
+                    <span>{u.name}{u.team_name ? ` (${u.team_name})` : ''}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs">Watchers — view updates only</Label>
+              <div className="max-h-28 space-y-1 overflow-y-auto">
+                {extraMemberCandidates.map((u) => (
+                  <label key={`w-${u.id}`} className="flex cursor-pointer items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={watcherIds.includes(u.id)}
+                      disabled={collaboratorIds.includes(u.id)}
+                      onCheckedChange={() => setWatcherIds((ids) => toggleId(ids, u.id, collaboratorIds))}
+                    />
+                    <span>{u.name}{u.team_name ? ` (${u.team_name})` : ''}</span>
+                  </label>
+                ))}
+              </div>
             </div>
           </div>
         )}
