@@ -22,6 +22,14 @@ const envVarsSchema = Joi.object()
     UPLOAD_DIR: Joi.string().default("uploads"),
     MAX_UPLOAD_BYTES: Joi.number().default(26214400),
     CRON_SECRET: Joi.string().allow("").default(""),
+    SMTP_HOST: Joi.string().allow("").default(""),
+    SMTP_PORT: Joi.number().default(587),
+    SMTP_SECURE: Joi.string().valid("true", "false", "").default("false"),
+    SMTP_USER: Joi.string().allow("").default(""),
+    SMTP_PASS: Joi.string().allow("").default(""),
+    SMTP_FROM: Joi.string().allow("").default(""),
+    APP_NAME: Joi.string().default("TaskFlow"),
+    OTP_EXPIRY_MINUTES: Joi.number().default(10),
   })
   .unknown();
 
@@ -47,4 +55,18 @@ export default {
   uploadDir: envVars.UPLOAD_DIR,
   maxUploadBytes: envVars.MAX_UPLOAD_BYTES,
   cronSecret: envVars.CRON_SECRET,
+  smtp: {
+    host: envVars.SMTP_HOST,
+    port: envVars.SMTP_PORT,
+    secure: envVars.SMTP_SECURE === "true",
+    user: envVars.SMTP_USER,
+    pass: envVars.SMTP_PASS,
+    from: envVars.SMTP_FROM || `"${envVars.APP_NAME}" <${envVars.SMTP_USER || "noreply@taskflow.local"}>`,
+  },
+  app: {
+    name: envVars.APP_NAME,
+  },
+  otp: {
+    expiryMinutes: envVars.OTP_EXPIRY_MINUTES,
+  },
 };

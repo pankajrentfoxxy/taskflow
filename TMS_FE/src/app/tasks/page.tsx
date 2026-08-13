@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Shell, { useMe } from '@/components/Shell';
 import TaskTable, { TaskTableSkeleton } from '@/components/TaskTable';
+import TaskPagination, { type TaskPaginationMeta } from '@/components/TaskPagination';
 import CommentsModal from '@/components/CommentsModal';
 import Composer from '@/components/Composer';
 import TaskTemplateButton from '@/components/TaskTemplateButton';
@@ -12,6 +13,8 @@ import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+
+const PAGE_SIZE = 15;
 
 function TasksInner() {
   const me = useMe();
@@ -24,6 +27,13 @@ function TasksInner() {
   const [teams, setTeams] = useState<any[]>([]);
   const [filterAssignee, setFilterAssignee] = useState('');
   const [tasks, setTasks] = useState<any[]>([]);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState<TaskPaginationMeta>({
+    page: 1,
+    limit: PAGE_SIZE,
+    total: 0,
+    totalPages: 1,
+  });
   const [composerOpen, setComposerOpen] = useState(params.get('new') === '1');
   const [commentsTask, setCommentsTask] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -33,6 +43,10 @@ function TasksInner() {
     api('/api/users').then((d) => setUsers(d.users.filter((u: any) => u.is_active)));
     api('/api/teams').then((d) => setTeams(d.teams));
   }, [canFilter]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filter, status, q, filterAssignee]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -47,12 +61,17 @@ function TasksInner() {
     }
     if (status) sp.set('status', status);
     if (q) sp.set('q', q);
-    api(`/api/tasks?${sp}`).then((d) => {
-      const rows = status ? d.tasks : d.tasks.filter((t: any) => t.status !== 'DONE');
-      setTasks(rows);
-      setLoading(false);
-    });
-  }, [filter, status, q, canFilter, filterAssignee]);
+    sp.set('page', String(page));
+    sp.set('limit', String(PAGE_SIZE));
+    api(`/api/tasks?${sp}`)
+      .then((d) => {
+        setTasks(d.tasks);
+        setPagination(
+          d.pagination ?? { page, limit: PAGE_SIZE, total: d.tasks.length, totalPages: 1 }
+        );
+      })
+      .finally(() => setLoading(false));
+  }, [filter, status, q, canFilter, filterAssignee, page]);
   useEffect(() => { load(); }, [load]);
 
   const segments = [
@@ -148,7 +167,14 @@ function TasksInner() {
           <CardContent className="p-10 text-center text-muted-foreground">No tasks match.</CardContent>
         </Card>
       ) : (
-        <TaskTable tasks={tasks} onOpenComments={setCommentsTask} onTaskUpdated={load} />
+        <>
+          <TaskTable tasks={tasks} onOpenComments={setCommentsTask} onTaskUpdated={load} />
+          <TaskPagination
+            pagination={pagination}
+            loading={loading}
+            onPageChange={setPage}
+          />
+        </>
       )}
 
       <CommentsModal

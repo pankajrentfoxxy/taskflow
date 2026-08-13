@@ -5,10 +5,12 @@ import Modal from './Modal';
 import {
   api,
   fromLocalInput,
+  fmtDateTime,
   STATUS_COLOR,
   STATUS_COLOR_FALLBACK,
   STATUS_LABEL,
   TASK_ACTION_TOAST,
+  timeAgo,
   toast,
   toLocalInput,
 } from '@/lib/util';
@@ -17,6 +19,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Card, CardContent } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 
 type View = 'actions' | 'ack' | 'reason' | 'eta';
@@ -40,6 +44,8 @@ export default function TaskStatusModal({
   const [pendingAction, setPendingAction] = useState('');
   const [reasonText, setReasonText] = useState('');
   const [eta, setEta] = useState('');
+  const [explanation, setExplanation] = useState('');
+  const [propEta, setPropEta] = useState('');
 
   const reset = useCallback(() => {
     setErr('');
@@ -47,6 +53,8 @@ export default function TaskStatusModal({
     setPendingAction('');
     setReasonText('');
     setEta('');
+    setExplanation('');
+    setPropEta('');
   }, []);
 
   const load = useCallback(async () => {
@@ -141,6 +149,48 @@ export default function TaskStatusModal({
     act({ action: 'update_eta', etaAt });
   };
 
+  const submitExplanation = async () => {
+    if (!task?.id) return;
+    setBusy(true);
+    setErr('');
+    try {
+      await api(`/api/tasks/${task.id}/escalation`, {
+        method: 'POST',
+        body: JSON.stringify({ explanation, proposedEtaAt: fromLocalInput(propEta) }),
+      });
+      toast.success('Explanation submitted');
+      onDone();
+      onClose();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to submit explanation';
+      setErr(msg);
+      toast.errorFrom(e, 'Failed to submit explanation');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reviewEscalation = async (result: 'ACCEPTED' | 'REJECTED') => {
+    if (!task?.id) return;
+    setBusy(true);
+    setErr('');
+    try {
+      await api(`/api/tasks/${task.id}/escalation`, {
+        method: 'POST',
+        body: JSON.stringify({ review: result }),
+      });
+      toast.success(result === 'ACCEPTED' ? 'Escalation accepted' : 'Escalation rejected');
+      onDone();
+      onClose();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Review failed';
+      setErr(msg);
+      toast.errorFrom(e, 'Review failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const openReason = (action: string) => {
     setPendingAction(action);
     setReasonText('');
@@ -150,14 +200,21 @@ export default function TaskStatusModal({
 
   const t = detail?.task;
   const perm = detail?.permissions;
+  const escalation = detail?.escalation;
   const status = t?.status || task?.status || '';
   const title = t?.title || task?.title || 'Task';
 
   const isEscalated = status === 'ESCALATED';
+  const showReview = Boolean(perm?.canReview && escalation?.explanation && isEscalated);
+  const modalTitle = perm?.mustExplain
+    ? 'Explanation required'
+    : showReview
+      ? 'Review escalation'
+      : 'Change status';
   const actionButtons: { label: string; onClick: () => void; variant?: 'default' | 'outline'; className?: string }[] = [];
 
   if (perm?.mustExplain) {
-    // Escalation blocks other actions until explanation is submitted on detail page.
+    // Explanation form shown below — blocks other actions until submitted.
   } else if (perm && isEscalated) {
     if (perm.canEditEta) {
       actionButtons.push({
@@ -260,7 +317,7 @@ export default function TaskStatusModal({
             : 'Why cancel this task?';
 
   return (
-    <Modal open={open} onClose={onClose} title="Change status">
+    <Modal open={open} onClose={onClose} title={modalTitle}>
       <div className="space-y-4">
         <div>
           <p className="text-sm text-muted-foreground">
@@ -280,11 +337,50 @@ export default function TaskStatusModal({
         {loading && <div className="h-16 animate-pulse rounded-lg bg-muted/50" />}
 
         {!loading && perm?.mustExplain && (
-          <Alert>
-            <AlertDescription>
-              This task is escalated. Open the task detail page to submit your explanation before changing status.
-            </AlertDescription>
-          </Alert>
+          <Card className="border-red-300 bg-red-50 py-0">
+            <CardContent className="p-3">
+              <h3 className="mb-1 font-bold text-red-700">🚨 Explanation required</h3>
+              <p className="mb-3 text-sm text-red-600">
+                Submit a written explanation (min 20 characters) and propose a new ETA before doing anything else.
+              </p>
+              <Textarea
+                className="mb-2 min-h-[80px] bg-white"
+                placeholder="Why was this task delayed?"
+                value={explanation}
+                onChange={(e) => setExplanation(e.target.value)}
+              />
+              <Label className="text-red-800">Proposed new ETA</Label>
+              <Input
+                type="datetime-local"
+                className="mb-3 mt-1.5 bg-white"
+                value={propEta}
+                onChange={(e) => setPropEta(e.target.value)}
+              />
+              <Button variant="destructive" className="w-full" disabled={busy} onClick={submitExplanation}>
+                {busy ? 'Submitting…' : 'Submit explanation'}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {!loading && showReview && (
+          <Card className="border-amber-300 bg-amber-50 py-0">
+            <CardContent className="p-3">
+              <h3 className="mb-1 font-bold text-amber-800">Escalation explanation</h3>
+              <p className="whitespace-pre-wrap text-sm text-gray-700">{escalation.explanation}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Proposed ETA: {fmtDateTime(escalation.proposed_eta_at)} · submitted {timeAgo(escalation.explanation_at)}
+              </p>
+              <div className="mt-3 flex gap-2">
+                <Button className="flex-1" disabled={busy} onClick={() => reviewEscalation('ACCEPTED')}>
+                  Accept & re-plan
+                </Button>
+                <Button variant="destructive" className="flex-1" disabled={busy} onClick={() => reviewEscalation('REJECTED')}>
+                  Reject
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {!loading && view === 'actions' && !perm?.mustExplain && (

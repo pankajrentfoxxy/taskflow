@@ -33,6 +33,7 @@ import {
   Escalation,
   Notification,
   Attachment,
+  Otp,
 } from "./models/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -96,6 +97,7 @@ const syncModels = async () => {
   await Escalation.sync();
   await Notification.sync();
   await Attachment.sync();
+  await Otp.sync();
   await sequelize.query(
     "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS is_visible BOOLEAN NOT NULL DEFAULT true"
   );

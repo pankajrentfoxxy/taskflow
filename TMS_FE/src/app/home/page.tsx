@@ -85,14 +85,14 @@ function HomeInner() {
       const [kind, idStr] = filterAssignee.split(':');
       if (kind === 'u') sp.set('assigneeId', idStr);
       else if (kind === 't') sp.set('teamId', idStr);
-      api(`/api/tasks?${sp}`).then((d) => {
+      api(`/api/tasks?${sp}&limit=300`).then((d) => {
         setMine(d.tasks);
         setCreated([]);
       });
       return;
     }
-    api('/api/tasks?filter=mine').then((d) => setMine(d.tasks));
-    api('/api/tasks?filter=created').then((d) => setCreated(d.tasks));
+    api('/api/tasks?filter=mine&limit=300').then((d) => setMine(d.tasks));
+    api('/api/tasks?filter=created&limit=300').then((d) => setCreated(d.tasks));
   }, [viewingFiltered, filterAssignee]);
   useEffect(() => { load(); const iv = setInterval(load, 30000); return () => clearInterval(iv); }, [load]);
 

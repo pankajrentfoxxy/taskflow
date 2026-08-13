@@ -14,6 +14,7 @@ import Attachment from "./Attachment.js";
 import Board from "./Board.js";
 import TaskType from "./TaskType.js";
 import Meta from "./Meta.js";
+import Otp from "./Otp.js";
 
 // ── Users & Teams ──────────────────────────────────────────────────────────
 // No DB-level FK between users ↔ teams (circular: team_id + manager_id); enforce in app layer.
@@ -121,6 +122,7 @@ export {
   Board,
   TaskType,
   Meta,
+  Otp,
 };
 
 export default {
@@ -140,4 +142,5 @@ export default {
   Board,
   TaskType,
   Meta,
+  Otp,
 };

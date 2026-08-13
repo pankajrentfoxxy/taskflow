@@ -10,6 +10,8 @@ export const listTasks = catchAsync(async (req, res) => {
       projectId: req.query.projectId,
       assigneeId: req.query.assigneeId,
       teamId: req.query.teamId,
+      page: req.query.page,
+      limit: req.query.limit,
     })
   );
 });

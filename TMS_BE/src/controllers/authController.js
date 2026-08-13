@@ -42,8 +42,12 @@ export const logout = catchAsync(async (_req, res) => {
   res.json({ ok: true });
 });
 
+export const forgotPassword = catchAsync(async (req, res) => {
+  res.json(await authService.requestPasswordResetOtp(req.body.email));
+});
+
 export const resetPassword = catchAsync(async (req, res) => {
   res.json(await authService.resetPassword(req.body));
 });
 
-export default { login, refresh, logout, resetPassword };
+export default { login, refresh, logout, resetPassword, forgotPassword };

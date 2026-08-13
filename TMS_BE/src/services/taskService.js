@@ -29,6 +29,15 @@ const SUB_COUNTS = `
   (SELECT COUNT(*)::int FROM tasks s WHERE s.parent_id = t.id AND s.status = 'DONE' AND s.deleted = false) AS subtask_done,
   (SELECT COUNT(*)::int FROM comments c WHERE c.task_id = t.id) AS comment_count`;
 
+const ESCALATION_REVIEW_PENDING = `
+  COALESCE((
+    SELECT (e.explanation IS NOT NULL AND e.review_status = 'PENDING')
+    FROM escalations e
+    WHERE e.task_id = t.id
+    ORDER BY e.id DESC
+    LIMIT 1
+  ), false) AS escalation_review_pending`;
+
 export async function loadTask(id, { includeDeleted = false } = {}) {
   const deletedClause = includeDeleted ? "" : " AND t.deleted = false";
   const [task] = await sequelize.query(
@@ -55,12 +64,20 @@ async function explanationPending(task) {
   return esc && !esc.explanation;
 }
 
-export const listTasks = async (user, { filter = "mine", status, q, projectId, assigneeId, teamId }) => {
+export const listTasks = async (
+  user,
+  { filter = "mine", status, q, projectId, assigneeId, teamId, page = 1, limit = 25 }
+) => {
   await runSlaSweep();
+
+  page = Math.max(1, parseInt(page, 10) || 1);
+  limit = Math.min(100, Math.max(1, parseInt(limit, 10) || 25));
+  const offset = (page - 1) * limit;
+  const emptyPage = { tasks: [], pagination: { page, limit, total: 0, totalPages: 1 } };
 
   const { sql, replacements } = taskVisibilityWhere(user);
   let where = `(${sql})`;
-  const repl = { ...replacements };
+  const repl = { ...replacements, limit, offset };
 
   if (assigneeId || teamId) {
     if (!["ADMIN", "CEO"].includes(user.role)) {
@@ -98,13 +115,15 @@ export const listTasks = async (user, { filter = "mine", status, q, projectId, a
       repl.mgrTeamId = user.team_id;
       repl.mgrTeamId2 = user.team_id;
     } else if (!["ADMIN", "CEO"].includes(user.role)) {
-      return { tasks: [] };
+      return emptyPage;
     }
   }
 
   if (status) {
     where += " AND t.status = :status";
     repl.status = status;
+  } else {
+    where += " AND t.status != 'DONE'";
   }
   if (q) {
     where += " AND (t.title ILIKE :q OR t.description ILIKE :q)";
@@ -118,23 +137,33 @@ export const listTasks = async (user, { filter = "mine", status, q, projectId, a
   }
   where += " AND t.deleted = false";
 
-  const tasks = await sequelize.query(
-    `SELECT t.*, ${SUB_COUNTS},
-      ua.name AS assignee_name, uc.name AS creator_name, tm.name AS team_name, p.name AS project_name,
-      tt.name AS type_name
+  const fromClause = `
      FROM tasks t
      LEFT JOIN task_types tt ON tt.id = t.task_type_id
      LEFT JOIN users ua ON ua.id = t.assignee_id
      LEFT JOIN users uc ON uc.id = t.creator_id
      LEFT JOIN teams tm ON tm.id = t.assigned_team_id
-     LEFT JOIN projects p ON p.id = t.project_id
+     LEFT JOIN projects p ON p.id = t.project_id`;
+
+  const [countRow] = await sequelize.query(`SELECT COUNT(*)::int AS total ${fromClause} WHERE ${where}`, {
+    replacements: repl,
+    type: QueryTypes.SELECT,
+  });
+  const total = countRow?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / limit) || 1);
+
+  const tasks = await sequelize.query(
+    `SELECT t.*, ${SUB_COUNTS}, ${ESCALATION_REVIEW_PENDING},
+      ua.name AS assignee_name, uc.name AS creator_name, tm.name AS team_name, p.name AS project_name,
+      tt.name AS type_name
+     ${fromClause}
      WHERE ${where}
      ORDER BY CASE t.status WHEN 'ESCALATED' THEN 0 WHEN 'ASSIGNED' THEN 1 WHEN 'DISCUSS' THEN 2 ELSE 3 END, t.due_at ASC
-     LIMIT 300`,
+     LIMIT :limit OFFSET :offset`,
     { replacements: repl, type: QueryTypes.SELECT }
   );
 
-  return { tasks };
+  return { tasks, pagination: { page, limit, total, totalPages } };
 };
 
 export const createTask = async (user, body) => {
@@ -276,7 +305,8 @@ export const getTaskDetail = async (user, taskId) => {
 
   const subtasks = await sequelize.query(
     `SELECT t.*, ua.name AS assignee_name, tm.name AS team_name, tt.name AS type_name,
-      (SELECT COUNT(*)::int FROM comments c WHERE c.task_id = t.id) AS comment_count
+      (SELECT COUNT(*)::int FROM comments c WHERE c.task_id = t.id) AS comment_count,
+      ${ESCALATION_REVIEW_PENDING}
      FROM tasks t
      LEFT JOIN users ua ON ua.id = t.assignee_id
      LEFT JOIN teams tm ON tm.id = t.assigned_team_id
@@ -342,9 +372,11 @@ export const getTaskDetail = async (user, taskId) => {
       !expPending,
     canEditEta: isEscalated
       ? isBoss
-      : (await canEditEta(user, task)) &&
-        !["DONE", "CANCELLED", "REJECTED"].includes(task.status) &&
-        !expPending,
+      : task.status === "ASSIGNED"
+        ? isBoss
+        : (await canEditEta(user, task)) &&
+          !["DONE", "CANCELLED", "REJECTED"].includes(task.status) &&
+          !expPending,
     canReopen:
       task.status === "DONE" &&
       (isCreator || isBoss || isMgr) &&
@@ -572,6 +604,13 @@ export const patchTask = async (user, taskId, body) => {
       if (task.status === "ESCALATED") {
         if (!["ADMIN", "CEO"].includes(user.role)) {
           throw new ApiError(httpStatus.FORBIDDEN, "Only Admin or CEO can update ETA on escalated tasks");
+        }
+      } else if (task.status === "ASSIGNED") {
+        if (!["ADMIN", "CEO"].includes(user.role)) {
+          throw new ApiError(
+            httpStatus.FORBIDDEN,
+            "Only Admin or CEO can update ETA while the task is awaiting acceptance"
+          );
         }
       } else if (!(await canEditEta(user, task))) {
         throw new ApiError(httpStatus.FORBIDDEN, "You cannot edit the ETA of this task");

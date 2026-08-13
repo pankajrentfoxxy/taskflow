@@ -14,6 +14,7 @@ export default function TaskAssignerUrgentBadge({
     creator_id?: number;
     status?: string;
     blocked_reason?: string | null;
+    escalation_review_pending?: boolean | string | null;
   };
   viewer?: { id?: number; role?: string } | null;
   className?: string;

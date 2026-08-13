@@ -170,13 +170,38 @@ export function taskNeedsAssignerAction(task: {
   return false;
 }
 
-/** Pulse only for the task creator (and Admin/CEO oversight). */
+/** Escalation explanation submitted and awaiting Admin/CEO review. */
+export function taskNeedsEscalationReview(task: {
+  status?: string;
+  escalation_review_pending?: boolean | string | null;
+}): boolean {
+  if (task.status !== 'ESCALATED') return false;
+  const pending = task.escalation_review_pending;
+  if (pending === true || pending === 'true' || pending === 't') return true;
+  if (pending === false || pending === 'false' || pending === 'f' || pending == null) return false;
+  return Boolean(pending);
+}
+
+/** Pulse + badge for creator (discuss/block/reject) or Admin/CEO (escalation review). */
 export function taskNeedsAssignerActionForViewer(
-  task: { creator_id?: number; status?: string; blocked_reason?: string | null },
+  task: {
+    creator_id?: number;
+    status?: string;
+    blocked_reason?: string | null;
+    escalation_review_pending?: boolean | string | null;
+  },
   viewer?: { id?: number; role?: string } | null,
 ): boolean {
-  if (!taskNeedsAssignerAction(task)) return false;
   if (!viewer?.id) return false;
+
+  if (
+    (viewer.role === 'ADMIN' || viewer.role === 'CEO') &&
+    taskNeedsEscalationReview(task)
+  ) {
+    return true;
+  }
+
+  if (!taskNeedsAssignerAction(task)) return false;
   if (task.creator_id === viewer.id) return true;
   return viewer.role === 'ADMIN' || viewer.role === 'CEO';
 }
@@ -196,6 +221,7 @@ export function getTaskRowClasses(
     due_at?: unknown;
     creator_id?: number;
     blocked_reason?: string | null;
+    escalation_review_pending?: boolean | string | null;
   },
   viewer?: { id?: number; role?: string } | null,
 ): string {
@@ -215,7 +241,13 @@ export const PRIORITY_COLOR: Record<string, string> = {
   LOW: 'text-gray-400',
 };
 
-const AUTH_NO_RETRY = new Set(['/auth/login', '/auth/logout', '/auth/reset-password', '/auth/refresh']);
+const AUTH_NO_RETRY = new Set([
+  '/auth/login',
+  '/auth/logout',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+  '/auth/refresh',
+]);
 
 function normalizeApiPath(path: string): string {
   const normalized = path.startsWith('/api') ? path.slice(4) : path;
