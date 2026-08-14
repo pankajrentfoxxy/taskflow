@@ -4,6 +4,7 @@ import Modal from './Modal';
 import { api, apiUpload, fromLocalInput, toLocalInput, toast } from '@/lib/util';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import DescriptionEditor from '@/components/DescriptionEditor';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
