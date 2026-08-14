@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Modal from '@/components/Modal';
+import TaskFlowLogo from '@/components/TaskFlowLogo';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -148,8 +149,8 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-4">
         <div className="mb-4 text-center">
-          <div className="mx-auto mb-3 flex size-16 items-center justify-center rounded-2xl bg-foreground text-background shadow-lg">
-            <span className="text-lg font-black">TF</span>
+          <div className="mx-auto mb-3 flex size-16 items-center justify-center rounded-2xl shadow-lg">
+            <TaskFlowLogo size={64} className="rounded-2xl" />
           </div>
           <h1 className="text-2xl font-bold">TaskFlow</h1>
           <p className="mt-1 text-sm text-muted-foreground">Task Management System</p>

@@ -27,7 +27,13 @@ export async function notify(
   }
 
   if (rows.length > 0) {
-    await Notification.bulkCreate(rows);
+    const created = await Notification.bulkCreate(rows);
+    try {
+      const { emitNotificationsFromRows } = await import("./socket.js");
+      emitNotificationsFromRows(created);
+    } catch {
+      // socket optional during tests
+    }
   }
 }
 

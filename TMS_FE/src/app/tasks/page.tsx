@@ -9,6 +9,7 @@ import Composer from '@/components/Composer';
 import TaskTemplateButton from '@/components/TaskTemplateButton';
 import TaskDateRangeFilter from '@/components/TaskDateRangeFilter';
 import { api, STATUS_LABEL, taskDueDateQueryParams, type TaskDueDateFilterMode } from '@/lib/util';
+import { onTaskChanged } from '@/lib/socket';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -80,6 +81,8 @@ function TasksInner() {
       .finally(() => setLoading(false));
   }, [filter, status, q, canFilter, filterAssignee, page, dueDateMode, dueFromDate, dueToDate]);
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => onTaskChanged(() => load()), [load]);
 
   const hasActiveFilters =
     filter !== 'mine' ||

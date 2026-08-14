@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, createContext, useContext } from 'react';
+import { useEffect, useState, createContext, useContext, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
@@ -9,7 +9,6 @@ import {
   PenLine,
   Folder,
   BarChart3,
-  Bell,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
@@ -17,6 +16,10 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/util';
 import { cn } from '@/lib/utils';
+import RealtimeBridge from '@/components/RealtimeBridge';
+import NotificationMenu from '@/components/NotificationMenu';
+import TaskFlowLogo from '@/components/TaskFlowLogo';
+import { useFaviconBadge } from '@/hooks/useFaviconBadge';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -143,11 +146,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     return () => { alive = false; clearInterval(iv); };
   }, [router]);
 
-  const refreshMe = () => {
+  const refreshMe = useCallback(() => {
     api('/api/me')
       .then((d) => { setMe(d.user); setUnread(d.unread); })
       .catch(() => router.push('/login'));
-  };
+  }, [router]);
+
+  useFaviconBadge(unread);
 
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
@@ -169,6 +174,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <MeContext.Provider value={{ me, unread, refreshMe }}>
+      <RealtimeBridge me={me} onNotification={refreshMe} />
       <div className="min-h-screen bg-background">
         {/* Desktop sidebar */}
         <aside
@@ -178,9 +184,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           )}
         >
           <div className={cn('flex h-16 shrink-0 items-center border-b border-border', collapsed ? 'justify-center px-2' : 'gap-3 px-4')}>
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
-              <span className="text-xs font-black">TF</span>
-            </div>
+            <TaskFlowLogo size={36} />
             {!collapsed && (
               <div className="min-w-0">
                 <div className="truncate text-sm font-bold tracking-tight">TaskFlow</div>
@@ -243,16 +247,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             </div>
 
             <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-              <Button variant="ghost" size="icon-sm" className="relative" asChild>
-                <Link href="/notifications" aria-label="Notifications">
-                  <Bell className="size-4" />
-                  {unread > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 flex size-4 min-w-4 items-center justify-center rounded-full bg-foreground px-0.5 text-[9px] font-bold text-background">
-                      {unread > 9 ? '9+' : unread}
-                    </span>
-                  )}
-                </Link>
-              </Button>
+              <NotificationMenu unread={unread} refreshMe={refreshMe} />
               {me && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -301,9 +296,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           <SheetContent side="left" className="w-[280px] p-0">
             <SheetHeader className="border-b px-4 py-4 text-left">
               <div className="flex items-center gap-3">
-                <div className="flex size-9 items-center justify-center rounded-lg bg-foreground text-background">
-                  <span className="text-xs font-black">TF</span>
-                </div>
+                <TaskFlowLogo size={36} />
                 <div>
                   <SheetTitle className="text-sm">TaskFlow</SheetTitle>
                   <p className="text-[11px] text-muted-foreground">Task Management</p>

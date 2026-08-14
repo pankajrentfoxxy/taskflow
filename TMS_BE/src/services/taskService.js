@@ -376,6 +376,14 @@ export const createTask = async (user, body) => {
     );
   }
 
+  try {
+    const { emitTasksCreated } = await import("../lib/socket.js");
+    const primaryTask = created.length ? await loadTask(created[0]) : null;
+    await emitTasksCreated({ taskIds: created, actor: user, primaryTask });
+  } catch {
+    // socket optional
+  }
+
   return { ids: created };
 };
 
@@ -1048,7 +1056,15 @@ export const patchTask = async (user, taskId, body) => {
       throw new ApiError(httpStatus.BAD_REQUEST, "Unknown action");
   }
 
-  return { ok: true, task: await loadTask(task.id) };
+  const updatedTask = await loadTask(task.id);
+  try {
+    const { emitTaskChanged } = await import("../lib/socket.js");
+    await emitTaskChanged({ action, task: updatedTask, actor: user });
+  } catch {
+    // socket optional
+  }
+
+  return { ok: true, task: updatedTask };
 };
 
 export const deleteTask = async (user, taskId) => {

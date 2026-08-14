@@ -2,10 +2,14 @@ import http from "http";
 import app, { initApp } from "./src/app.js";
 import config from "./src/config/config.js";
 import logger from "./src/config/logger.js";
+import { initSocket } from "./src/lib/socket.js";
 
 await initApp();
 
-const server = http.createServer(app).listen(config.port, () => {
+const server = http.createServer(app);
+initSocket(server);
+
+server.listen(config.port, () => {
   logger.info(`TaskFlow API listening on port ${config.port}`);
 });
 

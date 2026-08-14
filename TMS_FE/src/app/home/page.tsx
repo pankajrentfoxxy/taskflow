@@ -9,6 +9,7 @@ import Composer from '@/components/Composer';
 import TaskTemplateButton from '@/components/TaskTemplateButton';
 import TaskDateRangeFilter from '@/components/TaskDateRangeFilter';
 import { api, isDueInWindow, taskDueDateQueryParams, type TaskDueDateFilterMode } from '@/lib/util';
+import { onPresenceUpdate, onTaskChanged } from '@/lib/socket';
 import { IconZap, IconAlert, IconActivity, IconCalendar, IconPlus, IconPen, IconSend, IconCheckCircle } from '@/components/Icons';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -65,6 +66,7 @@ function HomeInner() {
   const [commentsTask, setCommentsTask] = useState<any>(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [clock, setClock] = useState<{ greeting: string; date: string } | null>(null);
+  const [onlineCount, setOnlineCount] = useState(0);
 
   useEffect(() => {
     if (!canFilter) return;
@@ -106,6 +108,18 @@ function HomeInner() {
     api(`/api/tasks?${withDue({ filter: 'created', limit: '300' })}`).then((d) => setCreated(d.tasks));
   }, [viewingFiltered, filterAssignee, dueDateMode, dueFromDate, dueToDate]);
   useEffect(() => { load(); const iv = setInterval(load, 30000); return () => clearInterval(iv); }, [load]);
+
+  useEffect(() => onTaskChanged(() => load()), [load]);
+  useEffect(() => {
+    if (!canFilter || !me) return;
+    return onPresenceUpdate((detail) => {
+      if (detail.onlineUsers) {
+        setOnlineCount(detail.onlineUsers.filter((id) => id !== me.id).length);
+        return;
+      }
+      setOnlineCount(Math.max(0, (detail.onlineCount ?? 0) - 1));
+    });
+  }, [canFilter, me]);
 
   const hasActiveFilters =
     !!filterAssignee ||
@@ -188,6 +202,7 @@ function HomeInner() {
         onToDateChange={setDueToDate}
         showReset={hasActiveFilters}
         onReset={resetFilters}
+        onlineCount={canFilter ? onlineCount : null}
       />
 
       {/* Focus metrics */}

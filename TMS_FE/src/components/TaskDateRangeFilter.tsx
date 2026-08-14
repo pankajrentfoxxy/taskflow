@@ -14,6 +14,7 @@ export default function TaskDateRangeFilter({
   onToDateChange,
   onReset,
   showReset = false,
+  onlineCount,
   className,
 }: {
   mode: TaskDueDateFilterMode;
@@ -24,11 +25,12 @@ export default function TaskDateRangeFilter({
   onToDateChange: (value: string) => void;
   onReset?: () => void;
   showReset?: boolean;
+  onlineCount?: number | null;
   className?: string;
 }) {
   return (
     <div className={cn('flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center', className)}>
-      <div className="flex gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         {(
           [
             { key: 'all' as const, label: 'All' },
@@ -47,6 +49,22 @@ export default function TaskDateRangeFilter({
             {opt.label}
           </Button>
         ))}
+        {onlineCount != null && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            tabIndex={-1}
+            aria-live="polite"
+            className="h-8 cursor-default rounded-full px-3 text-xs font-normal text-muted-foreground hover:bg-background"
+          >
+            <span className="relative mr-1.5 flex size-2 shrink-0">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-70" />
+              <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+            </span>
+            {onlineCount} user{onlineCount === 1 ? '' : 's'} online
+          </Button>
+        )}
       </div>
       {mode === 'range' && (
         <div className="flex flex-wrap items-center gap-2">
