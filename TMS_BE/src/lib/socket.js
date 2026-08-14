@@ -33,7 +33,7 @@ export function initSocket(server) {
       origin: config.corsOrigin,
       credentials: true,
     },
-    path: "/socket.io/",
+    path: "/socket.io",
   });
 
   io.use(async (socket, next) => {

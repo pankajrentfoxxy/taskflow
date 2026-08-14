@@ -14,7 +14,7 @@ const DISCONNECT_DELAY_MS = 1000;
 export function getSocket(): Socket {
   if (!socket) {
     socket = io(socketBaseUrl(), {
-      path: '/socket.io/',
+      path: '/socket.io',
       withCredentials: true,
       autoConnect: false,
       // Polling first is more reliable behind nginx; upgrades to websocket when ready.
