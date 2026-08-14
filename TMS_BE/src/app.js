@@ -46,6 +46,10 @@ fs.mkdirSync(uploadPath, { recursive: true });
 
 const app = express();
 
+if (config.env === "production") {
+  app.set("trust proxy", 1);
+}
+
 if (config.env !== "test") {
   app.use(morgan.successHandler);
   app.use(morgan.errorHandler);

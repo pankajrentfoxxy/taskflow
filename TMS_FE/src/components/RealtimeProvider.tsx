@@ -1,37 +1,51 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { usePathname } from 'next/navigation';
-import { connectSocket, disconnectSocket, dispatchNotification, dispatchPresence, dispatchTaskChanged } from '@/lib/socket';
-import { toast } from '@/lib/util';
+import {
+  connectSocket,
+  releaseSocket,
+  disconnectSocket,
+  dispatchNotification,
+  dispatchPresence,
+  dispatchTaskChanged,
+  dispatchMeRefresh,
+} from '@/lib/socket';
+import { api, toast } from '@/lib/util';
 
 type Me = {
   id: number;
   role: string;
 };
 
-export default function RealtimeBridge({
-  me,
-  onNotification,
-  onAdminNotification,
-}: {
-  me: Me | null;
-  onNotification: () => void;
-  onAdminNotification?: () => void;
-}) {
+/** Keeps one socket connection for the whole app (survives page navigations). */
+export default function RealtimeProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [me, setMe] = useState<Me | null>(null);
+
+  const loadMe = useCallback(() => {
+    return api('/api/me')
+      .then((d) => setMe(d.user))
+      .catch(() => setMe(null));
+  }, []);
 
   useEffect(() => {
-    if (!me || pathname.startsWith('/login')) {
+    if (pathname.startsWith('/login')) {
+      setMe(null);
       disconnectSocket();
       return;
     }
+    void loadMe();
+  }, [pathname, loadMe]);
+
+  useEffect(() => {
+    if (!me || pathname.startsWith('/login')) return;
 
     const socket = connectSocket();
     const isAdmin = ['ADMIN', 'CEO'].includes(me.role);
 
     const onNotify = (payload: { notification?: { title?: string; body?: string } }) => {
-      onNotification();
+      dispatchMeRefresh();
       dispatchNotification(payload);
       if (!isAdmin) {
         const title = payload?.notification?.title;
@@ -41,8 +55,7 @@ export default function RealtimeBridge({
 
     const onAdminNotify = (payload: { title?: string; body?: string }) => {
       if (!isAdmin) return;
-      onAdminNotification?.();
-      onNotification();
+      dispatchMeRefresh();
       dispatchNotification(payload);
       if (payload?.title) toast.info(payload.title);
     };
@@ -55,19 +68,27 @@ export default function RealtimeBridge({
       dispatchPresence(payload);
     };
 
+    const onConnectError = (err: Error) => {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[socket] connect_error', err.message);
+      }
+    };
+
     socket.on('notification:new', onNotify);
     socket.on('admin:notification', onAdminNotify);
     socket.on('task:changed', onTaskChanged);
     socket.on('presence:update', onPresence);
+    socket.on('connect_error', onConnectError);
 
     return () => {
       socket.off('notification:new', onNotify);
       socket.off('admin:notification', onAdminNotify);
       socket.off('task:changed', onTaskChanged);
       socket.off('presence:update', onPresence);
-      disconnectSocket();
+      socket.off('connect_error', onConnectError);
+      releaseSocket();
     };
-  }, [me, pathname, onNotification, onAdminNotification]);
+  }, [me, pathname]);
 
-  return null;
+  return children;
 }

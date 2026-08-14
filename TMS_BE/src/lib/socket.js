@@ -1,9 +1,10 @@
-import cookie from "cookie";
 import jwt from "jsonwebtoken";
+import cookie from "cookie";
 import { Server } from "socket.io";
 import config from "../config/config.js";
 import { User } from "../models/index.js";
 import logger from "../config/logger.js";
+import { verifyRefreshToken } from "../utils/jwt.js";
 
 let io = null;
 /** @type {Map<number, number>} */
@@ -39,11 +40,26 @@ export function initSocket(server) {
     try {
       const raw = socket.handshake.headers.cookie || "";
       const cookies = cookie.parse(raw);
-      const token = cookies.accessToken;
-      if (!token) return next(new Error("Unauthorized"));
+      let userId = null;
 
-      const payload = jwt.verify(token, config.jwt.secret);
-      const userId = payload?.userId ?? payload?.user_id;
+      if (cookies.accessToken) {
+        try {
+          const payload = jwt.verify(cookies.accessToken, config.jwt.secret);
+          userId = payload?.userId ?? payload?.user_id;
+        } catch {
+          userId = null;
+        }
+      }
+
+      if (!userId && cookies.refreshToken) {
+        try {
+          const payload = verifyRefreshToken(cookies.refreshToken);
+          userId = payload?.userId;
+        } catch {
+          userId = null;
+        }
+      }
+
       if (!userId) return next(new Error("Unauthorized"));
 
       const user = await User.findOne({

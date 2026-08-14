@@ -7,6 +7,7 @@ const cookieBase = {
   httpOnly: true,
   sameSite: "lax",
   path: "/",
+  secure: config.env === "production",
 };
 
 function setAuthCookies(res, { accessToken, refreshToken }) {
@@ -21,8 +22,9 @@ function setAuthCookies(res, { accessToken, refreshToken }) {
 }
 
 function clearAuthCookies(res) {
-  res.clearCookie("accessToken", { path: "/" });
-  res.clearCookie("refreshToken", { path: "/" });
+  const clearOpts = { path: "/", secure: config.env === "production" };
+  res.clearCookie("accessToken", clearOpts);
+  res.clearCookie("refreshToken", clearOpts);
 }
 
 export const login = catchAsync(async (req, res) => {

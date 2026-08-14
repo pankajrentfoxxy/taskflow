@@ -15,8 +15,8 @@ import {
   Settings2,
 } from 'lucide-react';
 import { api } from '@/lib/util';
+import { onMeRefresh } from '@/lib/socket';
 import { cn } from '@/lib/utils';
-import RealtimeBridge from '@/components/RealtimeBridge';
 import NotificationMenu from '@/components/NotificationMenu';
 import TaskFlowLogo from '@/components/TaskFlowLogo';
 import { useFaviconBadge } from '@/hooks/useFaviconBadge';
@@ -152,6 +152,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       .catch(() => router.push('/login'));
   }, [router]);
 
+  useEffect(() => onMeRefresh(refreshMe), [refreshMe]);
+
   useFaviconBadge(unread);
 
   const toggleCollapsed = () => {
@@ -174,7 +176,6 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <MeContext.Provider value={{ me, unread, refreshMe }}>
-      <RealtimeBridge me={me} onNotification={refreshMe} />
       <div className="min-h-screen bg-background">
         {/* Desktop sidebar */}
         <aside

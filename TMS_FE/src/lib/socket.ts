@@ -6,6 +6,10 @@ export function socketBaseUrl(): string {
 }
 
 let socket: Socket | null = null;
+let subscribers = 0;
+let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+const DISCONNECT_DELAY_MS = 1000;
 
 export function getSocket(): Socket {
   if (!socket) {
@@ -13,25 +17,54 @@ export function getSocket(): Socket {
       path: '/socket.io/',
       withCredentials: true,
       autoConnect: false,
-      transports: ['websocket', 'polling'],
+      // Polling first is more reliable behind nginx; upgrades to websocket when ready.
+      transports: ['polling', 'websocket'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 10000,
     });
   }
   return socket;
 }
 
 export function connectSocket(): Socket {
+  if (disconnectTimer) {
+    clearTimeout(disconnectTimer);
+    disconnectTimer = null;
+  }
+  subscribers += 1;
   const s = getSocket();
   if (!s.connected) s.connect();
   return s;
 }
 
+/** Release a subscriber; disconnect only after delay when nothing needs the socket. */
+export function releaseSocket(): void {
+  subscribers = Math.max(0, subscribers - 1);
+  if (subscribers > 0) return;
+
+  if (disconnectTimer) clearTimeout(disconnectTimer);
+  disconnectTimer = setTimeout(() => {
+    if (subscribers === 0 && socket?.connected) socket.disconnect();
+    disconnectTimer = null;
+  }, DISCONNECT_DELAY_MS);
+}
+
+/** Force disconnect (logout). */
 export function disconnectSocket(): void {
-  if (socket?.connected) socket.disconnect();
+  subscribers = 0;
+  if (disconnectTimer) {
+    clearTimeout(disconnectTimer);
+    disconnectTimer = null;
+  }
+  if (socket) socket.disconnect();
 }
 
 export const REALTIME_TASK_EVENT = 'tf:task-changed';
 export const REALTIME_PRESENCE_EVENT = 'tf:presence';
 export const REALTIME_NOTIFICATION_EVENT = 'tf:notification';
+export const REALTIME_ME_REFRESH_EVENT = 'tf:me-refresh';
 
 export function dispatchTaskChanged(detail: unknown): void {
   if (typeof window === 'undefined') return;
@@ -46,6 +79,11 @@ export function dispatchPresence(detail: unknown): void {
 export function dispatchNotification(detail: unknown): void {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent(REALTIME_NOTIFICATION_EVENT, { detail }));
+}
+
+export function dispatchMeRefresh(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(REALTIME_ME_REFRESH_EVENT));
 }
 
 export function onTaskChanged(handler: (detail: unknown) => void): () => void {
@@ -66,4 +104,10 @@ export function onNotification(handler: () => void): () => void {
   if (typeof window === 'undefined') return () => {};
   window.addEventListener(REALTIME_NOTIFICATION_EVENT, handler);
   return () => window.removeEventListener(REALTIME_NOTIFICATION_EVENT, handler);
+}
+
+export function onMeRefresh(handler: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  window.addEventListener(REALTIME_ME_REFRESH_EVENT, handler);
+  return () => window.removeEventListener(REALTIME_ME_REFRESH_EVENT, handler);
 }
