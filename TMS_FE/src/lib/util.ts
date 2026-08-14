@@ -85,6 +85,8 @@ export function fromLocalInput(v: string): number | null {
 
 export type TaskDueDateFilterMode = 'all' | 'today' | 'range';
 
+export type ReportsDateFilterMode = 'all' | '7' | '30' | '90' | 'range';
+
 export function getTodayDueBounds(): { dueFrom: number; dueTo: number } {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
@@ -117,6 +119,19 @@ export function taskDueDateQueryParams(
   const bounds = getDateRangeDueBounds(fromDate, toDate);
   if (!bounds) return {};
   return { dueFrom: String(bounds.dueFrom), dueTo: String(bounds.dueTo) };
+}
+
+/** Query params for GET /api/reports created-date filtering. */
+export function reportsDateQueryParams(
+  mode: ReportsDateFilterMode,
+  fromDate = '',
+  toDate = '',
+): Record<string, string> {
+  if (mode === 'all') return {};
+  if (mode === '7' || mode === '30' || mode === '90') return { days: mode };
+  const bounds = getDateRangeDueBounds(fromDate, toDate);
+  if (!bounds) return {};
+  return { createdFrom: String(bounds.dueFrom), createdTo: String(bounds.dueTo) };
 }
 
 export const STATUS_LABEL: Record<string, string> = {

@@ -3,8 +3,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Shell, { useMe } from '@/components/Shell';
 import Modal from '@/components/Modal';
-import { api, fmtDateTime, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, SLA_BREACH_BADGE } from '@/lib/util';
+import { api, fmtDateTime, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, SLA_BREACH_BADGE, reportsDateQueryParams, type ReportsDateFilterMode } from '@/lib/util';
 import { IconInbox, IconClock, IconMute, IconAlert, IconScale, IconCalendar, IconCheckCircle, IconZap, IconActivity, IconTag, IconUsers, IconDownload } from '@/components/Icons';
+import ReportsDateRangeFilter from '@/components/ReportsDateRangeFilter';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -58,7 +59,9 @@ const TD = 'px-3 py-3';
 
 function ReportsInner() {
   const me = useMe();
-  const [days, setDays] = useState('0');
+  const [dateMode, setDateMode] = useState<ReportsDateFilterMode>('all');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   const [data, setData] = useState<any>(null);
   const [teams, setTeams] = useState<any[]>([]);
   const [types, setTypes] = useState<any[]>([]);
@@ -67,12 +70,32 @@ function ReportsInner() {
   const [drill, setDrill] = useState<{ title: string; tasks: any[] } | null>(null);
   const [drillLoading, setDrillLoading] = useState(false);
 
-  useEffect(() => {
-    const sp = new URLSearchParams({ days });
+  const buildQueryParams = (extra: Record<string, string> = {}) => {
+    const sp = new URLSearchParams(reportsDateQueryParams(dateMode, fromDate, toDate));
     if (teamId) sp.set('teamId', teamId);
     if (typeId) sp.set('taskTypeId', typeId);
-    api(`/api/reports?${sp}`).then(setData);
-  }, [days, teamId, typeId]);
+    for (const [k, v] of Object.entries(extra)) sp.set(k, v);
+    return sp;
+  };
+
+  const hasActiveFilters =
+    !!teamId ||
+    !!typeId ||
+    dateMode !== 'all' ||
+    !!fromDate ||
+    !!toDate;
+
+  const resetFilters = () => {
+    setTeamId('');
+    setTypeId('');
+    setDateMode('all');
+    setFromDate('');
+    setToDate('');
+  };
+
+  useEffect(() => {
+    api(`/api/reports?${buildQueryParams()}`).then(setData);
+  }, [dateMode, fromDate, toDate, teamId, typeId]);
 
   useEffect(() => {
     if (me && ['ADMIN', 'CEO'].includes(me.role)) api('/api/teams').then((d) => setTeams(d.teams)).catch(() => {});
@@ -89,9 +112,7 @@ function ReportsInner() {
     setDrillLoading(true);
     setDrill({ title, tasks: [] });
     try {
-      const sp = new URLSearchParams({ days, list: metric });
-      if (teamId) sp.set('teamId', teamId);
-      if (typeId) sp.set('taskTypeId', typeId);
+      const sp = buildQueryParams({ list: metric });
       for (const [k, v] of Object.entries(extra)) sp.set(k, String(v));
       const d = await api(`/api/reports?${sp}`);
       setDrill({ title, tasks: d.tasks });
@@ -139,30 +160,36 @@ function ReportsInner() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-2 flex-wrap mb-5">
-        {me && ['ADMIN', 'CEO'].includes(me.role) && (
-          <NativeSelect className="w-auto" value={teamId} onChange={(e) => setTeamId(e.target.value)}>
-            <option value="">All teams</option>
-            {teams.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </NativeSelect>
-        )}
-        {types.length > 0 && (
-          <NativeSelect className="w-auto" value={typeId} onChange={(e) => setTypeId(e.target.value)}>
-            <option value="">All task types</option>
-            {types.map((tt: any) => <option key={tt.id} value={tt.id}>{tt.name}</option>)}
-          </NativeSelect>
-        )}
-        <NativeSelect className="w-auto" value={days} onChange={(e) => setDays(e.target.value)}>
-          <option value="0">All time</option>
-          <option value="7">Last 7 days</option>
-          <option value="30">Last 30 days</option>
-          <option value="90">Last 90 days</option>
-        </NativeSelect>
-        {data.people.length > 0 && (
-          <Button variant="outline" className="ml-auto" onClick={exportCsv}>
-            <IconDownload className="w-4 h-4" /> CSV
-          </Button>
-        )}
+      <div className="mb-5 space-y-3">
+        <div className="flex gap-2 flex-wrap items-center">
+          {me && ['ADMIN', 'CEO'].includes(me.role) && (
+            <NativeSelect className="w-auto" value={teamId} onChange={(e) => setTeamId(e.target.value)}>
+              <option value="">All teams</option>
+              {teams.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </NativeSelect>
+          )}
+          {types.length > 0 && (
+            <NativeSelect className="w-auto" value={typeId} onChange={(e) => setTypeId(e.target.value)}>
+              <option value="">All task types</option>
+              {types.map((tt: any) => <option key={tt.id} value={tt.id}>{tt.name}</option>)}
+            </NativeSelect>
+          )}
+          {data.people.length > 0 && (
+            <Button variant="outline" className="ml-auto" onClick={exportCsv}>
+              <IconDownload className="w-4 h-4" /> CSV
+            </Button>
+          )}
+        </div>
+        <ReportsDateRangeFilter
+          mode={dateMode}
+          fromDate={fromDate}
+          toDate={toDate}
+          onModeChange={setDateMode}
+          onFromDateChange={setFromDate}
+          onToDateChange={setToDate}
+          showReset={hasActiveFilters}
+          onReset={resetFilters}
+        />
       </div>
 
       {/* Stat cards */}

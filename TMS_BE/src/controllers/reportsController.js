@@ -5,6 +5,8 @@ export const getReports = catchAsync(async (req, res) => {
   res.json(
     await reportsService.getReports(req.user, {
       days: Number(req.query.days || 0),
+      createdFrom: req.query.createdFrom,
+      createdTo: req.query.createdTo,
       teamId: req.query.teamId,
       taskTypeId: req.query.taskTypeId,
       listMetric: req.query.list,
