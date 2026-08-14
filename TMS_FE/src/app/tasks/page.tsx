@@ -150,6 +150,7 @@ function TasksInner() {
           onChange={(e) => setStatus(e.target.value)}
         >
           <option value="">Open tasks</option>
+          <option value="all">All</option>
           {Object.entries(STATUS_LABEL).map(([k, v]) => (
             <option key={k} value={k}>
               {v}

@@ -176,7 +176,9 @@ export const listTasks = async (
     }
   }
 
-  if (status) {
+  if (status === "all") {
+    // no status filter — include every status
+  } else if (status) {
     where += " AND t.status = :status";
     repl.status = status;
   } else {
