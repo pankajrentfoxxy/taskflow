@@ -2,16 +2,20 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Flag, MessageSquare, Plus, User } from 'lucide-react';
+import { Flag, MessageSquare, Pencil, Plus, User } from 'lucide-react';
 import Composer from '@/components/Composer';
 import CommentsModal from '@/components/CommentsModal';
 import TaskStatusModal from '@/components/TaskStatusModal';
 import TaskAssignerUrgentBadge from '@/components/TaskAssignerUrgentBadge';
-import { api, fmtShortDate, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, STATUS_DOT, PRIORITY_COLOR, isTaskOverdue, getTaskRowClasses } from '@/lib/util';
+import { api, fmtShortDate, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, STATUS_DOT, PRIORITY_COLOR, isTaskOverdue, getTaskRowClasses, TASK_ACTION_TOAST, toast } from '@/lib/util';
 import { useMe } from '@/components/Shell';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import DescriptionContent from '@/components/DescriptionContent';
+import DescriptionEditor from '@/components/DescriptionEditor';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { NativeSelect } from '@/components/ui/native-select';
 import {
   Table,
   TableBody,
@@ -199,6 +203,12 @@ export default function TaskDetailAccordion({
   const [subOpen, setSubOpen] = useState(false);
   const [statusTask, setStatusTask] = useState<any>(null);
   const [commentsTask, setCommentsTask] = useState<any>(null);
+  const [users, setUsers] = useState<any[]>([]);
+  const [addMemberUserId, setAddMemberUserId] = useState('');
+  const [addMemberRole, setAddMemberRole] = useState<'COLLABORATOR' | 'WATCHER'>('COLLABORATOR');
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
   const me = useMe();
   const viewer = me ? { id: me.id, role: me.role } : null;
 
@@ -212,8 +222,20 @@ export default function TaskDetailAccordion({
   }, [taskId]);
 
   useEffect(() => {
+    setEditingDetails(false);
+    setEditTitle('');
+    setEditDescription('');
+  }, [taskId]);
+
+  useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    api('/api/users')
+      .then((d) => setUsers(d.users.filter((u: any) => u.is_active)))
+      .catch(() => {});
+  }, []);
 
   if (loading && !data) {
     return (
@@ -231,9 +253,71 @@ export default function TaskDetailAccordion({
 
   if (!data) return null;
 
-  const { task, subtasks, attachments, permissions } = data;
+  const { task, members = [], subtasks, attachments, permissions } = data;
   const doneCount = subtasks.filter((s: any) => s.status === 'DONE').length;
   const canAddSubtask = permissions?.canAddSubtask && !task.parent_id;
+  const canManageMembers = permissions?.canManageMembers;
+  const canEditDetails = permissions?.canEditDetails;
+  const memberUserIds = new Set(members.map((m: any) => m.user_id));
+  const addMemberCandidates = users.filter(
+    (u) => u.id !== task.assignee_id && !memberUserIds.has(u.id),
+  );
+
+  const act = async (body: any): Promise<boolean> => {
+    setErr('');
+    try {
+      await api(`/api/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify(body) });
+      const action = String(body.action || '');
+      if (TASK_ACTION_TOAST[action]) toast.success(TASK_ACTION_TOAST[action]);
+      else toast.success('Task updated');
+      load();
+      onUpdated?.();
+      return true;
+    } catch (e: any) {
+      setErr(e.message);
+      toast.errorFrom(e);
+      return false;
+    }
+  };
+
+  const addMember = () => {
+    if (!addMemberUserId) {
+      toast.error('Choose a user');
+      return;
+    }
+    act({ action: 'add_member', userId: Number(addMemberUserId), role: addMemberRole });
+    setAddMemberUserId('');
+  };
+
+  const removeMember = (userId: number) => {
+    act({ action: 'remove_member', userId });
+  };
+
+  const startEditDetails = () => {
+    setEditTitle(task.title || '');
+    setEditDescription(task.description || '');
+    setEditingDetails(true);
+  };
+
+  const cancelEditDetails = () => {
+    setEditingDetails(false);
+    setEditTitle('');
+    setEditDescription('');
+  };
+
+  const saveDetails = async () => {
+    const title = editTitle.trim();
+    if (!title) {
+      toast.error('Title is required');
+      return;
+    }
+    const ok = await act({
+      action: 'update_details',
+      title,
+      description: editDescription.trim(),
+    });
+    if (ok) setEditingDetails(false);
+  };
 
   const handleStatusDone = () => {
     load();
@@ -242,6 +326,90 @@ export default function TaskDetailAccordion({
 
   return (
     <div className="border-t bg-muted/20 px-4 py-4">
+      <div className="mb-4 rounded-lg border bg-card p-4">
+        <div className="flex items-start justify-between gap-2">
+          {editingDetails ? (
+            <div className="min-w-0 flex-1 space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Title</label>
+                <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="Task title" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Description</label>
+                <DescriptionEditor value={editDescription} onChange={setEditDescription} />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" onClick={saveDetails}>Save</Button>
+                <Button type="button" size="sm" variant="outline" onClick={cancelEditDetails}>Cancel</Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-semibold leading-snug">{task.title}</h2>
+                <DescriptionContent text={task.description} className="mt-2" />
+              </div>
+              {canEditDetails && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="shrink-0 text-muted-foreground hover:text-foreground"
+                  onClick={startEditDetails}
+                  title="Edit title and description"
+                >
+                  <Pencil className="size-4" />
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+
+        {members.length > 0 && (
+          <div className="mt-4 border-t border-border/60 pt-3">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Additional members</div>
+            <ul className="mt-2 space-y-2">
+              {members.map((m: any) => (
+                <li key={m.user_id} className="flex items-center justify-between gap-2 text-sm">
+                  <div className="min-w-0">
+                    <span className="font-medium">{m.user_name}</span>
+                    <Badge variant="secondary" className="ml-2 text-[10px] capitalize">
+                      {String(m.role).toLowerCase()}
+                    </Badge>
+                  </div>
+                  {canManageMembers && (
+                    <Button type="button" variant="ghost" size="xs" className="text-red-600" onClick={() => removeMember(m.user_id)}>
+                      Remove
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {canManageMembers && addMemberCandidates.length > 0 && (
+          <div className="mt-4 border-t border-border/60 pt-3">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Add member</div>
+            <div className="flex flex-wrap gap-2">
+              <NativeSelect className="h-9 min-w-[160px] flex-1" value={addMemberUserId} onChange={(e) => setAddMemberUserId(e.target.value)}>
+                <option value="">Choose user…</option>
+                {addMemberCandidates.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </NativeSelect>
+              <NativeSelect className="h-9 w-36" value={addMemberRole} onChange={(e) => setAddMemberRole(e.target.value as 'COLLABORATOR' | 'WATCHER')}>
+                <option value="COLLABORATOR">Collaborator</option>
+                <option value="WATCHER">Watcher</option>
+              </NativeSelect>
+              <Button type="button" size="sm" variant="outline" onClick={addMember}>Add</Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {err && <p className="mb-3 text-sm text-red-600">{err}</p>}
+
       {!task.parent_id && (
         <div>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">

@@ -7,7 +7,8 @@ import TaskPagination, { type TaskPaginationMeta } from '@/components/TaskPagina
 import CommentsModal from '@/components/CommentsModal';
 import Composer from '@/components/Composer';
 import TaskTemplateButton from '@/components/TaskTemplateButton';
-import { api, STATUS_LABEL } from '@/lib/util';
+import TaskDateRangeFilter from '@/components/TaskDateRangeFilter';
+import { api, STATUS_LABEL, taskDueDateQueryParams, type TaskDueDateFilterMode } from '@/lib/util';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -26,6 +27,9 @@ function TasksInner() {
   const [users, setUsers] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [filterAssignee, setFilterAssignee] = useState('');
+  const [dueDateMode, setDueDateMode] = useState<TaskDueDateFilterMode>('all');
+  const [dueFromDate, setDueFromDate] = useState('');
+  const [dueToDate, setDueToDate] = useState('');
   const [tasks, setTasks] = useState<any[]>([]);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState<TaskPaginationMeta>({
@@ -46,7 +50,7 @@ function TasksInner() {
 
   useEffect(() => {
     setPage(1);
-  }, [filter, status, q, filterAssignee]);
+  }, [filter, status, q, filterAssignee, dueDateMode, dueFromDate, dueToDate]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -61,6 +65,9 @@ function TasksInner() {
     }
     if (status) sp.set('status', status);
     if (q) sp.set('q', q);
+    Object.entries(taskDueDateQueryParams(dueDateMode, dueFromDate, dueToDate)).forEach(([k, v]) => {
+      sp.set(k, v);
+    });
     sp.set('page', String(page));
     sp.set('limit', String(PAGE_SIZE));
     api(`/api/tasks?${sp}`)
@@ -71,8 +78,28 @@ function TasksInner() {
         );
       })
       .finally(() => setLoading(false));
-  }, [filter, status, q, canFilter, filterAssignee, page]);
+  }, [filter, status, q, canFilter, filterAssignee, page, dueDateMode, dueFromDate, dueToDate]);
   useEffect(() => { load(); }, [load]);
+
+  const hasActiveFilters =
+    filter !== 'mine' ||
+    !!status ||
+    !!q.trim() ||
+    !!filterAssignee ||
+    dueDateMode !== 'all' ||
+    !!dueFromDate ||
+    !!dueToDate;
+
+  const resetFilters = () => {
+    setFilter('mine');
+    setStatus('');
+    setQ('');
+    setFilterAssignee('');
+    setDueDateMode('all');
+    setDueFromDate('');
+    setDueToDate('');
+    setPage(1);
+  };
 
   const segments = [
     { key: 'mine', label: 'My tasks' },
@@ -151,14 +178,21 @@ function TasksInner() {
                 ))}
               </optgroup>
             </NativeSelect>
-            {filterAssignee && (
-              <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0" onClick={() => setFilterAssignee('')}>
-                Clear user filter
-              </Button>
-            )}
           </>
         )}
       </div>
+
+      <TaskDateRangeFilter
+        className="mb-4"
+        mode={dueDateMode}
+        fromDate={dueFromDate}
+        toDate={dueToDate}
+        onModeChange={setDueDateMode}
+        onFromDateChange={setDueFromDate}
+        onToDateChange={setDueToDate}
+        showReset={hasActiveFilters}
+        onReset={resetFilters}
+      />
 
       {loading ? (
         <TaskTableSkeleton />

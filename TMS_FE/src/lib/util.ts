@@ -9,8 +9,6 @@ export const toTimestamp = parseTimestamp;
 
 export const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api').replace(/\/$/, '');
 
-const LOGGED_IN_COOKIE = 'tf_logged_in';
-
 export function apiUrl(path: string): string {
   const normalized = path.startsWith('/api') ? path.slice(4) : path;
   return `${API_BASE}${normalized.startsWith('/') ? normalized : `/${normalized}`}`;
@@ -18,16 +16,6 @@ export function apiUrl(path: string): string {
 
 export function uploadUrl(id: number | string): string {
   return `${API_BASE}/uploads/${id}`;
-}
-
-export function setLoggedIn(): void {
-  if (typeof document === 'undefined') return;
-  document.cookie = `${LOGGED_IN_COOKIE}=1; path=/; max-age=${30 * 24 * 60 * 60}; SameSite=Lax`;
-}
-
-export function clearLoggedIn(): void {
-  if (typeof document === 'undefined') return;
-  document.cookie = `${LOGGED_IN_COOKIE}=; path=/; max-age=0`;
 }
 
 export function fmtDateTime(value?: unknown): string {
@@ -93,6 +81,42 @@ export function fromLocalInput(v: string): number | null {
   if (!v) return null;
   const ms = new Date(v).getTime();
   return Number.isNaN(ms) ? null : ms;
+}
+
+export type TaskDueDateFilterMode = 'all' | 'today' | 'range';
+
+export function getTodayDueBounds(): { dueFrom: number; dueTo: number } {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  return { dueFrom: start.getTime(), dueTo: end.getTime() };
+}
+
+export function getDateRangeDueBounds(fromDate: string, toDate: string): { dueFrom: number; dueTo: number } | null {
+  if (!fromDate || !toDate) return null;
+  const start = new Date(`${fromDate}T00:00:00`);
+  const end = new Date(`${toDate}T23:59:59.999`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start.getTime() > end.getTime()) {
+    return null;
+  }
+  return { dueFrom: start.getTime(), dueTo: end.getTime() };
+}
+
+/** Query params for GET /api/tasks due-date filtering. */
+export function taskDueDateQueryParams(
+  mode: TaskDueDateFilterMode,
+  fromDate = '',
+  toDate = '',
+): Record<string, string> {
+  if (mode === 'all') return {};
+  if (mode === 'today') {
+    const { dueFrom, dueTo } = getTodayDueBounds();
+    return { dueFrom: String(dueFrom), dueTo: String(dueTo) };
+  }
+  const bounds = getDateRangeDueBounds(fromDate, toDate);
+  if (!bounds) return {};
+  return { dueFrom: String(bounds.dueFrom), dueTo: String(bounds.dueTo) };
 }
 
 export const STATUS_LABEL: Record<string, string> = {
@@ -303,7 +327,6 @@ async function refreshAccessToken(): Promise<boolean> {
 }
 
 async function logoutClient() {
-  clearLoggedIn();
   try {
     await fetch(apiUrl('/auth/logout'), { method: 'POST', credentials: 'include' });
   } catch {

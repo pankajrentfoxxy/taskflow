@@ -15,10 +15,19 @@ import {
   PanelLeftOpen,
   Settings2,
 } from 'lucide-react';
-import { api, clearLoggedIn } from '@/lib/util';
+import { api } from '@/lib/util';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Separator } from '@/components/ui/separator';
 
@@ -47,6 +56,11 @@ const ROLE_LABEL: Record<string, string> = {
   MANAGER: 'Manager',
   MEMBER: 'Member',
 };
+
+const userInitials = (name?: string | null) =>
+  (name || '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+
+const displayName = (name?: string | null) => name?.split(' (')[0] || 'User';
 
 function SidebarNav({
   pathname,
@@ -145,7 +159,6 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     await api('/api/auth/logout', { method: 'POST' }).catch(() => {});
-    clearLoggedIn();
     router.push('/login');
   };
 
@@ -240,11 +253,41 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                   )}
                 </Link>
               </Button>
-              <span className="hidden text-sm font-medium sm:inline">{roleLabel}</span>
-              <Button variant="outline" size="sm" onClick={logout} className="gap-1.5">
-                <LogOut className="size-3.5" />
-                <span className="hidden sm:inline">Logout</span>
-              </Button>
+              {me && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="rounded-full outline-none ring-offset-background transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      aria-label="Account menu"
+                    >
+                      <Avatar size="sm" className="size-8 cursor-pointer">
+                        <AvatarFallback className="bg-foreground text-[10px] font-semibold text-background">
+                          {userInitials(me.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel className="font-normal">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="truncate font-medium text-foreground">{displayName(me.name)}</span>
+                        <span className="truncate text-xs font-normal text-muted-foreground">{me.email}</span>
+                        <Badge variant="outline" className="mt-1.5 w-fit text-[10px]">{roleLabel}</Badge>
+                      </div>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      variant="destructive"
+                      className="cursor-pointer gap-2"
+                      onClick={logout}
+                    >
+                      <LogOut className="size-4" />
+                      Logout
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
           </header>
 
@@ -279,7 +322,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             </div>
             <Separator />
             <div className="p-4">
-              <div className="mb-3 text-sm font-medium">{me?.name?.split(' (')[0]}</div>
+              <div className="mb-1 text-sm font-medium">{displayName(me?.name)}</div>
+              {me?.email && <div className="mb-3 truncate text-xs text-muted-foreground">{me.email}</div>}
               <Badge variant="outline" className="mb-3">{roleLabel}</Badge>
               <Button variant="outline" className="w-full gap-2" onClick={logout}>
                 <LogOut className="size-4" />

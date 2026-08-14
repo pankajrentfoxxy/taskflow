@@ -7,7 +7,8 @@ import CommentsModal from '@/components/CommentsModal';
 import AckModal from '@/components/AckModal';
 import Composer from '@/components/Composer';
 import TaskTemplateButton from '@/components/TaskTemplateButton';
-import { api, isDueInWindow } from '@/lib/util';
+import TaskDateRangeFilter from '@/components/TaskDateRangeFilter';
+import { api, isDueInWindow, taskDueDateQueryParams, type TaskDueDateFilterMode } from '@/lib/util';
 import { IconZap, IconAlert, IconActivity, IconCalendar, IconPlus, IconPen, IconSend, IconCheckCircle } from '@/components/Icons';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -57,6 +58,9 @@ function HomeInner() {
   const [users, setUsers] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [filterAssignee, setFilterAssignee] = useState('');
+  const [dueDateMode, setDueDateMode] = useState<TaskDueDateFilterMode>('all');
+  const [dueFromDate, setDueFromDate] = useState('');
+  const [dueToDate, setDueToDate] = useState('');
   const [ackTask, setAckTask] = useState<any>(null);
   const [commentsTask, setCommentsTask] = useState<any>(null);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -80,21 +84,41 @@ function HomeInner() {
   const viewingFiltered = canFilter && !!filterAssignee;
 
   const load = useCallback(() => {
+    const dueParams = taskDueDateQueryParams(dueDateMode, dueFromDate, dueToDate);
+    const withDue = (base: Record<string, string>) => {
+      const sp = new URLSearchParams(base);
+      Object.entries(dueParams).forEach(([k, v]) => sp.set(k, v));
+      return sp;
+    };
+
     if (viewingFiltered) {
-      const sp = new URLSearchParams({ filter: 'all' });
+      const sp = withDue({ filter: 'all', limit: '300' });
       const [kind, idStr] = filterAssignee.split(':');
       if (kind === 'u') sp.set('assigneeId', idStr);
       else if (kind === 't') sp.set('teamId', idStr);
-      api(`/api/tasks?${sp}&limit=300`).then((d) => {
+      api(`/api/tasks?${sp}`).then((d) => {
         setMine(d.tasks);
         setCreated([]);
       });
       return;
     }
-    api('/api/tasks?filter=mine&limit=300').then((d) => setMine(d.tasks));
-    api('/api/tasks?filter=created&limit=300').then((d) => setCreated(d.tasks));
-  }, [viewingFiltered, filterAssignee]);
+    api(`/api/tasks?${withDue({ filter: 'mine', limit: '300' })}`).then((d) => setMine(d.tasks));
+    api(`/api/tasks?${withDue({ filter: 'created', limit: '300' })}`).then((d) => setCreated(d.tasks));
+  }, [viewingFiltered, filterAssignee, dueDateMode, dueFromDate, dueToDate]);
   useEffect(() => { load(); const iv = setInterval(load, 30000); return () => clearInterval(iv); }, [load]);
+
+  const hasActiveFilters =
+    !!filterAssignee ||
+    dueDateMode !== 'all' ||
+    !!dueFromDate ||
+    !!dueToDate;
+
+  const resetFilters = () => {
+    setFilterAssignee('');
+    setDueDateMode('all');
+    setDueFromDate('');
+    setDueToDate('');
+  };
 
   const now = Date.now();
   const dayEnd = new Date(); dayEnd.setHours(23, 59, 59, 999);
@@ -140,11 +164,6 @@ function HomeInner() {
                   ))}
                 </optgroup>
               </NativeSelect>
-              {viewingFiltered && (
-                <Button type="button" variant="ghost" size="sm" onClick={() => setFilterAssignee('')}>
-                  Clear
-                </Button>
-              )}
             </>
           )}
           <TaskTemplateButton onImported={load} />
@@ -158,6 +177,18 @@ function HomeInner() {
           </Button>
         </div>
       </div>
+
+      <TaskDateRangeFilter
+        className="mb-6"
+        mode={dueDateMode}
+        fromDate={dueFromDate}
+        toDate={dueToDate}
+        onModeChange={setDueDateMode}
+        onFromDateChange={setDueFromDate}
+        onToDateChange={setDueToDate}
+        showReset={hasActiveFilters}
+        onReset={resetFilters}
+      />
 
       {/* Focus metrics */}
       <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4">

@@ -38,4 +38,5 @@ export const TASK_ACTION_TOAST: Record<string, string> = {
   request_input: 'Input requested',
   provide_input: 'Information provided',
   resume_after_input: 'Continuing work',
+  update_details: 'Task details updated',
 };

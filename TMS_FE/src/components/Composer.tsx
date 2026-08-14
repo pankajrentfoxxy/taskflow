@@ -4,7 +4,7 @@ import Modal from './Modal';
 import { api, apiUpload, fromLocalInput, toLocalInput, toast } from '@/lib/util';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import DescriptionEditor from '@/components/DescriptionEditor';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -299,11 +299,7 @@ export default function Composer({
         </div>
         <div className="space-y-2">
           <Label>Description (optional)</Label>
-          <Textarea
-            className="min-h-[70px]"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
+          <DescriptionEditor value={description} onChange={setDescription} rows={3} />
         </div>
         <div className="space-y-2">
           <Label>Attachments</Label>

@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { api, setLoggedIn, toast } from '@/lib/util';
+import { api, toast } from '@/lib/util';
 
 type ResetStep = 'email' | 'otp';
 
@@ -46,7 +46,6 @@ export default function LoginPage() {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
-      setLoggedIn();
       router.push('/home');
     } catch (e: any) {
       setErr(e.message);

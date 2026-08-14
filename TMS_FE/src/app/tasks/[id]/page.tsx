@@ -19,6 +19,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { NativeSelect } from '@/components/ui/native-select';
 import { cn } from '@/lib/utils';
+import DescriptionContent from '@/components/DescriptionContent';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -179,7 +180,7 @@ function TaskDetailInner({ id }: { id: string }) {
                   {task.reopen_count > 0 && <Badge className="bg-gray-100 text-gray-500">Reopened ×{task.reopen_count}</Badge>}
                 </div>
                 <h1 className="text-lg font-bold leading-snug">{task.title}</h1>
-                {task.description && <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{task.description}</p>}
+                {task.description && <DescriptionContent text={task.description} className="mt-2" />}
                 {task.blocked_reason && (
                   <div className="mt-2 rounded-lg bg-purple-50 px-3 py-2 text-sm text-purple-800">🚧 Blocked: {task.blocked_reason}</div>
                 )}

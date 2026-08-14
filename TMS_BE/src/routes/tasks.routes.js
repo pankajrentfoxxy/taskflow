@@ -70,6 +70,8 @@ router.patch(
   "/:id",
   validate({
     body: Joi.object({
+      title: Joi.string(),
+      description: Joi.string().allow(''),
       action: Joi.string().required(),
       assigneeId: Joi.number().integer(),
       userId: Joi.number().integer(),

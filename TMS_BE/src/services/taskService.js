@@ -121,7 +121,7 @@ async function explanationPending(task) {
 
 export const listTasks = async (
   user,
-  { filter = "mine", status, q, projectId, assigneeId, teamId, page = 1, limit = 25 }
+  { filter = "mine", status, q, projectId, assigneeId, teamId, page = 1, limit = 25, dueFrom, dueTo }
 ) => {
   await runSlaSweep();
 
@@ -185,6 +185,14 @@ export const listTasks = async (
   if (q) {
     where += " AND (t.title ILIKE :q OR t.description ILIKE :q)";
     repl.q = `%${q}%`;
+  }
+  if (dueFrom != null && dueFrom !== "") {
+    where += " AND t.due_at >= :dueFrom";
+    repl.dueFrom = Number(dueFrom);
+  }
+  if (dueTo != null && dueTo !== "") {
+    where += " AND t.due_at <= :dueTo";
+    repl.dueTo = Number(dueTo);
   }
   if (projectId) {
     where += " AND t.project_id = :projectId";
@@ -439,6 +447,8 @@ export const getTaskDetail = async (user, taskId) => {
     isAssignee,
     isTaskMember,
     canManageMembers: canManageTaskMembers(user, task),
+    canEditDetails:
+      isCreator && !["DONE", "CANCELLED", "REJECTED"].includes(task.status),
     canAcknowledge: awaitingAccept && canRespond && !expPending,
     canDiscuss: task.status === "ASSIGNED" && canRespond && !expPending,
     canReject: awaitingAccept && canRespond && !expPending,
@@ -1009,6 +1019,27 @@ export const patchTask = async (user, taskId, body) => {
         { where: { id: task.id } }
       );
       await logActivity(task.id, user.id, "INPUT_ACKNOWLEDGED", { resumedStatus: nextStatus });
+      break;
+    }
+    case "update_details": {
+      if (!isCreator) {
+        throw new ApiError(httpStatus.FORBIDDEN, "Only the task creator can edit the title and description");
+      }
+      if (["DONE", "CANCELLED", "REJECTED"].includes(task.status)) {
+        throw new ApiError(httpStatus.BAD_REQUEST, "Closed tasks cannot be edited");
+      }
+      const title = String(body.title ?? "").trim();
+      const description = String(body.description ?? "").trim();
+      if (!title) throw new ApiError(httpStatus.BAD_REQUEST, "Title is required");
+      await Task.update(
+        { title, description: description || null, updated_at: t },
+        { where: { id: task.id } }
+      );
+      await logActivity(task.id, user.id, "DETAILS_UPDATED", {
+        fromTitle: task.title,
+        toTitle: title,
+        descriptionChanged: (task.description || "") !== description,
+      });
       break;
     }
     default:

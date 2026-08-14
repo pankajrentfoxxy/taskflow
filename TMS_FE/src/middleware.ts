@@ -11,12 +11,16 @@ export function middleware(req: NextRequest) {
   ) {
     return NextResponse.next();
   }
-  const hasSession = !!req.cookies.get('tf_logged_in')?.value;
+
+  const hasSession =
+    !!req.cookies.get('accessToken')?.value || !!req.cookies.get('refreshToken')?.value;
+
   if (!hasSession) {
     const url = req.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);
   }
+
   return NextResponse.next();
 }
 
