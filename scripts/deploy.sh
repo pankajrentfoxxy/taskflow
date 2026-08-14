@@ -52,5 +52,15 @@ echo "==> Health checks"
 sleep 2
 curl -fsS "http://127.0.0.1:4011/health" || curl -fsS "http://127.0.0.1:${PORT:-4011}/health" || true
 curl -fsSI "http://127.0.0.1:3010" >/dev/null && echo "Frontend OK on :3010"
+curl -fsS "http://127.0.0.1:4011/api/socket.io/?EIO=4&transport=polling" | head -c 80 && echo "" && echo "Socket.IO OK on /api/socket.io"
+
+echo "==> Nginx (optional — copy site config if you maintain it on the server)"
+NGINX_SITE="${NGINX_SITE:-/etc/nginx/sites-available/task.rentfoxxy.com}"
+if [[ -f "$ROOT_DIR/deploy/nginx-task.rentfoxxy.com.conf" ]] && [[ -w "$(dirname "$NGINX_SITE")" || -w "$NGINX_SITE" ]]; then
+  cp "$ROOT_DIR/deploy/nginx-task.rentfoxxy.com.conf" "$NGINX_SITE"
+  nginx -t && systemctl reload nginx && echo "Nginx reloaded"
+else
+  echo "Skip nginx copy (no permission or file missing). Socket.IO uses /api/socket.io via existing /api/ proxy."
+fi
 
 echo "✅ Deploy complete"
