@@ -1,8 +1,9 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { Link2 } from 'lucide-react';
+import { useRef, useState, useCallback, useEffect } from 'react';
+import { Link2, Mic, MicOff } from 'lucide-react';
 import { insertDescriptionLink, normalizeDescriptionUrl } from '@/lib/descriptionLinks';
+import { useSpeechToText } from '@/hooks/useSpeechToText';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import Modal from '@/components/Modal';
 import DescriptionContent from '@/components/DescriptionContent';
 import { toast } from '@/lib/util';
+import { cn } from '@/lib/utils';
 
 type PendingLink = { name: string; url: string };
 
@@ -25,10 +27,42 @@ export default function DescriptionEditor({
   rows?: number;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const valueRef = useRef(value);
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [linkName, setLinkName] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
   const [addedLinks, setAddedLinks] = useState<PendingLink[]>([]);
+
+  const appendSpeech = useCallback(
+    (transcript: string) => {
+      const el = textareaRef.current;
+      const current = valueRef.current;
+      const start = el?.selectionStart ?? current.length;
+      const end = el?.selectionEnd ?? current.length;
+      const before = current.slice(0, start);
+      const after = current.slice(end);
+      const needsSpace = before.length > 0 && !/[\s]$/.test(before);
+      const chunk = `${needsSpace ? ' ' : ''}${transcript}`;
+      const next = before + chunk + after;
+      valueRef.current = next;
+      onChange(next);
+      requestAnimationFrame(() => {
+        if (!el) return;
+        const cursor = before.length + chunk.length;
+        el.focus();
+        el.setSelectionRange(cursor, cursor);
+      });
+    },
+    [onChange]
+  );
+
+  const { supported: speechSupported, listening, toggle: toggleSpeech } = useSpeechToText({
+    onTranscript: appendSpeech,
+    onError: (msg) => toast.error(msg),
+  });
 
   const openLinkModal = () => {
     setLinkName('');
@@ -76,19 +110,38 @@ export default function DescriptionEditor({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className="min-h-[88px] resize-y pr-10"
+          className={cn('min-h-[88px] resize-y', speechSupported ? 'pr-[4.5rem]' : 'pr-10')}
           rows={rows}
         />
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="absolute top-2 right-2 text-muted-foreground hover:text-foreground"
-          onClick={openLinkModal}
-          title="Add hyperlink"
-        >
-          <Link2 className="size-4" />
-        </Button>
+        <div className="absolute top-2 right-2 flex items-center gap-0.5">
+          {speechSupported && (
+            <Button
+              type="button"
+              variant={listening ? 'secondary' : 'ghost'}
+              size="icon-sm"
+              className={cn(
+                'text-muted-foreground hover:text-foreground',
+                listening && 'text-red-600 ring-1 ring-red-200'
+              )}
+              onClick={toggleSpeech}
+              title={listening ? 'Stop dictation' : 'Speech to text (free, uses browser mic)'}
+              aria-pressed={listening}
+              aria-label={listening ? 'Stop speech to text' : 'Start speech to text'}
+            >
+              {listening ? <MicOff className="size-4 animate-pulse" /> : <Mic className="size-4" />}
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={openLinkModal}
+            title="Add hyperlink"
+          >
+            <Link2 className="size-4" />
+          </Button>
+        </div>
       </div>
 
       {value.trim() && (
