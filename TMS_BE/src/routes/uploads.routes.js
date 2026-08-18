@@ -16,11 +16,14 @@ const uploadPath = path.isAbsolute(config.uploadDir)
 
 const ALLOWED_PREFIXES = [
   "image/",
+  "audio/",
+  "video/",
   "application/pdf",
   "text/",
   "application/vnd",
   "application/msword",
   "application/zip",
+  "application/octet-stream",
 ];
 
 const storage = multer.diskStorage({
@@ -49,5 +52,6 @@ router.use(auth());
 
 router.post("/", upload.single("file"), uploadsController.uploadFile);
 router.get("/:id", uploadsController.getFile);
+router.delete("/:id", uploadsController.deleteFile);
 
 export default router;

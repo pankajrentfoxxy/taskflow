@@ -246,6 +246,7 @@ export const createTask = async (user, body) => {
     multiple = false,
     lines = [],
     attachmentIds = [],
+    descriptionAttachmentIds = [],
     boardId = null,
     taskTypeId = null,
     collaboratorIds = [],
@@ -324,10 +325,18 @@ export const createTask = async (user, body) => {
   if (attachmentIds.length && created.length) {
     for (const aid of attachmentIds) {
       await Attachment.update(
-        { task_id: created[0] },
+        { task_id: created[0], context: "file" },
         { where: { id: aid, uploader_id: user.id } }
       );
     }
+  }
+
+  const descIds = Array.isArray(descriptionAttachmentIds)
+    ? descriptionAttachmentIds.map(Number).filter(Boolean)
+    : [];
+  if (descIds.length && created.length) {
+    const { linkAttachmentsToTask } = await import("./uploadsService.js");
+    await linkAttachmentsToTask(created[0], descIds, user.id, "description");
   }
 
   const label = titles.length > 1 ? `${titles.length} new tasks` : `New task: "${titles[0]}"`;
@@ -424,7 +433,7 @@ export const getTaskDetail = async (user, taskId) => {
     : [];
 
   const attachments = await sequelize.query(
-    "SELECT id, file_name, mime_type, size, uploader_id, created_at FROM attachments WHERE task_id = :taskId",
+    "SELECT id, file_name, mime_type, size, uploader_id, context, created_at FROM attachments WHERE task_id = :taskId ORDER BY created_at ASC, id ASC",
     { replacements: { taskId: task.id }, type: QueryTypes.SELECT }
   );
 
@@ -1045,6 +1054,32 @@ export const patchTask = async (user, taskId, body) => {
         { title, description: description || null, updated_at: t },
         { where: { id: task.id } }
       );
+
+      const addIds = Array.isArray(body.descriptionAttachmentIds)
+        ? body.descriptionAttachmentIds.map(Number).filter(Boolean)
+        : [];
+      if (addIds.length) {
+        const { linkAttachmentsToTask } = await import("./uploadsService.js");
+        await linkAttachmentsToTask(task.id, addIds, user.id, "description");
+      }
+
+      const removeIds = Array.isArray(body.removeAttachmentIds)
+        ? body.removeAttachmentIds.map(Number).filter(Boolean)
+        : [];
+      if (removeIds.length) {
+        const { deleteAttachmentById } = await import("./uploadsService.js");
+        for (const attachmentId of removeIds) {
+          const [row] = await sequelize.query(
+            "SELECT id FROM attachments WHERE id = :attachmentId AND task_id = :taskId AND context = 'description'",
+            {
+              replacements: { attachmentId, taskId: task.id },
+              type: QueryTypes.SELECT,
+            }
+          );
+          if (row) await deleteAttachmentById(user, attachmentId);
+        }
+      }
+
       await logActivity(task.id, user.id, "DETAILS_UPDATED", {
         fromTitle: task.title,
         toTitle: title,

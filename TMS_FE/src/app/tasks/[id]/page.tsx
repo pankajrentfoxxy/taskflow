@@ -18,8 +18,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { NativeSelect } from '@/components/ui/native-select';
+import SearchableSelect, { buildUserSelectOptions } from '@/components/SearchableSelect';
 import { cn } from '@/lib/utils';
 import DescriptionContent from '@/components/DescriptionContent';
+import AttachmentMedia from '@/components/AttachmentMedia';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -75,6 +77,8 @@ function TaskDetailInner({ id }: { id: string }) {
   if (!data) return <Card className="h-60 animate-pulse" />;
 
   const { task, members = [], subtasks, activity, attachments, escalation, batchTasks, permissions: perm } = data;
+  const descriptionAttachments = (attachments || []).filter((a: any) => a.context === 'description');
+  const fileAttachments = (attachments || []).filter((a: any) => a.context !== 'description');
 
   const act = async (body: any) => {
     setErr('');
@@ -181,6 +185,13 @@ function TaskDetailInner({ id }: { id: string }) {
                 </div>
                 <h1 className="text-lg font-bold leading-snug">{task.title}</h1>
                 {task.description && <DescriptionContent text={task.description} className="mt-2" />}
+                {descriptionAttachments.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {descriptionAttachments.map((a: any) => (
+                      <AttachmentMedia key={a.id} attachment={a} compact />
+                    ))}
+                  </div>
+                )}
                 {task.blocked_reason && (
                   <div className="mt-2 rounded-lg bg-purple-50 px-3 py-2 text-sm text-purple-800">🚧 Blocked: {task.blocked_reason}</div>
                 )}
@@ -232,12 +243,14 @@ function TaskDetailInner({ id }: { id: string }) {
                   <div className="border-t border-gray-50 pt-3">
                     <div className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Add member</div>
                     <div className="flex flex-wrap gap-2">
-                      <NativeSelect className="h-9 min-w-[160px] flex-1" value={addMemberUserId} onChange={(e) => setAddMemberUserId(e.target.value)}>
-                        <option value="">Choose user…</option>
-                        {addMemberCandidates.map((u) => (
-                          <option key={u.id} value={u.id}>{u.name}</option>
-                        ))}
-                      </NativeSelect>
+                      <SearchableSelect
+                        className="h-9 min-w-[160px] flex-1"
+                        value={addMemberUserId}
+                        onChange={setAddMemberUserId}
+                        placeholder="Choose user…"
+                        searchPlaceholder="Search users…"
+                        options={buildUserSelectOptions(addMemberCandidates)}
+                      />
                       <NativeSelect className="h-9 w-36" value={addMemberRole} onChange={(e) => setAddMemberRole(e.target.value as 'COLLABORATOR' | 'WATCHER')}>
                         <option value="COLLABORATOR">Collaborator</option>
                         <option value="WATCHER">Watcher</option>
@@ -387,19 +400,12 @@ function TaskDetailInner({ id }: { id: string }) {
                 </Alert>
               )}
 
-              {attachments.length > 0 && (
+              {fileAttachments.length > 0 && (
                 <div>
                   <h3 className="mb-2 text-sm font-bold">Attachments</h3>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {attachments.map((a: any) => (
-                      <a key={a.id} href={uploadUrl(a.id)} target="_blank" className="block overflow-hidden rounded-lg border hover:border-foreground">
-                        {a.mime_type.startsWith('image/') ? (
-                          <AuthImage id={a.id} alt={a.file_name} className="h-24 w-full object-cover" />
-                        ) : (
-                          <div className="flex h-24 items-center justify-center bg-muted text-3xl">📄</div>
-                        )}
-                        <div className="truncate px-2 py-1 text-[11px] text-muted-foreground">{a.file_name}</div>
-                      </a>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {fileAttachments.map((a: any) => (
+                      <AttachmentMedia key={a.id} attachment={a} />
                     ))}
                   </div>
                 </div>

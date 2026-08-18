@@ -7,15 +7,17 @@ import Composer from '@/components/Composer';
 import CommentsModal from '@/components/CommentsModal';
 import TaskStatusModal from '@/components/TaskStatusModal';
 import TaskAssignerUrgentBadge from '@/components/TaskAssignerUrgentBadge';
-import { api, fmtShortDate, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, STATUS_DOT, PRIORITY_COLOR, isTaskOverdue, getTaskRowClasses, TASK_ACTION_TOAST, toast } from '@/lib/util';
+import { api, deleteUpload, fmtShortDate, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, STATUS_DOT, PRIORITY_COLOR, isTaskOverdue, getTaskRowClasses, TASK_ACTION_TOAST, toast } from '@/lib/util';
 import { useMe } from '@/components/Shell';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import DescriptionContent from '@/components/DescriptionContent';
+import AttachmentMedia from '@/components/AttachmentMedia';
 import DescriptionEditor from '@/components/DescriptionEditor';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { NativeSelect } from '@/components/ui/native-select';
+import SearchableSelect, { buildUserSelectOptions } from '@/components/SearchableSelect';
 import {
   Table,
   TableBody,
@@ -209,6 +211,8 @@ export default function TaskDetailAccordion({
   const [editingDetails, setEditingDetails] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
+  const [voiceAttachments, setVoiceAttachments] = useState<any[]>([]);
+  const [pendingVoiceIds, setPendingVoiceIds] = useState<number[]>([]);
   const me = useMe();
   const viewer = me ? { id: me.id, role: me.role } : null;
 
@@ -225,6 +229,8 @@ export default function TaskDetailAccordion({
     setEditingDetails(false);
     setEditTitle('');
     setEditDescription('');
+    setVoiceAttachments([]);
+    setPendingVoiceIds([]);
   }, [taskId]);
 
   useEffect(() => {
@@ -293,16 +299,41 @@ export default function TaskDetailAccordion({
     act({ action: 'remove_member', userId });
   };
 
+  const fileAttachments = (attachments || []).filter((a: any) => a.context !== 'description');
+  const descriptionAttachments = (attachments || []).filter((a: any) => a.context === 'description');
+
   const startEditDetails = () => {
     setEditTitle(task.title || '');
     setEditDescription(task.description || '');
+    setVoiceAttachments(descriptionAttachments);
+    setPendingVoiceIds([]);
     setEditingDetails(true);
   };
 
-  const cancelEditDetails = () => {
+  const discardPendingUploads = async (ids: number[]) => {
+    await Promise.all(
+      ids.map((id) =>
+        deleteUpload(id).catch((e) => {
+          toast.errorFrom(e);
+        })
+      )
+    );
+  };
+
+  const removeVoiceAttachment = (id: number) => {
+    setVoiceAttachments((prev) => prev.filter((a) => a.id !== id));
+    setPendingVoiceIds((prev) => prev.filter((x) => x !== id));
+  };
+
+  const cancelEditDetails = async () => {
+    const pendingIds = [...pendingVoiceIds];
+    await discardPendingUploads(pendingIds);
     setEditingDetails(false);
     setEditTitle('');
     setEditDescription('');
+    setVoiceAttachments([]);
+    setPendingVoiceIds([]);
+    load();
   };
 
   const saveDetails = async () => {
@@ -315,6 +346,7 @@ export default function TaskDetailAccordion({
       action: 'update_details',
       title,
       description: editDescription.trim(),
+      descriptionAttachmentIds: pendingVoiceIds,
     });
     if (ok) setEditingDetails(false);
   };
@@ -336,11 +368,28 @@ export default function TaskDetailAccordion({
               </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Description</label>
-                <DescriptionEditor value={editDescription} onChange={setEditDescription} />
+                <DescriptionEditor
+                  value={editDescription}
+                  onChange={setEditDescription}
+                  voiceAttachments={voiceAttachments}
+                  onVoiceUploaded={(id, durationSec) => {
+                    setPendingVoiceIds((prev) => [...prev, id]);
+                    setVoiceAttachments((prev) => [
+                      ...prev,
+                      {
+                        id,
+                        file_name: durationSec ? `Voice note (${Math.floor(durationSec / 60)}:${String(durationSec % 60).padStart(2, '0')})` : 'Voice note',
+                        mime_type: 'audio/webm',
+                        context: 'description',
+                      },
+                    ]);
+                  }}
+                  onRemoveVoiceAttachment={removeVoiceAttachment}
+                />
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" size="sm" onClick={saveDetails}>Save</Button>
-                <Button type="button" size="sm" variant="outline" onClick={cancelEditDetails}>Cancel</Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => void cancelEditDetails()}>Cancel</Button>
               </div>
             </div>
           ) : (
@@ -348,6 +397,13 @@ export default function TaskDetailAccordion({
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-semibold leading-snug">{task.title}</h2>
                 <DescriptionContent text={task.description} className="mt-2" />
+                {descriptionAttachments.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {descriptionAttachments.map((a: any) => (
+                      <AttachmentMedia key={a.id} attachment={a} compact />
+                    ))}
+                  </div>
+                )}
               </div>
               {canEditDetails && (
                 <Button
@@ -392,12 +448,14 @@ export default function TaskDetailAccordion({
           <div className="mt-4 border-t border-border/60 pt-3">
             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Add member</div>
             <div className="flex flex-wrap gap-2">
-              <NativeSelect className="h-9 min-w-[160px] flex-1" value={addMemberUserId} onChange={(e) => setAddMemberUserId(e.target.value)}>
-                <option value="">Choose user…</option>
-                {addMemberCandidates.map((u) => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
-                ))}
-              </NativeSelect>
+              <SearchableSelect
+                className="h-9 min-w-[160px] flex-1"
+                value={addMemberUserId}
+                onChange={setAddMemberUserId}
+                placeholder="Choose user…"
+                searchPlaceholder="Search users…"
+                options={buildUserSelectOptions(addMemberCandidates)}
+              />
               <NativeSelect className="h-9 w-36" value={addMemberRole} onChange={(e) => setAddMemberRole(e.target.value as 'COLLABORATOR' | 'WATCHER')}>
                 <option value="COLLABORATOR">Collaborator</option>
                 <option value="WATCHER">Watcher</option>
@@ -451,9 +509,9 @@ export default function TaskDetailAccordion({
         </div>
       )}
 
-      {attachments?.length > 0 && (
+      {fileAttachments?.length > 0 && (
         <div className="mt-3 text-sm text-muted-foreground">
-          {attachments.length} attachment{attachments.length > 1 ? 's' : ''}
+          {fileAttachments.length} attachment{fileAttachments.length > 1 ? 's' : ''}
         </div>
       )}
 

@@ -13,6 +13,7 @@ import { onTaskChanged } from '@/lib/socket';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
+import SearchableSelect, { buildUserTeamSelectOptions } from '@/components/SearchableSelect';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
@@ -162,26 +163,17 @@ function TasksInner() {
         </NativeSelect>
         {canFilter && (
           <>
-            <NativeSelect
+            <SearchableSelect
               className="h-8 w-full md:min-w-[200px] md:max-w-[280px] md:shrink-0 text-sm"
               value={filterAssignee}
-              onChange={(e) => setFilterAssignee(e.target.value)}
+              onChange={setFilterAssignee}
               aria-label="Filter by user or team"
-            >
-              <option value="">All users / teams</option>
-              <optgroup label="Users">
-                {users.map((u) => (
-                  <option key={u.id} value={`u:${u.id}`}>
-                    {u.name}{u.team_name ? ` (${u.team_name})` : ''}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="Teams">
-                {teams.map((t) => (
-                  <option key={t.id} value={`t:${t.id}`}>Team: {t.name}</option>
-                ))}
-              </optgroup>
-            </NativeSelect>
+              placeholder="All users / teams"
+              searchPlaceholder="Search users or teams…"
+              options={buildUserTeamSelectOptions(users, teams, {
+                emptyOption: { value: '', label: 'All users / teams' },
+              })}
+            />
           </>
         )}
       </div>

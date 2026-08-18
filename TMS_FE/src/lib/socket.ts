@@ -65,6 +65,44 @@ export const REALTIME_TASK_EVENT = 'tf:task-changed';
 export const REALTIME_PRESENCE_EVENT = 'tf:presence';
 export const REALTIME_NOTIFICATION_EVENT = 'tf:notification';
 export const REALTIME_ME_REFRESH_EVENT = 'tf:me-refresh';
+export const REALTIME_CHAT_EVENT = 'tf:chat-update';
+
+export type ChatUpdatePayload = {
+  action?: string;
+  conversation?: ConversationPreview;
+  message?: ChatMessagePayload;
+};
+
+export type ConversationPreview = {
+  id: number;
+  member_user_id?: number;
+  member_name?: string;
+  member_email?: string;
+  member_role?: string;
+  last_message_at?: number | null;
+  last_message_preview?: string | null;
+};
+
+export type ChatMessagePayload = {
+  id: number;
+  conversation_id: number;
+  author_id: number;
+  author_name: string;
+  parent_message_id: number | null;
+  body: string | null;
+  edited: boolean;
+  edited_at: number | null;
+  deleted_at: number | null;
+  created_at: number;
+  reactions?: { emoji: string; count: number; mine: boolean }[];
+  attachments?: {
+    id: number;
+    file_name: string;
+    mime_type: string;
+    size?: number;
+    context?: string;
+  }[];
+};
 
 export function dispatchTaskChanged(detail: unknown): void {
   if (typeof window === 'undefined') return;
@@ -86,6 +124,11 @@ export function dispatchMeRefresh(): void {
   window.dispatchEvent(new Event(REALTIME_ME_REFRESH_EVENT));
 }
 
+export function dispatchChatUpdate(detail: ChatUpdatePayload): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(REALTIME_CHAT_EVENT, { detail }));
+}
+
 export function onTaskChanged(handler: (detail: unknown) => void): () => void {
   if (typeof window === 'undefined') return () => {};
   const wrapped = (e: Event) => handler((e as CustomEvent).detail);
@@ -93,7 +136,11 @@ export function onTaskChanged(handler: (detail: unknown) => void): () => void {
   return () => window.removeEventListener(REALTIME_TASK_EVENT, wrapped);
 }
 
-export function onPresenceUpdate(handler: (detail: { onlineCount?: number; onlineUsers?: number[] }) => void): () => void {
+export function onPresenceUpdate(handler: (detail: {
+  onlineCount?: number;
+  onlineUsers?: number[];
+  onlineUserList?: { id: number; name: string }[];
+}) => void): () => void {
   if (typeof window === 'undefined') return () => {};
   const wrapped = (e: Event) => handler((e as CustomEvent).detail);
   window.addEventListener(REALTIME_PRESENCE_EVENT, wrapped);
@@ -110,4 +157,11 @@ export function onMeRefresh(handler: () => void): () => void {
   if (typeof window === 'undefined') return () => {};
   window.addEventListener(REALTIME_ME_REFRESH_EVENT, handler);
   return () => window.removeEventListener(REALTIME_ME_REFRESH_EVENT, handler);
+}
+
+export function onChatUpdate(handler: (detail: ChatUpdatePayload) => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  const wrapped = (e: Event) => handler((e as CustomEvent).detail);
+  window.addEventListener(REALTIME_CHAT_EVENT, wrapped);
+  return () => window.removeEventListener(REALTIME_CHAT_EVENT, wrapped);
 }

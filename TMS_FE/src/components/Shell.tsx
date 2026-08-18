@@ -10,6 +10,7 @@ import {
   Folder,
   BarChart3,
   LogOut,
+  MessageCircle,
   PanelLeftClose,
   PanelLeftOpen,
   Settings2,
@@ -18,6 +19,7 @@ import { api } from '@/lib/util';
 import { onMeRefresh } from '@/lib/socket';
 import { cn } from '@/lib/utils';
 import NotificationMenu from '@/components/NotificationMenu';
+import { useChatUnreadOptional } from '@/components/ChatUnreadProvider';
 import TaskFlowLogo from '@/components/TaskFlowLogo';
 import { useFaviconBadge } from '@/hooks/useFaviconBadge';
 import { Button } from '@/components/ui/button';
@@ -49,6 +51,7 @@ const NAV = [
   { href: '/home', label: 'Dashboard', Icon: LayoutDashboard },
   { href: '/tasks', label: 'Tasks', Icon: ListTodo },
   { href: '/projects', label: 'Projects', Icon: Folder },
+  { href: '/chat', label: 'Chat', Icon: MessageCircle },
   { href: '/scribble', label: 'Scribble', Icon: PenLine },
   { href: '/reports', label: 'Reports', Icon: BarChart3, managerial: true },
 ];
@@ -71,6 +74,7 @@ function SidebarNav({
   collapsed,
   canManage,
   adminLabel,
+  chatNavBadge,
   onNavigate,
 }: {
   pathname: string;
@@ -78,6 +82,7 @@ function SidebarNav({
   collapsed: boolean;
   canManage: boolean;
   adminLabel: string;
+  chatNavBadge?: number;
   onNavigate?: () => void;
 }) {
   const linkClass = (active: boolean) =>
@@ -103,6 +108,11 @@ function SidebarNav({
             <Link key={href} href={href} onClick={onNavigate} className={linkClass(active)} title={collapsed ? label : undefined}>
               <Icon className="size-[18px] shrink-0" />
               {!collapsed && label}
+              {href === '/chat' && chatNavBadge != null && chatNavBadge > 0 && (
+                <span className="ml-auto flex size-5 min-w-5 items-center justify-center rounded-full bg-foreground px-1 text-[10px] font-bold text-background">
+                  {chatNavBadge > 9 ? '9+' : chatNavBadge}
+                </span>
+              )}
             </Link>
           );
         })}
@@ -135,6 +145,11 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     if (saved === '1') setCollapsed(true);
   }, []);
 
+  const chatUnreadCtx = useChatUnreadOptional();
+  const chatUnread = chatUnreadCtx?.chatUnread ?? 0;
+  const chatEntries = chatUnreadCtx?.chatEntries ?? [];
+  const totalUnread = unread + chatUnread;
+
   useEffect(() => {
     let alive = true;
     const load = () =>
@@ -154,7 +169,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => onMeRefresh(refreshMe), [refreshMe]);
 
-  useFaviconBadge(unread);
+  useFaviconBadge(totalUnread);
 
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
@@ -173,6 +188,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const canManage = me && ['ADMIN', 'CEO', 'MANAGER'].includes(me.role);
   const adminLabel = me?.role === 'ADMIN' ? 'Admin' : 'Manage';
   const roleLabel = ROLE_LABEL[me?.role || ''] || me?.role || '';
+  const isFullBleed = pathname.startsWith('/chat');
 
   return (
     <MeContext.Provider value={{ me, unread, refreshMe }}>
@@ -201,6 +217,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               collapsed={collapsed}
               canManage={!!canManage}
               adminLabel={adminLabel}
+              chatNavBadge={!pathname.startsWith('/chat') ? chatUnread : 0}
             />
           </div>
 
@@ -221,7 +238,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         </aside>
 
         {/* Main column */}
-        <div className={cn('flex min-h-screen flex-col transition-[padding] duration-200', collapsed ? 'md:pl-[68px]' : 'md:pl-[260px]')}>
+        <div
+          className={cn(
+            'flex flex-col transition-[padding] duration-200',
+            collapsed ? 'md:pl-[68px]' : 'md:pl-[260px]',
+            isFullBleed ? 'h-dvh overflow-hidden' : 'min-h-screen'
+          )}
+        >
           {/* Top header */}
           <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
             <Button
@@ -248,7 +271,16 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             </div>
 
             <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-              <NotificationMenu unread={unread} refreshMe={refreshMe} />
+              <NotificationMenu
+                unread={unread}
+                chatUnread={chatUnread}
+                chatEntries={chatEntries}
+                refreshMe={refreshMe}
+                onOpenChat={(conversationId) => {
+                  chatUnreadCtx?.markConversationRead(conversationId);
+                  router.push(`/chat?conversationId=${conversationId}`);
+                }}
+              />
               {me && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -287,8 +319,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             </div>
           </header>
 
-          <main className="flex-1 px-4 py-6 md:px-8 md:py-8">
-            <div className="mx-auto w-full max-w-7xl">{children}</div>
+          <main
+            className={cn(
+              'flex-1',
+              isFullBleed ? 'flex min-h-0 flex-col overflow-hidden' : 'px-4 py-6 md:px-8 md:py-8'
+            )}
+          >
+            {isFullBleed ? children : <div className="mx-auto w-full max-w-7xl">{children}</div>}
           </main>
         </div>
 
@@ -311,6 +348,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
                 collapsed={false}
                 canManage={!!canManage}
                 adminLabel={adminLabel}
+                chatNavBadge={!pathname.startsWith('/chat') ? chatUnread : 0}
                 onNavigate={() => setMobileOpen(false)}
               />
             </div>

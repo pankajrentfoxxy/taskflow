@@ -14,7 +14,7 @@ import { IconZap, IconAlert, IconActivity, IconCalendar, IconPlus, IconPen, Icon
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { NativeSelect } from '@/components/ui/native-select';
+import SearchableSelect, { buildUserTeamSelectOptions } from '@/components/SearchableSelect';
 import { cn } from '@/lib/utils';
 
 function Metric({ icon, chip, value, label, hot }: { icon: React.ReactNode; chip: string; value: number; label: string; hot?: boolean }) {
@@ -67,6 +67,7 @@ function HomeInner() {
   const [composerOpen, setComposerOpen] = useState(false);
   const [clock, setClock] = useState<{ greeting: string; date: string } | null>(null);
   const [onlineCount, setOnlineCount] = useState(0);
+  const [onlineUsers, setOnlineUsers] = useState<{ id: number; name: string }[]>([]);
 
   useEffect(() => {
     if (!canFilter) return;
@@ -113,13 +114,22 @@ function HomeInner() {
   useEffect(() => {
     if (!canFilter || !me) return;
     return onPresenceUpdate((detail) => {
-      if (detail.onlineUsers) {
-        setOnlineCount(detail.onlineUsers.filter((id) => id !== me.id).length);
+      if (detail.onlineUserList) {
+        const others = detail.onlineUserList.filter((u) => u.id !== me.id);
+        setOnlineUsers(others);
+        setOnlineCount(others.length);
         return;
       }
-      setOnlineCount(Math.max(0, (detail.onlineCount ?? 0) - 1));
+      const ids = (detail.onlineUsers ?? []).filter((id) => id !== me.id);
+      setOnlineUsers(
+        ids.map((id) => {
+          const match = users.find((u) => u.id === id);
+          return { id, name: match?.name ?? `User #${id}` };
+        })
+      );
+      setOnlineCount(ids.length > 0 ? ids.length : Math.max(0, (detail.onlineCount ?? 0) - 1));
     });
-  }, [canFilter, me]);
+  }, [canFilter, me, users]);
 
   const hasActiveFilters =
     !!filterAssignee ||
@@ -158,26 +168,17 @@ function HomeInner() {
         <div className="flex flex-wrap items-center gap-2">
           {canFilter && (
             <>
-              <NativeSelect
+              <SearchableSelect
                 className="h-8 min-w-[200px] max-w-[280px] text-sm"
                 value={filterAssignee}
-                onChange={(e) => setFilterAssignee(e.target.value)}
+                onChange={setFilterAssignee}
                 aria-label="View tasks for user or team"
-              >
-                <option value="">Everyone (my dashboard)</option>
-                <optgroup label="Users">
-                  {users.map((u) => (
-                    <option key={u.id} value={`u:${u.id}`}>
-                      {u.name}{u.team_name ? ` (${u.team_name})` : ''}
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="Teams">
-                  {teams.map((t) => (
-                    <option key={t.id} value={`t:${t.id}`}>Team: {t.name}</option>
-                  ))}
-                </optgroup>
-              </NativeSelect>
+                placeholder="Everyone (my dashboard)"
+                searchPlaceholder="Search users or teams…"
+                options={buildUserTeamSelectOptions(users, teams, {
+                  emptyOption: { value: '', label: 'Everyone (my dashboard)' },
+                })}
+              />
             </>
           )}
           <TaskTemplateButton onImported={load} />
@@ -203,6 +204,8 @@ function HomeInner() {
         showReset={hasActiveFilters}
         onReset={resetFilters}
         onlineCount={canFilter ? onlineCount : null}
+        onlineUsers={canFilter ? onlineUsers : []}
+        userChatHref={canFilter ? (user) => `/chat?userId=${user.id}` : undefined}
       />
 
       {/* Focus metrics */}

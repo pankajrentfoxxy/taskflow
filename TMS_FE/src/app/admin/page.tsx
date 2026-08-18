@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import { NativeSelect } from '@/components/ui/native-select';
+import SearchableSelect, { buildUserSelectOptions } from '@/components/SearchableSelect';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -506,10 +507,17 @@ function AdminInner() {
           </div>
           <div>
             <Label>Manager</Label>
-            <NativeSelect value={teamForm.managerId} onChange={(e) => setTeamForm({ ...teamForm, managerId: e.target.value })}>
-              <option value="">Choose later</option>
-              {users.filter((u) => u.is_active).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </NativeSelect>
+            <SearchableSelect
+              className="h-10"
+              value={teamForm.managerId}
+              onChange={(v) => setTeamForm({ ...teamForm, managerId: v })}
+              placeholder="Choose later"
+              searchPlaceholder="Search users…"
+              options={[
+                { value: '', label: 'Choose later' },
+                ...buildUserSelectOptions(users.filter((u) => u.is_active), { activeOnly: false }),
+              ]}
+            />
           </div>
           <Button className="w-full" onClick={createTeam} disabled={!teamForm.name}>Create team</Button>
         </div>
@@ -526,15 +534,17 @@ function AdminInner() {
           </div>
           <div>
             <Label>Manager</Label>
-            <NativeSelect
+            <SearchableSelect
+              className="h-10"
               value={editTeamForm.managerId}
-              onChange={(e) => setEditTeamForm({ ...editTeamForm, managerId: e.target.value })}
-            >
-              <option value="">No manager</option>
-              {activeUsers.map((u) => (
-                <option key={u.id} value={u.id}>{u.name}{u.team_name ? ` (${u.team_name})` : ''}</option>
-              ))}
-            </NativeSelect>
+              onChange={(v) => setEditTeamForm({ ...editTeamForm, managerId: v })}
+              placeholder="No manager"
+              searchPlaceholder="Search users…"
+              options={[
+                { value: '', label: 'No manager' },
+                ...buildUserSelectOptions(activeUsers, { activeOnly: false }),
+              ]}
+            />
           </div>
           <div>
             <div className="mb-2 flex items-center justify-between">

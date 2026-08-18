@@ -16,6 +16,10 @@ import TaskType from "./TaskType.js";
 import Meta from "./Meta.js";
 import Otp from "./Otp.js";
 import TaskMember from "./TaskMember.js";
+import ChatConversation from "./ChatConversation.js";
+import ChatMessage from "./ChatMessage.js";
+import ChatMessageReaction from "./ChatMessageReaction.js";
+import ChatGroupMember from "./ChatGroupMember.js";
 
 // ── Users & Teams ──────────────────────────────────────────────────────────
 // No DB-level FK between users ↔ teams (circular: team_id + manager_id); enforce in app layer.
@@ -108,6 +112,28 @@ User.hasMany(Attachment, { foreignKey: "uploader_id", as: "uploads" });
 Board.belongsTo(User, { foreignKey: "owner_id", as: "owner" });
 User.hasMany(Board, { foreignKey: "owner_id", as: "boards" });
 
+// ── Chat ───────────────────────────────────────────────────────────────────
+ChatConversation.belongsTo(User, { foreignKey: "created_by", as: "creator" });
+ChatGroupMember.belongsTo(ChatConversation, { foreignKey: "conversation_id", as: "conversation" });
+ChatGroupMember.belongsTo(User, { foreignKey: "user_id", as: "user" });
+ChatConversation.hasMany(ChatGroupMember, { foreignKey: "conversation_id", as: "groupMembers" });
+User.hasMany(ChatGroupMember, { foreignKey: "user_id", as: "chatGroupMemberships" });
+
+ChatMessage.belongsTo(ChatConversation, { foreignKey: "conversation_id", as: "conversation" });
+ChatMessage.belongsTo(User, { foreignKey: "author_id", as: "author" });
+ChatMessage.belongsTo(ChatMessage, { foreignKey: "parent_message_id", as: "parent" });
+ChatMessage.hasMany(ChatMessage, { foreignKey: "parent_message_id", as: "replies" });
+ChatConversation.hasMany(ChatMessage, { foreignKey: "conversation_id", as: "messages" });
+User.hasMany(ChatMessage, { foreignKey: "author_id", as: "chatMessages" });
+
+ChatMessageReaction.belongsTo(ChatMessage, { foreignKey: "message_id", as: "message" });
+ChatMessageReaction.belongsTo(User, { foreignKey: "user_id", as: "user" });
+ChatMessage.hasMany(ChatMessageReaction, { foreignKey: "message_id", as: "reactions" });
+User.hasMany(ChatMessageReaction, { foreignKey: "user_id", as: "chatMessageReactions" });
+
+Attachment.belongsTo(ChatMessage, { foreignKey: "chat_message_id", as: "chatMessage" });
+ChatMessage.hasMany(Attachment, { foreignKey: "chat_message_id", as: "attachments" });
+
 // ── Task Types ─────────────────────────────────────────────────────────────
 TaskType.belongsTo(Team, { foreignKey: "team_id", as: "team" });
 Team.hasMany(TaskType, { foreignKey: "team_id", as: "taskTypes" });
@@ -131,6 +157,10 @@ export {
   Meta,
   Otp,
   TaskMember,
+  ChatConversation,
+  ChatMessage,
+  ChatMessageReaction,
+  ChatGroupMember,
 };
 
 export default {
@@ -152,4 +182,8 @@ export default {
   Meta,
   Otp,
   TaskMember,
+  ChatConversation,
+  ChatMessage,
+  ChatMessageReaction,
+  ChatGroupMember,
 };

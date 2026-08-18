@@ -1,7 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Modal from './Modal';
-import { api, apiUpload, fromLocalInput, toLocalInput, toast } from '@/lib/util';
+import { api, apiUpload, deleteUpload, fromLocalInput, toLocalInput, toast } from '@/lib/util';
+import type { AttachmentLike } from '@/components/AttachmentMedia';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -9,6 +10,7 @@ import DescriptionEditor from '@/components/DescriptionEditor';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { NativeSelect } from '@/components/ui/native-select';
+import SearchableSelect, { buildUserTeamSelectOptions } from '@/components/SearchableSelect';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function Composer({
@@ -35,6 +37,10 @@ export default function Composer({
   const [multiple, setMultiple] = useState(false);
   const [linesText, setLinesText] = useState('');
   const [files, setFiles] = useState<File[]>([]);
+  const [voiceAttachments, setVoiceAttachments] = useState<AttachmentLike[]>([]);
+  const [pendingVoiceIds, setPendingVoiceIds] = useState<number[]>([]);
+  const pendingVoiceIdsRef = useRef<number[]>([]);
+  pendingVoiceIdsRef.current = pendingVoiceIds;
   const [taskTypes, setTaskTypes] = useState<any[]>([]);
   const [taskTypeId, setTaskTypeId] = useState('');
   const [collaboratorIds, setCollaboratorIds] = useState<number[]>([]);
@@ -89,6 +95,34 @@ export default function Composer({
     setDue(toLocalInput(d.getTime()));
   };
 
+  const resetForm = () => {
+    setTitle('');
+    setDescription('');
+    setLinesText('');
+    setFiles([]);
+    setVoiceAttachments([]);
+    setPendingVoiceIds([]);
+    setMultiple(false);
+    setDue('');
+    setTaskTypeId('');
+    setCollaboratorIds([]);
+    setWatcherIds([]);
+  };
+
+  const handleClose = () => {
+    const ids = [...pendingVoiceIdsRef.current];
+    void Promise.all(
+      ids.map((id) =>
+        deleteUpload(id).catch(() => {
+          /* best effort */
+        })
+      )
+    ).finally(() => {
+      resetForm();
+      onClose();
+    });
+  };
+
   const submit = async () => {
     setErr('');
     const dueAt = fromLocalInput(due);
@@ -119,6 +153,7 @@ export default function Composer({
         parentId: presetParentId || null,
         boardId: presetBoardId || null,
         attachmentIds,
+        descriptionAttachmentIds: pendingVoiceIds,
         taskTypeId: taskTypeId ? Number(taskTypeId) : null,
         collaboratorIds,
         watcherIds,
@@ -135,9 +170,8 @@ export default function Composer({
         toast.success('Task created');
       }
       onCreated?.(d.ids);
+      resetForm();
       onClose();
-      setTitle(''); setDescription(''); setLinesText(''); setFiles([]); setMultiple(false); setDue(''); setTaskTypeId('');
-      setCollaboratorIds([]); setWatcherIds([]);
     } catch (e: any) {
       setErr(e.message);
       toast.errorFrom(e);
@@ -147,7 +181,7 @@ export default function Composer({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={presetParentId ? 'New subtask' : 'New task'}>
+    <Modal open={open} onClose={handleClose} title={presetParentId ? 'New subtask' : 'New task'}>
       <div className="space-y-4">
         {!presetParentId && (
           <div className="flex items-center gap-2">
@@ -185,17 +219,14 @@ export default function Composer({
         )}
         <div className="space-y-2">
           <Label>Assign to</Label>
-          <NativeSelect className="h-10" value={assignee} onChange={(e) => setAssignee(e.target.value)}>
-            <option value="">Choose person or team…</option>
-            <optgroup label="People">
-              {users.map((u) => <option key={u.id} value={`u:${u.id}`}>{u.name}{u.team_name ? ` (${u.team_name})` : ''}</option>)}
-            </optgroup>
-            {!presetParentId && (
-              <optgroup label="Teams">
-                {teams.map((t) => <option key={t.id} value={`t:${t.id}`}>Team: {t.name}</option>)}
-              </optgroup>
-            )}
-          </NativeSelect>
+          <SearchableSelect
+            className="h-10"
+            value={assignee}
+            onChange={setAssignee}
+            placeholder="Choose person or team…"
+            searchPlaceholder="Search people or teams…"
+            options={buildUserTeamSelectOptions(users, teams, { includeTeams: !presetParentId })}
+          />
         </div>
         {teamMembers.length > 0 && (
           <div className="text-xs text-muted-foreground -mt-2">
@@ -300,7 +331,30 @@ export default function Composer({
         </div>
         <div className="space-y-2">
           <Label>Description (optional)</Label>
-          <DescriptionEditor value={description} onChange={setDescription} rows={3} />
+          <DescriptionEditor
+            value={description}
+            onChange={setDescription}
+            rows={3}
+            voiceAttachments={voiceAttachments}
+            onVoiceUploaded={(id, durationSec) => {
+              setPendingVoiceIds((prev) => [...prev, id]);
+              setVoiceAttachments((prev) => [
+                ...prev,
+                {
+                  id,
+                  file_name: durationSec
+                    ? `Voice note (${Math.floor(durationSec / 60)}:${String(durationSec % 60).padStart(2, '0')})`
+                    : 'Voice note',
+                  mime_type: 'audio/webm',
+                  context: 'description',
+                },
+              ]);
+            }}
+            onRemoveVoiceAttachment={(id) => {
+              setVoiceAttachments((prev) => prev.filter((a) => a.id !== id));
+              setPendingVoiceIds((prev) => prev.filter((x) => x !== id));
+            }}
+          />
         </div>
         <div className="space-y-2">
           <Label>Attachments</Label>

@@ -35,6 +35,10 @@ import {
   Attachment,
   Otp,
   TaskMember,
+  ChatConversation,
+  ChatMessage,
+  ChatMessageReaction,
+  ChatGroupMember,
 } from "./models/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -104,6 +108,10 @@ const syncModels = async () => {
   await Attachment.sync();
   await Otp.sync();
   await TaskMember.sync();
+  await ChatConversation.sync();
+  await ChatGroupMember.sync();
+  await ChatMessage.sync();
+  await ChatMessageReaction.sync();
   await sequelize.query(
     `CREATE TABLE IF NOT EXISTS task_members (
       task_id INTEGER NOT NULL,
@@ -135,6 +143,61 @@ const syncModels = async () => {
   await sequelize.query(
     "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS input_payload TEXT"
   );
+  await sequelize.query(
+    "ALTER TABLE attachments ADD COLUMN IF NOT EXISTS chat_message_id INTEGER"
+  );
+  await sequelize.query(
+    "ALTER TABLE attachments ADD COLUMN IF NOT EXISTS context VARCHAR(32) NOT NULL DEFAULT 'file'"
+  );
+  // await sequelize.query(
+  //   "ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS user_one_id INTEGER"
+  // );
+  // await sequelize.query(
+  //   "ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS user_two_id INTEGER"
+  // );
+  // await sequelize.query(
+  //   "ALTER TABLE chat_conversations ALTER COLUMN member_user_id DROP NOT NULL"
+  // );
+  // await sequelize.query(
+  //   "ALTER TABLE chat_conversations DROP CONSTRAINT IF EXISTS chat_conversations_member_user_id_key"
+  // );
+  // await sequelize.query(
+  //   `UPDATE chat_conversations c
+  //    SET user_one_id = LEAST(
+  //          c.member_user_id,
+  //          COALESCE((SELECT MIN(u.id) FROM users u WHERE u.role IN ('ADMIN', 'CEO') AND u.is_active = true), c.member_user_id)
+  //        ),
+  //        user_two_id = GREATEST(
+  //          c.member_user_id,
+  //          COALESCE((SELECT MIN(u.id) FROM users u WHERE u.role IN ('ADMIN', 'CEO') AND u.is_active = true), c.member_user_id)
+  //        )
+  //    WHERE c.user_one_id IS NULL
+  //      AND c.user_two_id IS NULL
+  //      AND c.member_user_id IS NOT NULL`
+  // );
+  // await sequelize.query(
+  //   `CREATE UNIQUE INDEX IF NOT EXISTS chat_conversations_user_pair_unique
+  //    ON chat_conversations (user_one_id, user_two_id)
+  //    WHERE user_one_id IS NOT NULL AND user_two_id IS NOT NULL`
+  // );
+  // await sequelize.query(
+  //   "ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS kind VARCHAR(16) NOT NULL DEFAULT 'direct'"
+  // );
+  // await sequelize.query(
+  //   "ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS name VARCHAR(140)"
+  // );
+  // await sequelize.query(
+  //   "ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS created_by INTEGER"
+  // );
+  // await sequelize.query(
+  //   `CREATE TABLE IF NOT EXISTS chat_group_members (
+  //     conversation_id INTEGER NOT NULL,
+  //     user_id INTEGER NOT NULL,
+  //     added_by INTEGER,
+  //     created_at BIGINT NOT NULL,
+  //     PRIMARY KEY (conversation_id, user_id)
+  //   )`
+  // );
 };
 
 export const initApp = async () => {

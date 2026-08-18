@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
+import SearchableSelect, { buildUserSelectOptions } from '@/components/SearchableSelect';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
@@ -142,12 +143,14 @@ function ProjectInner({ id }: { id: string }) {
               </div>
               {canManage && (
                 <div className="flex gap-2">
-                  <NativeSelect className="flex-1" value={addUserId} onChange={(e) => setAddUserId(e.target.value)}>
-                    <option value="">Add member…</option>
-                    {users.filter((u) => !members.some((m: any) => m.id === u.id)).map((u) => (
-                      <option key={u.id} value={u.id}>{u.name}</option>
-                    ))}
-                  </NativeSelect>
+                  <SearchableSelect
+                    className="flex-1 h-10"
+                    value={addUserId}
+                    onChange={setAddUserId}
+                    placeholder="Add member…"
+                    searchPlaceholder="Search users…"
+                    options={buildUserSelectOptions(users.filter((u) => !members.some((m: any) => m.id === u.id)))}
+                  />
                   <Button disabled={!addUserId} onClick={() => { patch({ addMemberId: Number(addUserId) }, 'Member added'); setAddUserId(''); }}>Add</Button>
                 </div>
               )}

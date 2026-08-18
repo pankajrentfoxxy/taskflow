@@ -2,6 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+type SpeechRecognitionResultEvent = Event & {
+  resultIndex: number;
+  results: SpeechRecognitionResultList;
+};
+
+type SpeechRecognitionErrorLike = Event & { error?: string };
+
 type SpeechRecognitionInstance = {
   lang: string;
   continuous: boolean;
@@ -10,8 +17,8 @@ type SpeechRecognitionInstance = {
   start: () => void;
   stop: () => void;
   abort: () => void;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+  onresult: ((event: SpeechRecognitionResultEvent) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorLike) => void) | null;
   onend: (() => void) | null;
 };
 

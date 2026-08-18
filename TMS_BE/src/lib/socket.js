@@ -7,8 +7,8 @@ import logger from "../config/logger.js";
 import { verifyRefreshToken } from "../utils/jwt.js";
 
 let io = null;
-/** @type {Map<number, number>} */
-const onlineCounts = new Map();
+/** @type {Map<number, { count: number, name: string }>} */
+const onlineUsers = new Map();
 
 function adminRoles() {
   return ["ADMIN", "CEO"];
@@ -18,13 +18,21 @@ function isAdminRole(role) {
   return adminRoles().includes(role);
 }
 
+function buildPresencePayload() {
+  const onlineUserList = [...onlineUsers.entries()]
+    .filter(([, entry]) => entry.count > 0)
+    .map(([userId, entry]) => ({ id: Number(userId), name: entry.name }));
+  return {
+    onlineCount: onlineUserList.length,
+    onlineUsers: onlineUserList.map((u) => u.id),
+    onlineUserList,
+  };
+}
+
 function broadcastPresence() {
   if (!io) return;
-  const onlineUsers = [...onlineCounts.entries()]
-    .filter(([, count]) => count > 0)
-    .map(([userId]) => Number(userId));
-  const payload = { onlineCount: onlineUsers.length, onlineUsers };
-  io.to("admins").emit("presence:update", payload);
+  const payload = buildPresencePayload();
+  io.emit("presence:update", payload);
 }
 
 export function initSocket(server) {
@@ -81,19 +89,16 @@ export function initSocket(server) {
     socket.join(`role:${user.role}`);
     if (isAdminRole(user.role)) socket.join("admins");
 
-    const prev = onlineCounts.get(user.id) || 0;
-    onlineCounts.set(user.id, prev + 1);
+    const prev = onlineUsers.get(user.id)?.count || 0;
+    onlineUsers.set(user.id, { count: prev + 1, name: user.name });
     broadcastPresence();
 
-    socket.emit("presence:update", {
-      onlineCount: [...onlineCounts.values()].filter((c) => c > 0).length,
-      onlineUsers: [...onlineCounts.entries()].filter(([, c]) => c > 0).map(([id]) => Number(id)),
-    });
+    socket.emit("presence:update", buildPresencePayload());
 
     socket.on("disconnect", () => {
-      const count = onlineCounts.get(user.id) || 0;
-      if (count <= 1) onlineCounts.delete(user.id);
-      else onlineCounts.set(user.id, count - 1);
+      const entry = onlineUsers.get(user.id);
+      if (!entry || entry.count <= 1) onlineUsers.delete(user.id);
+      else onlineUsers.set(user.id, { count: entry.count - 1, name: entry.name });
       broadcastPresence();
     });
   });
@@ -120,6 +125,12 @@ export function emitToUsers(userIds, event, payload) {
 export function emitToAdmins(event, payload) {
   if (!io) return;
   io.to("admins").emit(event, payload);
+}
+
+export function emitChatUpdate(participantUserIds, payload) {
+  if (!io) return;
+  const ids = (Array.isArray(participantUserIds) ? participantUserIds : [participantUserIds]).filter(Boolean);
+  emitToUsers([...new Set(ids)], "chat:update", payload);
 }
 
 export function emitNotificationsFromRows(rows) {
@@ -207,6 +218,7 @@ export default {
   emitToUser,
   emitToUsers,
   emitToAdmins,
+  emitChatUpdate,
   emitNotificationsFromRows,
   emitTaskChanged,
   emitTasksCreated,

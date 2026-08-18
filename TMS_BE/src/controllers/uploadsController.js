@@ -14,4 +14,8 @@ export const getFile = catchAsync(async (req, res) => {
   uploadsService.streamAttachment(att, res);
 });
 
-export default { uploadFile, getFile };
+export const deleteFile = catchAsync(async (req, res) => {
+  res.json(await uploadsService.deleteAttachmentById(req.user, Number(req.params.id)));
+});
+
+export default { uploadFile, getFile, deleteFile };

@@ -401,6 +401,10 @@ export async function api<T = any>(path: string, opts?: RequestInit): Promise<T>
   return data as T;
 }
 
+export async function deleteUpload(id: number): Promise<void> {
+  await api(`/api/uploads/${id}`, { method: 'DELETE' });
+}
+
 export async function apiUpload<T = any>(path: string, formData: FormData): Promise<T> {
   let result = await request(path, { method: 'POST', body: formData });
 

@@ -55,6 +55,7 @@ router.post(
         otherwise: Joi.array().items(Joi.string().allow("")),
       }),
       attachmentIds: Joi.array().items(Joi.number().integer()),
+      descriptionAttachmentIds: Joi.array().items(Joi.number().integer()),
       boardId: Joi.number().integer().allow(null),
       taskTypeId: Joi.number().integer().allow(null),
       collaboratorIds: Joi.array().items(Joi.number().integer()),

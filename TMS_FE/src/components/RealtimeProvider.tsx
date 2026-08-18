@@ -10,6 +10,7 @@ import {
   dispatchPresence,
   dispatchTaskChanged,
   dispatchMeRefresh,
+  dispatchChatUpdate,
 } from '@/lib/socket';
 import { api, toast } from '@/lib/util';
 
@@ -68,6 +69,10 @@ export default function RealtimeProvider({ children }: { children: React.ReactNo
       dispatchPresence(payload);
     };
 
+    const onChatUpdate = (payload: unknown) => {
+      dispatchChatUpdate(payload as Parameters<typeof dispatchChatUpdate>[0]);
+    };
+
     const onConnectError = (err: Error) => {
       if (process.env.NODE_ENV === 'development') {
         console.warn('[socket] connect_error', err.message);
@@ -78,6 +83,7 @@ export default function RealtimeProvider({ children }: { children: React.ReactNo
     socket.on('admin:notification', onAdminNotify);
     socket.on('task:changed', onTaskChanged);
     socket.on('presence:update', onPresence);
+    socket.on('chat:update', onChatUpdate);
     socket.on('connect_error', onConnectError);
 
     return () => {
@@ -85,6 +91,7 @@ export default function RealtimeProvider({ children }: { children: React.ReactNo
       socket.off('admin:notification', onAdminNotify);
       socket.off('task:changed', onTaskChanged);
       socket.off('presence:update', onPresence);
+      socket.off('chat:update', onChatUpdate);
       socket.off('connect_error', onConnectError);
       releaseSocket();
     };

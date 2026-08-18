@@ -1,16 +1,19 @@
 'use client';
 
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { Link2, Mic, MicOff } from 'lucide-react';
+import { Link2, Mic, Square, Subtitles } from 'lucide-react';
 import { insertDescriptionLink, normalizeDescriptionUrl } from '@/lib/descriptionLinks';
 import { useSpeechToText } from '@/hooks/useSpeechToText';
+import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
+import AttachmentMedia, { type AttachmentLike } from '@/components/AttachmentMedia';
+import VoiceRecordingBar from '@/components/VoiceRecordingBar';
+import { apiUpload, deleteUpload, toast } from '@/lib/util';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import Modal from '@/components/Modal';
 import DescriptionContent from '@/components/DescriptionContent';
-import { toast } from '@/lib/util';
 import { cn } from '@/lib/utils';
 
 type PendingLink = { name: string; url: string };
@@ -20,17 +23,30 @@ export default function DescriptionEditor({
   onChange,
   placeholder = 'Add a description…',
   rows = 4,
+  voiceAttachments = [],
+  onVoiceUploaded,
+  onRemoveVoiceAttachment,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   rows?: number;
+  voiceAttachments?: AttachmentLike[];
+  onVoiceUploaded?: (attachmentId: number, durationSec?: number) => void;
+  onRemoveVoiceAttachment?: (attachmentId: number) => void;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const valueRef = useRef(value);
+  const mountedRef = useRef(true);
   useEffect(() => {
     valueRef.current = value;
   }, [value]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [linkName, setLinkName] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
@@ -63,6 +79,41 @@ export default function DescriptionEditor({
     onTranscript: appendSpeech,
     onError: (msg) => toast.error(msg),
   });
+
+  const [uploadingVoice, setUploadingVoice] = useState(false);
+  const { supported: voiceSupported, recording: recordingVoice, durationSec: recordingSeconds, stop: stopVoiceRecording, toggle: toggleVoice } = useVoiceRecorder({
+    onRecorded: async (file, durationSec) => {
+      if (!onVoiceUploaded) return;
+      setUploadingVoice(true);
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        const d = await apiUpload<{ id: number }>('/api/uploads', fd);
+        if (!mountedRef.current) {
+          await deleteUpload(d.id).catch(() => {});
+          return;
+        }
+        onVoiceUploaded(d.id, durationSec);
+        toast.success('Voice note added');
+      } catch (e) {
+        toast.errorFrom(e);
+      } finally {
+        setUploadingVoice(false);
+      }
+    },
+    onError: (msg) => toast.error(msg),
+  });
+
+  useEffect(() => () => stopVoiceRecording(), [stopVoiceRecording]);
+
+  const removeVoiceAttachment = async (attachmentId: number) => {
+    try {
+      await deleteUpload(attachmentId);
+      onRemoveVoiceAttachment?.(attachmentId);
+    } catch (e) {
+      toast.errorFrom(e);
+    }
+  };
 
   const openLinkModal = () => {
     setLinkName('');
@@ -110,10 +161,27 @@ export default function DescriptionEditor({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className={cn('min-h-[88px] resize-y', speechSupported ? 'pr-[4.5rem]' : 'pr-10')}
+          className={cn('min-h-[88px] resize-y', (speechSupported || voiceSupported) ? 'pr-[6.5rem]' : 'pr-10')}
           rows={rows}
         />
         <div className="absolute top-2 right-2 flex items-center gap-0.5">
+          {onVoiceUploaded && voiceSupported && (
+            <Button
+              type="button"
+              variant={recordingVoice ? 'secondary' : 'ghost'}
+              size="icon-sm"
+              className={cn(
+                'text-muted-foreground hover:text-foreground',
+                recordingVoice && 'text-red-600 ring-1 ring-red-200'
+              )}
+              onClick={toggleVoice}
+              disabled={uploadingVoice}
+              title={recordingVoice ? 'Stop recording' : 'Record voice note'}
+              aria-pressed={recordingVoice}
+            >
+              {recordingVoice ? <Square className="size-3.5 fill-current" /> : <Mic className="size-4" />}
+            </Button>
+          )}
           {speechSupported && (
             <Button
               type="button"
@@ -121,14 +189,14 @@ export default function DescriptionEditor({
               size="icon-sm"
               className={cn(
                 'text-muted-foreground hover:text-foreground',
-                listening && 'text-red-600 ring-1 ring-red-200'
+                listening && 'text-primary ring-1 ring-primary/30'
               )}
               onClick={toggleSpeech}
-              title={listening ? 'Stop dictation' : 'Speech to text (free, uses browser mic)'}
+              title={listening ? 'Stop dictation' : 'Speech to text — converts speech into text'}
               aria-pressed={listening}
               aria-label={listening ? 'Stop speech to text' : 'Start speech to text'}
             >
-              {listening ? <MicOff className="size-4 animate-pulse" /> : <Mic className="size-4" />}
+              <Subtitles className={cn('size-4', listening && 'animate-pulse')} />
             </Button>
           )}
           <Button
@@ -143,6 +211,26 @@ export default function DescriptionEditor({
           </Button>
         </div>
       </div>
+
+      {recordingVoice && <VoiceRecordingBar durationSec={recordingSeconds} onStop={toggleVoice} />}
+
+      {voiceAttachments.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Voice notes</div>
+          {voiceAttachments.map((attachment) => (
+            <div key={attachment.id} className="flex items-start gap-2 rounded-lg border bg-muted/10 p-2">
+              <div className="min-w-0 flex-1">
+                <AttachmentMedia attachment={attachment} compact />
+              </div>
+              {onRemoveVoiceAttachment && (
+                <Button type="button" variant="ghost" size="xs" onClick={() => void removeVoiceAttachment(attachment.id)}>
+                  Remove
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {value.trim() && (
         <div className="rounded-lg border bg-muted/10 p-3">

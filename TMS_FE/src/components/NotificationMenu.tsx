@@ -6,6 +6,7 @@ import { Bell } from 'lucide-react';
 import { api, timeAgo, toast } from '@/lib/util';
 import { onNotification } from '@/lib/socket';
 import { cn } from '@/lib/utils';
+import type { ChatUnreadEntry } from '@/lib/chatUnread';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -49,15 +50,22 @@ type NotificationItem = {
 
 export default function NotificationMenu({
   unread,
+  chatUnread = 0,
+  chatEntries = [],
   refreshMe,
+  onOpenChat,
 }: {
   unread: number;
+  chatUnread?: number;
+  chatEntries?: ChatUnreadEntry[];
   refreshMe: () => void;
+  onOpenChat?: (conversationId: number) => void;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const totalUnread = unread + chatUnread;
 
   const load = useCallback(() => {
     setLoading(true);
@@ -75,6 +83,14 @@ export default function NotificationMenu({
     if (open) void load();
     refreshMe();
   }), [open, load, refreshMe]);
+
+  useEffect(() => {
+    const onChatUnread = () => {
+      if (open) refreshMe();
+    };
+    window.addEventListener('tf:chat-unread-changed', onChatUnread);
+    return () => window.removeEventListener('tf:chat-unread-changed', onChatUnread);
+  }, [open, refreshMe]);
 
   const afterAction = (message: string) => {
     void load();
@@ -105,9 +121,9 @@ export default function NotificationMenu({
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon-sm" className="relative" aria-label="Notifications">
           <Bell className="size-4" />
-          {unread > 0 && (
+          {totalUnread > 0 && (
             <span className="absolute -top-1.5 -right-1.5 flex size-4 min-w-4 items-center justify-center rounded-full bg-foreground px-0.5 text-[9px] font-bold text-background">
-              {unread > 9 ? '9+' : unread}
+              {totalUnread > 9 ? '9+' : totalUnread}
             </span>
           )}
         </Button>
@@ -116,8 +132,15 @@ export default function NotificationMenu({
         <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2.5">
           <div>
             <div className="text-sm font-semibold">Notifications</div>
-            {unread > 0 && (
-              <div className="text-[11px] text-muted-foreground">{unread} unread</div>
+            {totalUnread > 0 && (
+              <div className="text-[11px] text-muted-foreground">
+                {totalUnread} unread
+                {chatUnread > 0 && unread > 0
+                  ? ` · ${chatUnread} chat`
+                  : chatUnread > 0
+                    ? ' · chat'
+                    : ''}
+              </div>
             )}
           </div>
           <div className="flex shrink-0 gap-1">
@@ -144,10 +167,49 @@ export default function NotificationMenu({
 
         <ScrollArea className="max-h-[min(24rem,60vh)]">
           <div className="p-1">
-            {loading && items.length === 0 && (
+            {chatEntries.length > 0 && (
+              <div className="mb-1">
+                <div className="px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Chat
+                </div>
+                {chatEntries.map((entry) => (
+                  <button
+                    key={`chat-${entry.conversationId}`}
+                    type="button"
+                    onClick={() => {
+                      setOpen(false);
+                      if (onOpenChat) onOpenChat(entry.conversationId);
+                      else router.push(`/chat?conversationId=${entry.conversationId}`);
+                    }}
+                    className="flex w-full gap-3 rounded-md px-2.5 py-2.5 text-left transition-colors hover:bg-muted/70 bg-brand-50/60"
+                  >
+                    <span className="shrink-0 text-lg leading-none">💬</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="truncate text-sm font-semibold">{entry.name}</div>
+                        {entry.count > 1 && (
+                          <span className="shrink-0 rounded-full bg-foreground px-1.5 py-0.5 text-[10px] font-bold text-background">
+                            {entry.count > 9 ? '9+' : entry.count}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-0.5 truncate text-xs text-muted-foreground">{entry.preview}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {chatEntries.length > 0 && items.length > 0 && (
+              <div className="px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Tasks
+              </div>
+            )}
+
+            {loading && items.length === 0 && chatEntries.length === 0 && (
               <div className="px-3 py-8 text-center text-sm text-muted-foreground">Loading…</div>
             )}
-            {!loading && items.length === 0 && (
+            {!loading && items.length === 0 && chatEntries.length === 0 && (
               <div className="px-3 py-8 text-center text-sm text-muted-foreground">No notifications.</div>
             )}
             {items.map((n) => (
