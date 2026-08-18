@@ -40,7 +40,7 @@ export default function RealtimeProvider({ children }: { children: React.ReactNo
   }, [pathname, loadMe]);
 
   useEffect(() => {
-    if (!me || pathname.startsWith('/login')) return;
+    if (!me) return;
 
     const socket = connectSocket();
     const isAdmin = ['ADMIN', 'CEO'].includes(me.role);
@@ -95,7 +95,7 @@ export default function RealtimeProvider({ children }: { children: React.ReactNo
       socket.off('connect_error', onConnectError);
       releaseSocket();
     };
-  }, [me, pathname]);
+  }, [me]);
 
   return children;
 }

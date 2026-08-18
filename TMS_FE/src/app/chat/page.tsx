@@ -798,11 +798,11 @@ function ChatInner() {
 
   useEffect(() => {
     return onPresenceUpdate((detail) => {
-      if (detail.onlineUserList?.length) {
+      if (detail.onlineUserList) {
         setOnlineUserIds(new Set(detail.onlineUserList.map((u) => u.id)));
         return;
       }
-      if (detail.onlineUsers?.length) {
+      if (detail.onlineUsers) {
         setOnlineUserIds(new Set(detail.onlineUsers));
       }
     });

@@ -107,6 +107,14 @@ export type ChatMessagePayload = {
   }[];
 };
 
+export type PresencePayload = {
+  onlineCount?: number;
+  onlineUsers?: number[];
+  onlineUserList?: { id: number; name: string }[];
+};
+
+let lastPresencePayload: PresencePayload | null = null;
+
 export function dispatchTaskChanged(detail: unknown): void {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent(REALTIME_TASK_EVENT, { detail }));
@@ -114,6 +122,7 @@ export function dispatchTaskChanged(detail: unknown): void {
 
 export function dispatchPresence(detail: unknown): void {
   if (typeof window === 'undefined') return;
+  lastPresencePayload = detail as PresencePayload;
   window.dispatchEvent(new CustomEvent(REALTIME_PRESENCE_EVENT, { detail }));
 }
 
@@ -139,12 +148,9 @@ export function onTaskChanged(handler: (detail: unknown) => void): () => void {
   return () => window.removeEventListener(REALTIME_TASK_EVENT, wrapped);
 }
 
-export function onPresenceUpdate(handler: (detail: {
-  onlineCount?: number;
-  onlineUsers?: number[];
-  onlineUserList?: { id: number; name: string }[];
-}) => void): () => void {
+export function onPresenceUpdate(handler: (detail: PresencePayload) => void): () => void {
   if (typeof window === 'undefined') return () => {};
+  if (lastPresencePayload) handler(lastPresencePayload);
   const wrapped = (e: Event) => handler((e as CustomEvent).detail);
   window.addEventListener(REALTIME_PRESENCE_EVENT, wrapped);
   return () => window.removeEventListener(REALTIME_PRESENCE_EVENT, wrapped);
