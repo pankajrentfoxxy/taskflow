@@ -75,10 +75,13 @@ export type ChatUpdatePayload = {
 
 export type ConversationPreview = {
   id: number;
-  member_user_id?: number;
+  kind?: 'direct' | 'group' | string;
+  name?: string | null;
+  member_user_id?: number | null;
   member_name?: string;
-  member_email?: string;
+  member_email?: string | null;
   member_role?: string;
+  member_count?: number | null;
   last_message_at?: number | null;
   last_message_preview?: string | null;
 };

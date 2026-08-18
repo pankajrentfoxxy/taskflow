@@ -123,7 +123,7 @@ export function handleChatUpdatePayload(payload: ChatUpdatePayload, meId: number
     name: conversation.member_name || conversation.name || 'Chat',
     preview: preview.slice(0, 120),
     updatedAt: message.created_at || Date.now(),
-    kind: (conversation as { kind?: string }).kind,
+    kind: conversation.kind,
   };
   saveState(state);
   notifyChanged();
