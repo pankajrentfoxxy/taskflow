@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight, Flag, MessageSquare, User } from 'lucide-react';
-import { STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, STATUS_DOT, PRIORITY_COLOR, fmtShortDate, isTaskOverdue, getTaskRowClasses, canReassignTask } from '@/lib/util';
+import { ChevronRight, Flag, MessageCircle, MessageSquare, User } from 'lucide-react';
+import { STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, STATUS_DOT, PRIORITY_COLOR, fmtShortDate, isTaskOverdue, getTaskRowClasses, canReassignTask, getTaskAssigneeChatHref, storeTaskForChatAttach } from '@/lib/util';
 import { useMe } from '@/components/Shell';
 import TaskCard from '@/components/TaskCard';
 import TaskStatusModal from '@/components/TaskStatusModal';
@@ -63,12 +63,26 @@ function TaskRow({
         +{task.member_count}
       </span>
     ) : null;
+  const assigneeChatHref = getTaskAssigneeChatHref(task, viewer?.id);
 
   return (
     <>
     <TableRow className={cn('group', rowHighlight, expanded && 'ring-1 ring-inset ring-foreground/5')}>
       <TableCell className="min-w-[280px] max-w-[420px] whitespace-normal py-3 pl-3">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-1.5">
+          {assigneeChatHref && (
+            <Link
+              href={assigneeChatHref}
+              className="shrink-0 rounded-md p-0.5 text-muted-foreground/50 outline-none ring-offset-background transition hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+              title="Chat with assignee about this task"
+              onClick={(e) => {
+                e.stopPropagation();
+                storeTaskForChatAttach(task);
+              }}
+            >
+              <MessageCircle className="size-4" />
+            </Link>
+          )}
           <button
             type="button"
             className="group relative shrink-0 rounded-md p-0.5 text-muted-foreground/50 outline-none ring-offset-background transition hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"

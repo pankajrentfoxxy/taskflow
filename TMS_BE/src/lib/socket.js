@@ -18,6 +18,25 @@ function isAdminRole(role) {
   return adminRoles().includes(role);
 }
 
+async function userCanAccessConversation(user, conversationId) {
+  const cid = Number(conversationId);
+  if (!cid) return false;
+  const { ChatConversation, ChatGroupMember } = await import("../models/index.js");
+  const conv = await ChatConversation.findByPk(cid);
+  if (!conv) return false;
+  if (conv.kind === "group") {
+    const row = await ChatGroupMember.findOne({
+      where: { conversation_id: cid, user_id: user.id },
+    });
+    return Boolean(row);
+  }
+  if (conv.user_one_id && conv.user_two_id) {
+    return conv.user_one_id === user.id || conv.user_two_id === user.id;
+  }
+  if (isAdminRole(user.role) && conv.member_user_id && !conv.user_one_id) return true;
+  return conv.member_user_id === user.id;
+}
+
 function buildPresencePayload() {
   const onlineUserList = [...onlineUsers.entries()]
     .filter(([, entry]) => entry.count > 0)
@@ -100,6 +119,31 @@ export function initSocket(server) {
       if (!entry || entry.count <= 1) onlineUsers.delete(user.id);
       else onlineUsers.set(user.id, { count: entry.count - 1, name: entry.name });
       broadcastPresence();
+    });
+
+    socket.on("chat:join", async ({ conversationId }) => {
+      const cid = Number(conversationId);
+      if (!cid || !(await userCanAccessConversation(user, cid))) return;
+      socket.join(`conv:${cid}`);
+    });
+
+    socket.on("chat:leave", ({ conversationId }) => {
+      const cid = Number(conversationId);
+      if (!cid) return;
+      socket.leave(`conv:${cid}`);
+    });
+
+    socket.on("chat:typing", ({ conversationId, typing }) => {
+      const cid = Number(conversationId);
+      if (!cid) return;
+      const room = `conv:${cid}`;
+      if (!socket.rooms.has(room)) return;
+      socket.to(room).emit("chat:typing", {
+        conversationId: cid,
+        userId: user.id,
+        userName: user.name,
+        typing: Boolean(typing),
+      });
     });
   });
 

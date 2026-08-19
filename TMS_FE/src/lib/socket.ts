@@ -66,11 +66,19 @@ export const REALTIME_PRESENCE_EVENT = 'tf:presence';
 export const REALTIME_NOTIFICATION_EVENT = 'tf:notification';
 export const REALTIME_ME_REFRESH_EVENT = 'tf:me-refresh';
 export const REALTIME_CHAT_EVENT = 'tf:chat-update';
+export const REALTIME_CHAT_TYPING_EVENT = 'tf:chat-typing';
 
 export type ChatUpdatePayload = {
   action?: string;
   conversation?: ConversationPreview;
   message?: ChatMessagePayload;
+};
+
+export type ChatTypingPayload = {
+  conversationId: number;
+  userId: number;
+  userName: string;
+  typing: boolean;
 };
 
 export type ConversationPreview = {
@@ -82,6 +90,8 @@ export type ConversationPreview = {
   member_email?: string | null;
   member_role?: string;
   member_count?: number | null;
+  member_names?: string | null;
+  member_list?: { id: number; name: string }[] | null;
   last_message_at?: number | null;
   last_message_preview?: string | null;
 };
@@ -141,6 +151,26 @@ export function dispatchChatUpdate(detail: ChatUpdatePayload): void {
   window.dispatchEvent(new CustomEvent(REALTIME_CHAT_EVENT, { detail }));
 }
 
+export function dispatchChatTyping(detail: ChatTypingPayload): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(REALTIME_CHAT_TYPING_EVENT, { detail }));
+}
+
+export function emitChatJoin(conversationId: number): void {
+  if (typeof window === 'undefined') return;
+  getSocket().emit('chat:join', { conversationId });
+}
+
+export function emitChatLeave(conversationId: number): void {
+  if (typeof window === 'undefined') return;
+  getSocket().emit('chat:leave', { conversationId });
+}
+
+export function emitChatTyping(conversationId: number, typing: boolean): void {
+  if (typeof window === 'undefined') return;
+  getSocket().emit('chat:typing', { conversationId, typing });
+}
+
 export function onTaskChanged(handler: (detail: unknown) => void): () => void {
   if (typeof window === 'undefined') return () => {};
   const wrapped = (e: Event) => handler((e as CustomEvent).detail);
@@ -173,4 +203,11 @@ export function onChatUpdate(handler: (detail: ChatUpdatePayload) => void): () =
   const wrapped = (e: Event) => handler((e as CustomEvent).detail);
   window.addEventListener(REALTIME_CHAT_EVENT, wrapped);
   return () => window.removeEventListener(REALTIME_CHAT_EVENT, wrapped);
+}
+
+export function onChatTyping(handler: (detail: ChatTypingPayload) => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  const wrapped = (e: Event) => handler((e as CustomEvent).detail);
+  window.addEventListener(REALTIME_CHAT_TYPING_EVENT, wrapped);
+  return () => window.removeEventListener(REALTIME_CHAT_TYPING_EVENT, wrapped);
 }

@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 
 const PRESETS: { key: ReportsDateFilterMode; label: string }[] = [
   { key: 'all', label: 'All time' },
+  { key: 'today', label: 'Today' },
   { key: '7', label: 'Last 7 days' },
   { key: '30', label: 'Last 30 days' },
   { key: '90', label: 'Last 90 days' },

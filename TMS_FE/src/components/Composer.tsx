@@ -14,16 +14,17 @@ import SearchableSelect, { buildUserTeamSelectOptions } from '@/components/Searc
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function Composer({
-  open, onClose, onCreated, presetProjectId, presetParentId, presetAttachmentIds, presetBoardId, presetTitle,
+  open, onClose, onCreated, presetProjectId, presetParentId, presetAttachmentIds, presetBoardId, presetTitle, presetAssigneeId,
 }: {
   open: boolean;
   onClose: () => void;
-  onCreated?: (ids: number[]) => void;
+  onCreated?: (ids: number[], detail?: { title?: string; description?: string; assigneeId?: number | null; lines?: string[] }) => void;
   presetProjectId?: number | null;
   presetParentId?: number | null;
   presetAttachmentIds?: number[];
   presetBoardId?: number | null;
   presetTitle?: string;
+  presetAssigneeId?: number | null;
 }) {
   const [users, setUsers] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
@@ -54,10 +55,11 @@ export default function Composer({
     api('/api/teams').then((d) => setTeams(d.teams));
     api('/api/projects').then((d) => setProjects(d.projects));
     setTitle(presetTitle || '');
+    setAssignee(presetAssigneeId ? `u:${presetAssigneeId}` : '');
     setCollaboratorIds([]);
     setWatcherIds([]);
     setErr('');
-  }, [open, presetTitle]);
+  }, [open, presetTitle, presetAssigneeId]);
 
   // Task types follow the selected person's team (or the selected team)
   useEffect(() => {
@@ -98,6 +100,7 @@ export default function Composer({
   const resetForm = () => {
     setTitle('');
     setDescription('');
+    setAssignee('');
     setLinesText('');
     setFiles([]);
     setVoiceAttachments([]);
@@ -169,7 +172,12 @@ export default function Composer({
       } else {
         toast.success('Task created');
       }
-      onCreated?.(d.ids);
+      onCreated?.(d.ids, {
+        title: multiple ? undefined : title.trim(),
+        description: description.trim(),
+        assigneeId: kind === 'u' ? Number(idStr) : null,
+        lines: multiple ? linesText.split('\n').map((l) => l.trim()).filter(Boolean) : undefined,
+      });
       resetForm();
       onClose();
     } catch (e: any) {

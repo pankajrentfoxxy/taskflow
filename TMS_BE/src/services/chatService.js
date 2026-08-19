@@ -68,6 +68,23 @@ const LAST_MESSAGE_PREVIEW_SQL = `(
   LIMIT 1
 ) AS last_message_preview`;
 
+const GROUP_MEMBER_NAMES_EXPR = `(
+  SELECT STRING_AGG(u.name, ', ' ORDER BY u.name)
+  FROM chat_group_members gm
+  JOIN users u ON u.id = gm.user_id AND u.is_active = true
+  WHERE gm.conversation_id = c.id
+)`;
+
+const GROUP_MEMBER_LIST_EXPR = `(
+  SELECT COALESCE(
+    JSON_AGG(JSON_BUILD_OBJECT('id', u.id, 'name', u.name) ORDER BY u.name),
+    '[]'::json
+  )
+  FROM chat_group_members gm
+  JOIN users u ON u.id = gm.user_id AND u.is_active = true
+  WHERE gm.conversation_id = c.id
+)`;
+
 const PEER_JOIN_SQL = `LEFT JOIN users peer ON peer.id = CASE
   WHEN c.kind = 'group' THEN NULL
   WHEN c.user_one_id IS NOT NULL AND c.user_two_id IS NOT NULL THEN
@@ -128,6 +145,20 @@ async function loadMessagesWithReactions(conversationId, viewerId) {
   }));
 }
 
+function parseMemberList(raw) {
+  if (!raw) return null;
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 function formatConversationRow(row) {
   const isGroup = row.kind === "group";
   return {
@@ -139,6 +170,8 @@ function formatConversationRow(row) {
     member_email: isGroup ? null : row.member_email,
     member_role: isGroup ? "GROUP" : row.member_role,
     member_count: row.member_count != null ? Number(row.member_count) : null,
+    member_names: isGroup ? row.member_names || null : null,
+    member_list: isGroup ? parseMemberList(row.member_list) : null,
     last_message_at: row.last_message_at,
     last_message_preview: row.last_message_preview,
     created_at: row.created_at,
@@ -153,6 +186,8 @@ async function getConversationRow(conversationId, viewerId) {
             peer.email AS member_email,
             peer.role AS member_role,
             (SELECT COUNT(*)::int FROM chat_group_members gm WHERE gm.conversation_id = c.id) AS member_count,
+            ${GROUP_MEMBER_NAMES_EXPR} AS member_names,
+            ${GROUP_MEMBER_LIST_EXPR} AS member_list,
             ${LAST_MESSAGE_PREVIEW_SQL}
      FROM chat_conversations c
      ${PEER_JOIN_SQL}
@@ -261,6 +296,8 @@ export async function listConversations(user) {
             peer.email AS member_email,
             peer.role AS member_role,
             (SELECT COUNT(*)::int FROM chat_group_members gm WHERE gm.conversation_id = c.id) AS member_count,
+            ${GROUP_MEMBER_NAMES_EXPR} AS member_names,
+            ${GROUP_MEMBER_LIST_EXPR} AS member_list,
             ${LAST_MESSAGE_PREVIEW_SQL}
      FROM chat_conversations c
      ${PEER_JOIN_SQL}
@@ -281,6 +318,8 @@ export async function listGroups(user) {
     `SELECT c.id, c.kind, c.name AS group_name, c.last_message_at, c.created_at,
             c.name AS member_name,
             (SELECT COUNT(*)::int FROM chat_group_members gm WHERE gm.conversation_id = c.id) AS member_count,
+            ${GROUP_MEMBER_NAMES_EXPR} AS member_names,
+            ${GROUP_MEMBER_LIST_EXPR} AS member_list,
             ${LAST_MESSAGE_PREVIEW_SQL}
      FROM chat_conversations c
      JOIN chat_group_members gm ON gm.conversation_id = c.id AND gm.user_id = :viewerId

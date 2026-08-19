@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Shell, { useMe } from '@/components/Shell';
 import { useChatUnread } from '@/components/ChatUnreadProvider';
@@ -15,14 +16,28 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { api, apiUpload, deleteUpload, fmtTime, toast } from '@/lib/util';
+import { api, apiUpload, deleteUpload, fmtTime, toast, htmlToPlainText, taskViewLink, buildTaskMentionBody, readTaskForChatAttach } from '@/lib/util';
+import {
+  CHAT_INLINE_TOKEN,
+  detectMentionQuery,
+  decodeMentionsForDisplay,
+  encodeMentionsForSend,
+  filterMentionMembers,
+  insertMention,
+  parseMentionDisplay,
+  type MentionQuery,
+} from '@/lib/chatMentions';
 import { onChatUpdate, onPresenceUpdate, type ChatUpdatePayload } from '@/lib/socket';
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
+import { useChatTyping } from '@/hooks/useChatTyping';
 import AttachmentMedia, { type AttachmentLike } from '@/components/AttachmentMedia';
 import VoiceRecordingBar from '@/components/VoiceRecordingBar';
+import ChatTypingIndicator from '@/components/ChatTypingIndicator';
+import ChatMentionPicker from '@/components/ChatMentionPicker';
 import { formatDuration } from '@/lib/formatDuration';
 import { cn } from '@/lib/utils';
 import Modal from '@/components/Modal';
+import Composer from '@/components/Composer';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -43,6 +58,7 @@ import {
   Users,
   Plus,
   Settings,
+  ListTodo,
 } from 'lucide-react';
 
 type Reaction = { emoji: string; count: number; mine: boolean };
@@ -63,6 +79,8 @@ type ChatMessage = {
   attachments?: ChatAttachment[];
 };
 
+type GroupMember = { id: number; name: string };
+
 type Conversation = {
   id: number;
   kind?: 'direct' | 'group';
@@ -72,6 +90,8 @@ type Conversation = {
   member_email?: string;
   member_role?: string;
   member_count?: number | null;
+  member_names?: string | null;
+  member_list?: GroupMember[] | null;
   last_message_at: number | null;
   last_message_preview?: string | null;
 };
@@ -92,6 +112,123 @@ const initials = (n?: string | null) =>
   (n || '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 
 const displayName = (n?: string | null) => n?.split(' (')[0] || 'User';
+
+function GroupMemberTags({
+  members,
+  onlineUserIds,
+  compact = false,
+}: {
+  members: GroupMember[];
+  onlineUserIds: Set<number>;
+  compact?: boolean;
+}) {
+  if (!members.length) return null;
+  return (
+    <div className={cn('flex flex-wrap gap-0.5', compact ? 'mt-0.5' : 'mt-0.5')}>
+      {members.map((member) => {
+        const online = onlineUserIds.has(member.id);
+        return (
+          <span
+            key={member.id}
+            className={cn(
+              'inline-flex max-w-full items-center gap-0.5 rounded-full font-medium leading-none',
+              compact ? 'px-1 py-px text-[9px]' : 'px-1.5 py-0.5 text-[9px]',
+              online
+                ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200'
+                : 'bg-muted/80 text-muted-foreground'
+            )}
+            title={online ? `${displayName(member.name)} is online` : displayName(member.name)}
+          >
+            {online && <span className="size-1 shrink-0 rounded-full bg-emerald-500" aria-hidden />}
+            <span className="truncate">{displayName(member.name)}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function buildTaskChatMessage(
+  ids: number[],
+  detail?: { title?: string; description?: string; lines?: string[] }
+): string {
+  const plainDesc = htmlToPlainText(detail?.description || '');
+  const lines: string[] = ['📋 New task assigned'];
+
+  if (ids.length > 1 && detail?.lines?.length) {
+    detail.lines.forEach((line, index) => {
+      const taskId = ids[index];
+      if (!taskId) return;
+      lines.push('', `${index + 1}. ${line}`, taskViewLink(taskId));
+    });
+  } else {
+    const taskId = ids[0];
+    const title = detail?.title || detail?.lines?.[0] || 'New task';
+    lines.push('', title, taskViewLink(taskId));
+  }
+
+  if (plainDesc) {
+    lines.push('', plainDesc);
+  }
+
+  return lines.join('\n').trim();
+}
+
+function ChatMessageBody({ body, mine }: { body: string; mine: boolean }) {
+  const linkClass = mine
+    ? 'font-medium underline underline-offset-2 hover:opacity-80'
+    : 'font-medium text-primary underline underline-offset-2 hover:opacity-80';
+
+  const renderLine = (line: string, key: string) => {
+    const legacyTaskPath = line.match(/^\/tasks\/(\d+)$/);
+    if (legacyTaskPath) {
+      return (
+        <Link key={key} href={`/tasks/${legacyTaskPath[1]}`} className={linkClass}>
+          Tap to view
+        </Link>
+      );
+    }
+
+    const parts = line.split(CHAT_INLINE_TOKEN);
+    return parts.map((part, index) => {
+      if (!part) return null;
+      const mentionName = parseMentionDisplay(part);
+      if (mentionName) {
+        return (
+          <span
+            key={`${key}-${index}`}
+            className={cn(
+              'rounded-sm px-0.5 font-semibold',
+              mine ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-primary/10 text-primary',
+            )}
+          >
+            @{mentionName}
+          </span>
+        );
+      }
+      const match = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+      if (match) {
+        return (
+          <Link key={`${key}-${index}`} href={match[2]} className={linkClass}>
+            {match[1]}
+          </Link>
+        );
+      }
+      return <span key={`${key}-${index}`}>{part}</span>;
+    });
+  };
+
+  return (
+    <>
+      {body.split('\n').map((line, index) => (
+        <span key={index}>
+          {index > 0 && <br />}
+          {renderLine(line, String(index))}
+        </span>
+      ))}
+    </>
+  );
+}
 
 function sortMessages(list: ChatMessage[]) {
   return [...list].sort((a, b) => a.created_at - b.created_at || a.id - b.id);
@@ -230,9 +367,9 @@ function MessageBubble({
           ) : (
             <>
               {message.body && (
-                <p className={cn('text-sm whitespace-pre-wrap break-words', isDeleted && 'italic')}>
-                  {isDeleted ? '[Message deleted]' : message.body}
-                </p>
+                <div className={cn('text-sm break-words', isDeleted && 'italic')}>
+                  {isDeleted ? '[Message deleted]' : <ChatMessageBody body={message.body} mine={mine} />}
+                </div>
               )}
               {!isDeleted && attachments.length > 0 && (
                 <div className={cn('space-y-2', message.body && 'mt-2')}>
@@ -340,6 +477,7 @@ function UserListSidebar({
   onCreateGroup,
   onSelectTarget,
   onSelectConversation,
+  onCreateTaskForUser,
 }: {
   loading: boolean;
   search: string;
@@ -354,6 +492,7 @@ function UserListSidebar({
   onCreateGroup: () => void;
   onSelectTarget: (t: Target) => void;
   onSelectConversation: (c: Conversation) => void;
+  onCreateTaskForUser: (userId: number) => void;
 }) {
   const recentConversations = conversations.filter((c) => c.last_message_preview);
   const q = search.trim().toLowerCase();
@@ -400,7 +539,14 @@ function UserListSidebar({
                         subtitle={conv.last_message_preview || ''}
                         online={conv.kind !== 'group' && conv.member_user_id != null && onlineUserIds.has(conv.member_user_id)}
                         isGroup={conv.kind === 'group'}
+                        groupMembers={conv.kind === 'group' ? conv.member_list : undefined}
+                        onlineUserIds={onlineUserIds}
                         onClick={() => onSelectConversation(conv)}
+                        onCreateTask={
+                          conv.kind !== 'group' && conv.member_user_id
+                            ? () => onCreateTaskForUser(conv.member_user_id!)
+                            : undefined
+                        }
                       />
                     ))}
                   </div>
@@ -415,11 +561,10 @@ function UserListSidebar({
                         key={`group-${group.id}`}
                         active={activeId === group.id}
                         name={displayName(group.member_name)}
-                        subtitle={
-                          group.last_message_preview ||
-                          `${group.member_count || 0} member${group.member_count === 1 ? '' : 's'}`
-                        }
+                        subtitle={group.last_message_preview || ''}
                         isGroup
+                        groupMembers={group.member_list}
+                        onlineUserIds={onlineUserIds}
                         onClick={() => onSelectConversation(group)}
                       />
                     ))}
@@ -445,7 +590,9 @@ function UserListSidebar({
                       name={displayName(target.name)}
                       subtitle={target.team_name || target.role}
                       online={onlineUserIds.has(target.id)}
+                      onlineUserIds={onlineUserIds}
                       onClick={() => onSelectTarget(target)}
+                      onCreateTask={() => onCreateTaskForUser(target.id)}
                     />
                   ))
                 )}
@@ -545,47 +692,72 @@ function SidebarRow({
   subtitle,
   online = false,
   isGroup = false,
+  groupMembers,
+  onlineUserIds,
   onClick,
+  onCreateTask,
 }: {
   active: boolean;
   name: string;
   subtitle: string;
   online?: boolean;
   isGroup?: boolean;
+  groupMembers?: GroupMember[] | null;
+  onlineUserIds: Set<number>;
   onClick: () => void;
+  onCreateTask?: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <div
       className={cn(
-        'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition',
+        'flex w-full items-center gap-0.5 rounded-lg pr-1 transition',
         active ? 'bg-muted font-medium' : 'hover:bg-muted/60'
       )}
     >
-      <div className="relative shrink-0">
-        <Avatar className={cn('size-9', isGroup ? 'bg-violet-500/10' : 'bg-primary/10')}>
-          <AvatarFallback
-            className={cn(
-              'text-[10px] font-semibold',
-              isGroup ? 'bg-violet-500/10 text-violet-700' : 'bg-primary/10 text-primary'
-            )}
-          >
-            {isGroup ? <Users className="size-4" /> : initials(name)}
-          </AvatarFallback>
-        </Avatar>
-        {!isGroup && online && (
-          <span
-            className="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-card bg-emerald-500"
-            title="Online"
-          />
-        )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm">{name}</div>
-        <div className="truncate text-xs text-muted-foreground">{subtitle}</div>
-      </div>
-    </button>
+      <button type="button" onClick={onClick} className="flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-2 text-left">
+        <div className="relative shrink-0">
+          <Avatar className={cn('size-9', isGroup ? 'bg-violet-500/10' : 'bg-primary/10')}>
+            <AvatarFallback
+              className={cn(
+                'text-[10px] font-semibold',
+                isGroup ? 'bg-violet-500/10 text-violet-700' : 'bg-primary/10 text-primary'
+              )}
+            >
+              {isGroup ? <Users className="size-4" /> : initials(name)}
+            </AvatarFallback>
+          </Avatar>
+          {!isGroup && online && (
+            <span
+              className="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-card bg-emerald-500"
+              title="Online"
+            />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm">{name}</div>
+          {isGroup && groupMembers?.length && !subtitle ? (
+            <GroupMemberTags members={groupMembers} onlineUserIds={onlineUserIds} compact />
+          ) : (
+            <div className="truncate text-xs text-muted-foreground">{subtitle}</div>
+          )}
+        </div>
+      </button>
+      {onCreateTask && !isGroup && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="shrink-0 text-muted-foreground hover:text-foreground"
+          title="Create task for this user"
+          onClick={(e) => {
+            e.stopPropagation();
+            onCreateTask();
+          }}
+        >
+          <Plus className="size-3.5" />
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -594,6 +766,12 @@ type PendingFile = {
   fileName: string;
   mimeType: string;
   durationSec?: number;
+};
+
+type AttachedTask = {
+  id: number;
+  title: string;
+  description?: string | null;
 };
 
 function ChatInner() {
@@ -613,8 +791,11 @@ function ChatInner() {
   const [search, setSearch] = useState('');
   const [mobileUsersOpen, setMobileUsersOpen] = useState(false);
   const [text, setText] = useState('');
+  const [mentionQuery, setMentionQuery] = useState<MentionQuery | null>(null);
+  const [mentionHighlight, setMentionHighlight] = useState(0);
   const [busy, setBusy] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+  const [attachedTask, setAttachedTask] = useState<AttachedTask | null>(null);
   const [pickerFor, setPickerFor] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState('');
@@ -625,10 +806,14 @@ function ChatInner() {
   const [manageGroupOpen, setManageGroupOpen] = useState(false);
   const [groupFormBusy, setGroupFormBusy] = useState(false);
   const [manageMemberIds, setManageMemberIds] = useState<number[]>([]);
+  const [taskComposerOpen, setTaskComposerOpen] = useState(false);
+  const [taskComposerUserId, setTaskComposerUserId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const activeConvIdRef = useRef<number | null>(null);
   const initForUserRef = useRef<number | null>(null);
+  const handledTaskNavRef = useRef<string | null>(null);
 
   const groups = useMemo(
     () => conversations.filter((c) => c.kind === 'group'),
@@ -639,6 +824,19 @@ function ChatInner() {
     [conversations]
   );
   const isGroupChat = activeConversation?.kind === 'group';
+  const groupMembers = useMemo(
+    () => (isGroupChat ? activeConversation?.member_list || [] : []),
+    [isGroupChat, activeConversation?.member_list],
+  );
+  const mentionCandidates = useMemo(() => {
+    if (!mentionQuery || !groupMembers.length) return [];
+    return filterMentionMembers(groupMembers, mentionQuery.query, me?.id);
+  }, [mentionQuery, groupMembers, me?.id]);
+  const mentionPickerOpen = isGroupChat && mentionQuery !== null && mentionCandidates.length > 0;
+  useEffect(() => {
+    setMentionHighlight((i) => Math.min(i, Math.max(0, mentionCandidates.length - 1)));
+  }, [mentionCandidates.length]);
+  const { typingUserNames } = useChatTyping(activeConversation?.id ?? null, text, me?.id);
 
   const loadAllUsers = useCallback(async (excludeSelf = true) => {
     try {
@@ -815,18 +1013,47 @@ function ChatInner() {
   }, [discardPendingUploads]);
 
   const urlUserId = searchParams.get('userId');
+  const urlTaskId = searchParams.get('taskId');
   useEffect(() => {
     if (!me?.id || !urlUserId) return;
     const userId = Number(urlUserId);
     if (!Number.isFinite(userId) || userId <= 0) return;
+    const taskId = urlTaskId ? Number(urlTaskId) : NaN;
+    const hasTask = Number.isFinite(taskId) && taskId > 0;
+    const navKey = `${userId}:${hasTask ? taskId : 'none'}`;
+    if (handledTaskNavRef.current === navKey) return;
+    handledTaskNavRef.current = navKey;
 
     setReplyTo(null);
     setEditingId(null);
     setPickerFor(null);
     setMobileUsersOpen(false);
-    void openWithUser(userId);
-    router.replace('/chat', { scroll: false });
-  }, [me?.id, urlUserId, openWithUser, router]);
+    setText('');
+    if (!hasTask) setAttachedTask(null);
+
+    void (async () => {
+      await openWithUser(userId);
+      if (hasTask) {
+        let taskAttach = readTaskForChatAttach(taskId);
+        if (!taskAttach) {
+          try {
+            const d = await api<{ task: AttachedTask }>(`/api/tasks/${taskId}`);
+            if (d.task) {
+              taskAttach = {
+                id: d.task.id,
+                title: d.task.title || 'Task',
+                description: d.task.description,
+              };
+            }
+          } catch (e) {
+            toast.errorFrom(e);
+          }
+        }
+        if (taskAttach) setAttachedTask(taskAttach);
+      }
+      router.replace('/chat', { scroll: false });
+    })();
+  }, [me?.id, urlUserId, urlTaskId, openWithUser, router]);
 
   const urlConversationId = searchParams.get('conversationId');
   useEffect(() => {
@@ -858,6 +1085,10 @@ function ChatInner() {
 
   const resetComposerState = () => {
     setReplyTo(null);
+    setAttachedTask(null);
+    setText('');
+    setMentionQuery(null);
+    setMentionHighlight(0);
     setEditingId(null);
     setEditText('');
     setPickerFor(null);
@@ -879,16 +1110,119 @@ function ChatInner() {
     switchConversation(() => openWithUser(target.id));
   };
 
+  const syncMentionQuery = useCallback(
+    (value: string, cursor: number, resetHighlight = false) => {
+      if (!isGroupChat || !groupMembers.length) {
+        setMentionQuery(null);
+        if (resetHighlight) setMentionHighlight(0);
+        return;
+      }
+      const next = detectMentionQuery(value, cursor);
+      setMentionQuery(next);
+      if (resetHighlight) setMentionHighlight(0);
+    },
+    [isGroupChat, groupMembers.length],
+  );
+
+  const handleMessageTextChange = (value: string, cursor: number) => {
+    setText(value);
+    syncMentionQuery(value, cursor, true);
+  };
+
+  const pickMentionMember = useCallback(
+    (member: { id: number; name: string }) => {
+      if (!mentionQuery) return;
+      const { text: nextText, cursor } = insertMention(text, mentionQuery, member);
+      setText(nextText);
+      setMentionQuery(null);
+      setMentionHighlight(0);
+      requestAnimationFrame(() => {
+        const el = messageInputRef.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(cursor, cursor);
+      });
+    },
+    [mentionQuery, text],
+  );
+
+  const openTaskComposerForUser = (userId: number) => {
+    setTaskComposerUserId(userId);
+    setTaskComposerOpen(true);
+  };
+
+  const sendTaskCreatedToChat = useCallback(
+    async (
+      userId: number,
+      ids: number[],
+      detail?: { title?: string; description?: string; lines?: string[] }
+    ) => {
+      const openRes = await api('/api/chat/open', {
+        method: 'POST',
+        body: JSON.stringify({ userId }),
+      });
+      const conversationId = openRes.conversation.id;
+      const msgRes = await api(`/api/chat/conversations/${conversationId}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({
+          body: buildTaskChatMessage(ids, detail),
+          attachmentIds: [],
+        }),
+      });
+
+      setConversations((prev) => upsertConversation(prev, msgRes.conversation));
+      setActiveConversation(msgRes.conversation);
+      setMessages((prev) => {
+        const base =
+          activeConvIdRef.current === conversationId
+            ? prev
+            : openRes.messages || [];
+        return mergeMessage(base, msgRes.message);
+      });
+      applyPayloadRef.current({
+        action: 'message',
+        conversation: msgRes.conversation,
+        message: msgRes.message,
+      });
+      scrollToBottom();
+      void loadList();
+    },
+    [loadList, scrollToBottom]
+  );
+
+  const handleTaskCreated = useCallback(
+    async (
+      ids: number[],
+      detail?: { title?: string; description?: string; assigneeId?: number | null; lines?: string[] }
+    ) => {
+      const userId = taskComposerUserId ?? detail?.assigneeId ?? null;
+      setTaskComposerOpen(false);
+      setTaskComposerUserId(null);
+      if (!userId || !ids.length) return;
+
+      try {
+        await sendTaskCreatedToChat(userId, ids, detail);
+        toast.success('Task created and sent in chat');
+      } catch (e) {
+        toast.errorFrom(e);
+      }
+    },
+    [taskComposerUserId, sendTaskCreatedToChat]
+  );
+
   const send = async () => {
     if (!activeConversation) return;
-    if (!text.trim() && pendingFiles.length === 0) return;
+    const userText = text.trim();
+    if (!userText && pendingFiles.length === 0 && !attachedTask) return;
     setBusy(true);
     const sentAttachmentIds = pendingFiles.map((item) => item.attachmentId);
+    const encodedText = isGroupChat ? encodeMentionsForSend(userText, groupMembers) : userText;
+    const messageBody = attachedTask ? buildTaskMentionBody(attachedTask, encodedText) : encodedText;
     try {
       const d = await api(`/api/chat/conversations/${activeConversation.id}/messages`, {
         method: 'POST',
         body: JSON.stringify({
-          body: text.trim(),
+          body: messageBody,
           parentMessageId: replyTo?.id ?? null,
           attachmentIds: sentAttachmentIds,
         }),
@@ -896,6 +1230,7 @@ function ChatInner() {
       setText('');
       setPendingFiles([]);
       setReplyTo(null);
+      setAttachedTask(null);
       applyPayload({ action: 'message', conversation: d.conversation, message: d.message });
     } catch (e) {
       toast.errorFrom(e);
@@ -919,7 +1254,7 @@ function ChatInner() {
 
   const startEdit = (message: ChatMessage) => {
     setEditingId(message.id);
-    setEditText(message.body || '');
+    setEditText(decodeMentionsForDisplay(message.body || ''));
     setReplyTo(null);
     setPickerFor(null);
   };
@@ -932,9 +1267,10 @@ function ChatInner() {
   const saveEdit = async (messageId: number) => {
     if (!activeConversation || !editText.trim()) return;
     try {
+      const body = isGroupChat ? encodeMentionsForSend(editText.trim(), groupMembers) : editText.trim();
       const d = await api(`/api/chat/messages/${messageId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ body: editText.trim() }),
+        body: JSON.stringify({ body }),
       });
       cancelEdit();
       applyPayload({ action: 'message', conversation: d.conversation, message: d.message });
@@ -1016,7 +1352,7 @@ function ChatInner() {
 
   const headerSubtitle = activeConversation
     ? isGroupChat
-      ? `${activeConversation.member_count || 0} member${activeConversation.member_count === 1 ? '' : 's'}`
+      ? undefined
       : activeConversation.member_email || activeConversation.member_role || undefined
     : 'Pick a user or group from the list';
 
@@ -1037,6 +1373,7 @@ function ChatInner() {
           onCreateGroup={openCreateGroup}
           onSelectTarget={selectTarget}
           onSelectConversation={selectConversation}
+          onCreateTaskForUser={openTaskComposerForUser}
         />
       </div>
 
@@ -1060,6 +1397,7 @@ function ChatInner() {
               onCreateGroup={openCreateGroup}
               onSelectTarget={selectTarget}
               onSelectConversation={selectConversation}
+              onCreateTaskForUser={openTaskComposerForUser}
             />
           </div>
         </SheetContent>
@@ -1075,8 +1413,29 @@ function ChatInner() {
           </div>
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-base font-semibold">{headerTitle}</h1>
-            {headerSubtitle && <p className="truncate text-xs text-muted-foreground">{headerSubtitle}</p>}
+            {isGroupChat && activeConversation?.member_list?.length ? (
+              <GroupMemberTags members={activeConversation.member_list} onlineUserIds={onlineUserIds} />
+            ) : isGroupChat && activeConversation?.member_names ? (
+              <p className="truncate text-[10px] text-muted-foreground">
+                {activeConversation.member_names.split(',').map((n) => displayName(n.trim())).join(', ')}
+              </p>
+            ) : headerSubtitle ? (
+              <p className="truncate text-xs text-muted-foreground">{headerSubtitle}</p>
+            ) : null}
           </div>
+          {activeConversation && !isGroupChat && activeConversation.member_user_id && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-1.5"
+              onClick={() => openTaskComposerForUser(activeConversation.member_user_id!)}
+              title="Create task for this user"
+            >
+              <ListTodo className="size-3.5" />
+              <span className="hidden sm:inline">Add task</span>
+            </Button>
+          )}
           {isBoss && isGroupChat && (
             <Button type="button" variant="outline" size="icon-sm" onClick={() => void openManageGroup()} title="Manage group">
               <Settings className="size-4" />
@@ -1125,6 +1484,7 @@ function ChatInner() {
                     }}
                   />
                 ))}
+                <ChatTypingIndicator names={typingUserNames} />
                 <div ref={bottomRef} />
               </>
             )}
@@ -1140,6 +1500,23 @@ function ChatInner() {
                   {replyTo.body && <span className="ml-1 text-muted-foreground">· {replyTo.body.slice(0, 60)}</span>}
                 </span>
                 <Button type="button" variant="ghost" size="icon-xs" onClick={() => setReplyTo(null)}>
+                  <X className="size-3.5" />
+                </Button>
+              </div>
+            )}
+            {attachedTask && (
+              <div className="mb-2 flex items-center justify-between rounded-lg bg-muted/50 px-3 py-1.5 text-xs">
+                <span className="min-w-0 truncate">
+                  <strong>Task</strong>
+                  <span className="font-medium"> · {attachedTask.title}</span>
+                  {attachedTask.description && htmlToPlainText(attachedTask.description) && (
+                    <span className="text-muted-foreground">
+                      {' '}
+                      · {htmlToPlainText(attachedTask.description).slice(0, 80)}
+                    </span>
+                  )}
+                </span>
+                <Button type="button" variant="ghost" size="icon-xs" className="shrink-0" onClick={() => setAttachedTask(null)}>
                   <X className="size-3.5" />
                 </Button>
               </div>
@@ -1187,13 +1564,52 @@ function ChatInner() {
                 })();
               }}
             />
-            <div className="rounded-md border bg-muted/20 p-2">
+            <div className="relative rounded-md border bg-muted/20 p-2">
+              {mentionPickerOpen && (
+                <ChatMentionPicker
+                  members={mentionCandidates}
+                  highlightIndex={mentionHighlight}
+                  onHighlight={setMentionHighlight}
+                  onSelect={pickMentionMember}
+                />
+              )}
               <Textarea
+                ref={messageInputRef}
                 value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="Write a message…"
+                onChange={(e) => handleMessageTextChange(e.target.value, e.target.selectionStart ?? e.target.value.length)}
+                onClick={(e) => {
+                  const el = e.currentTarget;
+                  syncMentionQuery(el.value, el.selectionStart ?? el.value.length);
+                }}
+                onSelect={(e) => {
+                  const el = e.currentTarget;
+                  syncMentionQuery(el.value, el.selectionStart ?? el.value.length);
+                }}
+                placeholder={isGroupChat ? 'Write a message… (@ to mention)' : 'Write a message…'}
                 className="min-h-[44px] resize-none border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
                 onKeyDown={(e) => {
+                  if (mentionPickerOpen) {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setMentionHighlight((i) => Math.min(i + 1, mentionCandidates.length - 1));
+                      return;
+                    }
+                    if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setMentionHighlight((i) => Math.max(i - 1, 0));
+                      return;
+                    }
+                    if (e.key === 'Enter' || e.key === 'Tab') {
+                      e.preventDefault();
+                      pickMentionMember(mentionCandidates[mentionHighlight] ?? mentionCandidates[0]);
+                      return;
+                    }
+                    if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setMentionQuery(null);
+                      return;
+                    }
+                  }
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     void send();
@@ -1218,7 +1634,7 @@ function ChatInner() {
                   )}
                   <span className="hidden text-xs text-muted-foreground sm:inline">Enter to send</span>
                 </div>
-                <Button type="button" size="sm" disabled={busy || (!text.trim() && pendingFiles.length === 0)} onClick={() => void send()}>
+                <Button type="button" size="sm" disabled={busy || (!text.trim() && pendingFiles.length === 0 && !attachedTask)} onClick={() => void send()}>
                   <Send className="size-3.5" />
                   Send
                 </Button>
@@ -1246,6 +1662,16 @@ function ChatInner() {
         users={allUsers}
         busy={groupFormBusy}
         onSubmit={updateGroup}
+      />
+
+      <Composer
+        open={taskComposerOpen}
+        onClose={() => {
+          setTaskComposerOpen(false);
+          setTaskComposerUserId(null);
+        }}
+        presetAssigneeId={taskComposerUserId}
+        onCreated={(ids, detail) => void handleTaskCreated(ids, detail)}
       />
     </div>
   );

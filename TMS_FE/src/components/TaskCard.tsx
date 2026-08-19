@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { ChevronRight, MessageSquare } from 'lucide-react';
-import { fmtShortDate, countdown, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, SLA_BREACH_BADGE, isTaskOverdue, getTaskRowClasses, canReassignTask } from '@/lib/util';
+import { ChevronRight, MessageCircle, MessageSquare } from 'lucide-react';
+import { fmtShortDate, countdown, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, SLA_BREACH_BADGE, isTaskOverdue, getTaskRowClasses, canReassignTask, getTaskAssigneeChatHref, storeTaskForChatAttach } from '@/lib/util';
 import { IconClock, IconFlag, IconTag } from './Icons';
 import TaskActionsMenu from './TaskActionsMenu';
 import TaskDetailAccordion from './TaskDetailAccordion';
@@ -43,11 +43,22 @@ export default function TaskCard({
   const slaRunning = task.status === 'ASSIGNED' && !task.sla_breached_at && task.sla_deadline_at;
   const who = task.assignee_name || (task.team_name ? `Team ${task.team_name}` : 'Unassigned');
   const canEditAssignee = canReassignTask(task, viewer);
+  const assigneeChatHref = getTaskAssigneeChatHref(task, viewer?.id);
 
   return (
     <Card className={cn('gap-0 overflow-hidden py-0 transition-all hover:shadow-[0_4px_12px_rgba(16,24,40,0.07)]', rowHighlight, expanded && 'ring-1 ring-foreground/10')}>
       <CardContent className="p-4">
-        <div className="flex gap-2">
+        <div className="flex gap-1.5">
+          {assigneeChatHref && (
+            <Link
+              href={assigneeChatHref}
+              className="mt-0.5 shrink-0 rounded-md p-0.5 text-muted-foreground/50 outline-none ring-offset-background transition hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+              title="Chat with assignee about this task"
+              onClick={() => storeTaskForChatAttach(task)}
+            >
+              <MessageCircle className="size-4" />
+            </Link>
+          )}
           {onToggleExpand && (
             <button
               type="button"

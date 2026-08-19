@@ -43,6 +43,7 @@ function CommentItem({
   onToggleReaction,
   onOpenPicker,
   onPickEmoji,
+  readOnly = false,
 }: {
   comment: Comment;
   depth: number;
@@ -51,6 +52,7 @@ function CommentItem({
   onToggleReaction: (commentId: number, emoji: string) => void;
   onOpenPicker: (commentId: number | null) => void;
   onPickEmoji: (commentId: number, emoji: string) => void;
+  readOnly?: boolean;
 }) {
   return (
     <div className={cn('rounded-xl bg-muted/40 p-3', depth > 0 && 'ml-4 mt-2')}>
@@ -71,36 +73,42 @@ function CommentItem({
               <button
                 key={r.emoji}
                 type="button"
-                onClick={() => onToggleReaction(comment.id, r.emoji)}
+                disabled={readOnly}
+                onClick={() => !readOnly && onToggleReaction(comment.id, r.emoji)}
                 className={cn(
                   'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition',
-                  r.mine ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border bg-background hover:bg-muted'
+                  r.mine ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border bg-background hover:bg-muted',
+                  readOnly && 'cursor-default opacity-90',
                 )}
               >
                 <span>{r.emoji}</span>
                 <span className="font-semibold tabular-nums">{r.count}</span>
               </button>
             ))}
-            <Button type="button" variant="ghost" size="icon-xs" className="text-muted-foreground" onClick={() => onToggleReaction(comment.id, '👍')}>
-              <ThumbsUp className="size-3.5" />
-            </Button>
-            <div className="relative">
-              <Button type="button" variant="ghost" size="icon-xs" className="text-muted-foreground" onClick={() => onOpenPicker(pickerFor === comment.id ? null : comment.id)}>
-                <SmilePlus className="size-3.5" />
-              </Button>
-              {pickerFor === comment.id && (
-                <div className="absolute bottom-full left-0 z-10 mb-1 flex gap-1 rounded-lg border bg-popover p-1 shadow-md">
-                  {QUICK_EMOJIS.map((emoji) => (
-                    <button key={emoji} type="button" className="rounded-md px-2 py-1 text-lg hover:bg-muted" onClick={() => onPickEmoji(comment.id, emoji)}>
-                      {emoji}
-                    </button>
-                  ))}
+            {!readOnly && (
+              <>
+                <Button type="button" variant="ghost" size="icon-xs" className="text-muted-foreground" onClick={() => onToggleReaction(comment.id, '👍')}>
+                  <ThumbsUp className="size-3.5" />
+                </Button>
+                <div className="relative">
+                  <Button type="button" variant="ghost" size="icon-xs" className="text-muted-foreground" onClick={() => onOpenPicker(pickerFor === comment.id ? null : comment.id)}>
+                    <SmilePlus className="size-3.5" />
+                  </Button>
+                  {pickerFor === comment.id && (
+                    <div className="absolute bottom-full left-0 z-10 mb-1 flex gap-1 rounded-lg border bg-popover p-1 shadow-md">
+                      {QUICK_EMOJIS.map((emoji) => (
+                        <button key={emoji} type="button" className="rounded-md px-2 py-1 text-lg hover:bg-muted" onClick={() => onPickEmoji(comment.id, emoji)}>
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-            <Button type="button" variant="ghost" size="xs" className="ml-auto text-muted-foreground" onClick={() => onReply(comment)}>
-              Reply
-            </Button>
+                <Button type="button" variant="ghost" size="xs" className="ml-auto text-muted-foreground" onClick={() => onReply(comment)}>
+                  Reply
+                </Button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -117,6 +125,7 @@ function CommentThread({
   onToggleReaction,
   onOpenPicker,
   onPickEmoji,
+  readOnly = false,
 }: {
   comment: Comment;
   byParent: Map<number | null, Comment[]>;
@@ -126,6 +135,7 @@ function CommentThread({
   onToggleReaction: (commentId: number, emoji: string) => void;
   onOpenPicker: (commentId: number | null) => void;
   onPickEmoji: (commentId: number, emoji: string) => void;
+  readOnly?: boolean;
 }) {
   const replies = byParent.get(comment.id) || [];
   return (
@@ -138,6 +148,7 @@ function CommentThread({
         onToggleReaction={onToggleReaction}
         onOpenPicker={onOpenPicker}
         onPickEmoji={onPickEmoji}
+        readOnly={readOnly}
       />
       {replies.map((reply) => (
         <CommentThread
@@ -150,6 +161,7 @@ function CommentThread({
           onToggleReaction={onToggleReaction}
           onOpenPicker={onOpenPicker}
           onPickEmoji={onPickEmoji}
+          readOnly={readOnly}
         />
       ))}
     </div>
@@ -160,10 +172,12 @@ export default function CommentsPanel({
   taskId,
   onChanged,
   className,
+  canComment = true,
 }: {
   taskId: number;
   onChanged?: () => void;
   className?: string;
+  canComment?: boolean;
 }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -254,45 +268,52 @@ export default function CommentsPanel({
                   toggleReaction(commentId, emoji);
                   setPickerFor(null);
                 }}
+                readOnly={!canComment}
               />
             ))}
           </div>
         )}
       </div>
 
-      <div className="shrink-0 border-t bg-background p-3">
-        {replyTo && (
-          <div className="mb-2 flex items-center justify-between rounded-lg bg-muted/50 px-3 py-1.5 text-xs">
-            <span>
-              Replying to <strong>{replyTo.author_name.split(' (')[0]}</strong>
-            </span>
-            <Button type="button" variant="ghost" size="xs" onClick={() => setReplyTo(null)}>
-              Cancel
-            </Button>
-          </div>
-        )}
-        <div className="rounded-lg border bg-muted/20 p-2.5">
-          <Textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Write a comment..."
-            className="min-h-[56px] resize-none border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              }
-            }}
-          />
-          <div className="mt-2 flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">Enter to send</span>
-            <Button type="button" size="sm" disabled={busy || !text.trim()} onClick={send}>
-              <Send className="size-3.5" />
-              Send
-            </Button>
+      {canComment ? (
+        <div className="shrink-0 border-t bg-background p-3">
+          {replyTo && (
+            <div className="mb-2 flex items-center justify-between rounded-lg bg-muted/50 px-3 py-1.5 text-xs">
+              <span>
+                Replying to <strong>{replyTo.author_name.split(' (')[0]}</strong>
+              </span>
+              <Button type="button" variant="ghost" size="xs" onClick={() => setReplyTo(null)}>
+                Cancel
+              </Button>
+            </div>
+          )}
+          <div className="rounded-lg border bg-muted/20 p-2.5">
+            <Textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Write a comment..."
+              className="min-h-[56px] resize-none border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+            />
+            <div className="mt-2 flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Enter to send</span>
+              <Button type="button" size="sm" disabled={busy || !text.trim()} onClick={send}>
+                <Send className="size-3.5" />
+                Send
+              </Button>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="shrink-0 border-t bg-muted/20 px-3 py-2 text-center text-xs text-muted-foreground">
+          You are watching this task — comments are read-only.
+        </div>
+      )}
     </div>
   );
 }

@@ -360,7 +360,7 @@ function TaskDetailInner({ id }: { id: string }) {
                 )}
                 {perm.canEditEta && <Button variant="outline" onClick={() => { setEtaVal(toLocalInput(task.eta_at || Date.now())); setEtaOpen(true); }}>Edit ETA</Button>}
                 {perm.canBlock && !task.blocked_reason && <Button variant="outline" onClick={() => setReasonModal({ action: 'block', title: 'What is blocking you?' })}>🚧 Blocked</Button>}
-                {task.blocked_reason && perm.isAssignee && <Button variant="outline" onClick={() => act({ action: 'unblock' })}>Unblock</Button>}
+                {task.blocked_reason && perm.canUnblock && <Button variant="outline" onClick={() => act({ action: 'unblock' })}>Unblock</Button>}
                 {perm.canReopen && <Button variant="outline" onClick={() => setReasonModal({ action: 'reopen', title: 'Why reopen this task?' })}>↩ Reopen</Button>}
                 {perm.canCancel && <Button variant="outline" className="text-red-600" onClick={() => setReasonModal({ action: 'cancel', title: 'Why cancel this task?' })}>Cancel task</Button>}
               </div>
@@ -487,7 +487,7 @@ function TaskDetailInner({ id }: { id: string }) {
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <PanelHeader title="Comments" />
-            <CommentsPanel taskId={Number(id)} onChanged={load} />
+            <CommentsPanel taskId={Number(id)} onChanged={load} canComment={perm.canComment !== false} />
           </div>
         </section>
       </div>

@@ -313,7 +313,7 @@ export default function TaskStatusModal({
         onClick: () => openReason('block'),
       });
     }
-    if (t?.blocked_reason && perm.isAssignee) {
+    if (t?.blocked_reason && perm.canUnblock) {
       actionButtons.push({
         label: 'Unblock',
         variant: 'outline',
@@ -471,7 +471,7 @@ export default function TaskStatusModal({
           </Card>
         )}
 
-        {!loading && status === 'WAITING_FOR_INPUT' && perm?.isAssignee && !showProvideInput && (
+        {!loading && status === 'WAITING_FOR_INPUT' && perm?.canActAsAssignee && !showProvideInput && (
           <Alert>
             <AlertDescription>
               Waiting for the task creator or Admin to provide:{' '}

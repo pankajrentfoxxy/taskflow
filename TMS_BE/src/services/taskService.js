@@ -22,6 +22,9 @@ import {
   canViewTaskInputRequest,
   canViewTaskInputPayload,
   canManageTaskMembers,
+  isTaskCollaborator,
+  isTaskWatcher,
+  canActAsTaskAssignee,
   isManagerOf,
 } from "../lib/rbac.js";
 import { addWorkingMinutes } from "../lib/sla.js";
@@ -451,45 +454,52 @@ export const getTaskDetail = async (user, taskId) => {
 
   const members = await loadTaskMembers(task.id);
   const isTaskMember = members.some((m) => m.user_id === user.id);
+  const isCollaborator = isTaskCollaborator(members, user.id);
+  const isWatcher = isTaskWatcher(members, user.id);
 
   const isAssignee = task.assignee_id === user.id;
   const isCreator = task.creator_id === user.id;
   const isMgr = await isManagerOf(user, task.assignee_id);
+  const canActAsAssignee = canActAsTaskAssignee(user, task, members);
   const expPending = await explanationPending(task);
   const openSubs = subtasks.filter((s) => !["DONE", "CANCELLED", "REJECTED"].includes(s.status)).length;
   const claimable = task.assigned_team_id && task.assigned_team_id === user.team_id;
-  const canRespond = isAssignee || claimable || isBoss;
+  const canRespond = canActAsAssignee || claimable || isBoss;
   const awaitingAccept = ["ASSIGNED", "DISCUSS"].includes(task.status);
   const isEscalated = task.status === "ESCALATED";
 
   const permissions = {
     isAssignee,
+    isCollaborator,
+    isWatcher,
+    canActAsAssignee,
     isTaskMember,
-    canManageMembers: canManageTaskMembers(user, task),
+    canManageMembers: canManageTaskMembers(user, task, members),
+    canComment: !isWatcher,
     canEditDetails:
       isCreator && !["DONE", "CANCELLED", "REJECTED"].includes(task.status),
     canAcknowledge: awaitingAccept && canRespond && !expPending,
     canDiscuss: task.status === "ASSIGNED" && canRespond && !expPending,
     canReject: awaitingAccept && canRespond && !expPending,
-    canStart: task.status === "ACKNOWLEDGED" && isAssignee && !expPending,
+    canStart: task.status === "ACKNOWLEDGED" && canActAsAssignee && !expPending,
     canDone:
       !isEscalated &&
       ["ACKNOWLEDGED", "IN_PROGRESS"].includes(task.status) &&
-      (isAssignee || isBoss || isCreator) &&
+      (canActAsAssignee || isBoss || isCreator) &&
       !expPending,
     canRequestInput:
-      isAssignee &&
+      canActAsAssignee &&
       ["ACKNOWLEDGED", "IN_PROGRESS"].includes(task.status) &&
       !expPending,
     canProvideInput: canProvideTaskInput(user, task),
-    canResumeAfterInput: isAssignee && task.status === "INPUT_PROVIDED" && !expPending,
-    canViewInputRequest: canViewTaskInputRequest(user, task),
-    canViewInputPayload: canViewTaskInputPayload(user, task),
+    canResumeAfterInput: canActAsAssignee && task.status === "INPUT_PROVIDED" && !expPending,
+    canViewInputRequest: canViewTaskInputRequest(user, task, members),
+    canViewInputPayload: canViewTaskInputPayload(user, task, members),
     canEditEta: isEscalated
       ? isBoss
       : task.status === "ASSIGNED"
         ? isBoss
-        : (await canEditEta(user, task)) &&
+        : (await canEditEta(user, task, members)) &&
           !["DONE", "CANCELLED", "REJECTED"].includes(task.status) &&
           !expPending,
     canReopen:
@@ -498,8 +508,9 @@ export const getTaskDetail = async (user, taskId) => {
       now() - (task.done_at || 0) < 7 * 24 * 3600 * 1000,
     canCancel:
       !isEscalated && !["DONE", "CANCELLED", "REJECTED"].includes(task.status) && (isCreator || isBoss),
-    canBlock: ["ACKNOWLEDGED", "IN_PROGRESS"].includes(task.status) && isAssignee,
-    mustExplain: expPending && isAssignee,
+    canBlock: ["ACKNOWLEDGED", "IN_PROGRESS"].includes(task.status) && canActAsAssignee,
+    canUnblock: Boolean(task.blocked_reason) && (canActAsAssignee || isBoss),
+    mustExplain: expPending && canActAsAssignee,
     canReview:
       task.status === "ESCALATED" &&
       escalation?.explanation &&
@@ -569,11 +580,13 @@ export const patchTask = async (user, taskId, body) => {
   const t = now();
   const action = body.action;
 
+  const members = await loadTaskMembers(task.id);
   const isAssignee = task.assignee_id === user.id;
+  const canActAsAssignee = canActAsTaskAssignee(user, task, members);
   const isCreator = task.creator_id === user.id;
   const isBoss = ["ADMIN", "CEO"].includes(user.role);
 
-  if ((await explanationPending(task)) && isAssignee && action !== "noop") {
+  if ((await explanationPending(task)) && canActAsAssignee && action !== "noop") {
     throw new ApiError(
       httpStatus.LOCKED,
       "This task is escalated. You must submit an explanation before any other action.",
@@ -589,7 +602,7 @@ export const patchTask = async (user, taskId, body) => {
         throw new ApiError(httpStatus.BAD_REQUEST, "Task is not awaiting acceptance");
       }
       const claimable = task.assigned_team_id && task.assigned_team_id === user.team_id;
-      if (!isAssignee && !claimable && !isBoss) {
+      if (!canActAsAssignee && !claimable && !isBoss) {
         throw new ApiError(httpStatus.FORBIDDEN, "Only the assignee can accept this task");
       }
       if (!body.etaAt) throw new ApiError(httpStatus.BAD_REQUEST, "ETA is mandatory when accepting");
@@ -611,7 +624,7 @@ export const patchTask = async (user, taskId, body) => {
         throw new ApiError(httpStatus.BAD_REQUEST, "Only tasks awaiting acceptance can be marked for discussion");
       }
       const claimable = task.assigned_team_id && task.assigned_team_id === user.team_id;
-      if (!isAssignee && !claimable && !isBoss) {
+      if (!canActAsAssignee && !claimable && !isBoss) {
         throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
       }
       const note = String(body.reason || body.note || "").trim();
@@ -635,7 +648,7 @@ export const patchTask = async (user, taskId, body) => {
         throw new ApiError(httpStatus.BAD_REQUEST, "This task cannot be rejected in its current status");
       }
       const claimable = task.assigned_team_id && task.assigned_team_id === user.team_id;
-      if (!isAssignee && !claimable && !isBoss) {
+      if (!canActAsAssignee && !claimable && !isBoss) {
         throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
       }
       if (!body.reason) throw new ApiError(httpStatus.BAD_REQUEST, "A reason is required to reject");
@@ -663,7 +676,7 @@ export const patchTask = async (user, taskId, body) => {
     }
     case "start": {
       if (task.status !== "ACKNOWLEDGED") throw new ApiError(httpStatus.BAD_REQUEST, "Accept the task first");
-      if (!isAssignee && !isBoss) throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
+      if (!canActAsAssignee && !isBoss) throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
       await Task.update({ status: "IN_PROGRESS", started_at: t, updated_at: t }, { where: { id: task.id } });
       await logActivity(task.id, user.id, "STARTED", {});
       break;
@@ -672,7 +685,7 @@ export const patchTask = async (user, taskId, body) => {
       if (["DONE", "CANCELLED", "REJECTED"].includes(task.status)) {
         throw new ApiError(httpStatus.BAD_REQUEST, "Task already closed");
       }
-      if (!isAssignee && !isCreator && !isBoss && !(await isManagerOf(user, task.assignee_id))) {
+      if (!canActAsAssignee && !isCreator && !isBoss && !(await isManagerOf(user, task.assignee_id))) {
         throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
       }
       const [countRow] = await sequelize.query(
@@ -741,7 +754,7 @@ export const patchTask = async (user, taskId, body) => {
             "Only Admin or CEO can update ETA while the task is awaiting acceptance"
           );
         }
-      } else if (!(await canEditEta(user, task))) {
+      } else if (!(await canEditEta(user, task, members))) {
         throw new ApiError(httpStatus.FORBIDDEN, "You cannot edit the ETA of this task");
       }
       if (!body.etaAt) throw new ApiError(httpStatus.BAD_REQUEST, "etaAt required");
@@ -795,7 +808,7 @@ export const patchTask = async (user, taskId, body) => {
       break;
     }
     case "block": {
-      if (!isAssignee) throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
+      if (!canActAsAssignee) throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
       if (!body.reason) throw new ApiError(httpStatus.BAD_REQUEST, "Describe what is blocking you");
       await Task.update({ blocked_reason: body.reason, updated_at: t }, { where: { id: task.id } });
       await logActivity(task.id, user.id, "BLOCKED", { reason: body.reason });
@@ -810,7 +823,7 @@ export const patchTask = async (user, taskId, body) => {
       break;
     }
     case "unblock": {
-      if (!isAssignee && !isBoss) throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
+      if (!canActAsAssignee && !isBoss) throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
       await Task.update({ blocked_reason: null, updated_at: t }, { where: { id: task.id } });
       await logActivity(task.id, user.id, "UNBLOCKED", {});
       break;
@@ -904,7 +917,7 @@ export const patchTask = async (user, taskId, body) => {
       break;
     }
     case "add_member": {
-      if (!canManageTaskMembers(user, task)) {
+      if (!canManageTaskMembers(user, task, members)) {
         throw new ApiError(httpStatus.FORBIDDEN, "You cannot manage members on this task");
       }
       const memberUserId = Number(body.userId);
@@ -944,7 +957,7 @@ export const patchTask = async (user, taskId, body) => {
       break;
     }
     case "remove_member": {
-      if (!canManageTaskMembers(user, task)) {
+      if (!canManageTaskMembers(user, task, members)) {
         throw new ApiError(httpStatus.FORBIDDEN, "You cannot manage members on this task");
       }
       const memberUserId = Number(body.userId);
@@ -958,7 +971,7 @@ export const patchTask = async (user, taskId, body) => {
       break;
     }
     case "request_input": {
-      if (!isAssignee) throw new ApiError(httpStatus.FORBIDDEN, "Only the assignee can request input");
+      if (!canActAsAssignee) throw new ApiError(httpStatus.FORBIDDEN, "Only the assignee can request input");
       if (!["ACKNOWLEDGED", "IN_PROGRESS"].includes(task.status)) {
         throw new ApiError(httpStatus.BAD_REQUEST, "Input can only be requested on accepted or in-progress tasks");
       }
@@ -1025,7 +1038,7 @@ export const patchTask = async (user, taskId, body) => {
       break;
     }
     case "resume_after_input": {
-      if (!isAssignee) throw new ApiError(httpStatus.FORBIDDEN, "Only the assignee can continue");
+      if (!canActAsAssignee) throw new ApiError(httpStatus.FORBIDDEN, "Only the assignee can continue");
       if (task.status !== "INPUT_PROVIDED") {
         throw new ApiError(httpStatus.BAD_REQUEST, "No input has been provided yet");
       }
@@ -1174,6 +1187,11 @@ export const createComment = async (user, taskId, body) => {
   const task = await assertActiveTask(await Task.findByPk(taskId));
   if (!(await canSeeTask(user, task))) throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
 
+  const members = await loadTaskMembers(task.id);
+  if (isTaskWatcher(members, user.id)) {
+    throw new ApiError(httpStatus.FORBIDDEN, "Watchers can only view this task");
+  }
+
   const content = String(body.content || body.body || "").trim();
   const parentCommentId = body.parentCommentId ? Number(body.parentCommentId) : null;
 
@@ -1214,6 +1232,11 @@ export const toggleReaction = async (user, taskId, commentId, emoji) => {
   const task = await assertActiveTask(await Task.findByPk(taskId));
   if (!(await canSeeTask(user, task))) throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
 
+  const members = await loadTaskMembers(task.id);
+  if (isTaskWatcher(members, user.id)) {
+    throw new ApiError(httpStatus.FORBIDDEN, "Watchers can only view this task");
+  }
+
   const comment = await Comment.findOne({ where: { id: commentId, task_id: taskId } });
   if (!comment) throw new ApiError(httpStatus.BAD_REQUEST, "Comment not found");
 
@@ -1252,7 +1275,8 @@ export const handleEscalation = async (user, taskId, body) => {
   if (!esc) throw new ApiError(httpStatus.BAD_REQUEST, "Task is not escalated");
 
   if (body.explanation !== undefined) {
-    if (task.assignee_id !== user.id) {
+    const members = await loadTaskMembers(task.id);
+    if (!canActAsTaskAssignee(user, task, members)) {
       throw new ApiError(httpStatus.FORBIDDEN, "Only the assignee submits the explanation");
     }
     if (esc.explanation) throw new ApiError(httpStatus.BAD_REQUEST, "Explanation already submitted");

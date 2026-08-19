@@ -85,7 +85,7 @@ export function fromLocalInput(v: string): number | null {
 
 export type TaskDueDateFilterMode = 'all' | 'today' | 'range';
 
-export type ReportsDateFilterMode = 'all' | '7' | '30' | '90' | 'range';
+export type ReportsDateFilterMode = 'all' | 'today' | '7' | '30' | '90' | 'range';
 
 export function getTodayDueBounds(): { dueFrom: number; dueTo: number } {
   const start = new Date();
@@ -128,6 +128,10 @@ export function reportsDateQueryParams(
   toDate = '',
 ): Record<string, string> {
   if (mode === 'all') return {};
+  if (mode === 'today') {
+    const { dueFrom, dueTo } = getTodayDueBounds();
+    return { createdFrom: String(dueFrom), createdTo: String(dueTo) };
+  }
   if (mode === '7' || mode === '30' || mode === '90') return { days: mode };
   const bounds = getDateRangeDueBounds(fromDate, toDate);
   if (!bounds) return {};
@@ -399,6 +403,84 @@ export async function api<T = any>(path: string, opts?: RequestInit): Promise<T>
   const { res, data } = await requestWithRefresh(path, opts);
   if (!res.ok) throwApiError(res, data);
   return data as T;
+}
+
+export function htmlToPlainText(html: string): string {
+  if (!html?.trim()) return '';
+  if (typeof document !== 'undefined') {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    return (doc.body.textContent || '').replace(/\s+/g, ' ').trim();
+  }
+  return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+export function taskViewLink(taskId: number): string {
+  return `[Tap to view](/tasks/${taskId})`;
+}
+
+export function buildTaskMentionBody(
+  task: {
+    id: number;
+    title?: string | null;
+    description?: string | null;
+  },
+  userMessage = ''
+): string {
+  const plainDesc = htmlToPlainText(task.description || '');
+  const lines = ['📋 Task', '', task.title || 'Task', '', taskViewLink(task.id)];
+  if (plainDesc) lines.push('', plainDesc);
+  const trimmedUser = userMessage.trim();
+  if (trimmedUser) lines.push('', trimmedUser);
+  return lines.join('\n').trim();
+}
+
+export function getTaskAssigneeChatHref(
+  task: { id: number; assignee_id?: number | null },
+  viewerId?: number | null
+): string | null {
+  if (!task.assignee_id || task.assignee_id === viewerId) return null;
+  return `/chat?userId=${task.assignee_id}&taskId=${task.id}`;
+}
+
+const CHAT_TASK_ATTACH_KEY = 'tf-chat-task-attach';
+
+export function storeTaskForChatAttach(task: {
+  id: number;
+  title?: string | null;
+  description?: string | null;
+}) {
+  if (typeof window === 'undefined') return;
+  sessionStorage.setItem(
+    CHAT_TASK_ATTACH_KEY,
+    JSON.stringify({
+      id: task.id,
+      title: task.title || 'Task',
+      description: task.description ?? null,
+    })
+  );
+}
+
+export function readTaskForChatAttach(taskId: number): {
+  id: number;
+  title: string;
+  description?: string | null;
+} | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(CHAT_TASK_ATTACH_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { id: number; title?: string; description?: string | null };
+    if (parsed.id !== taskId) return null;
+    sessionStorage.removeItem(CHAT_TASK_ATTACH_KEY);
+    return {
+      id: parsed.id,
+      title: parsed.title || 'Task',
+      description: parsed.description ?? null,
+    };
+  } catch {
+    sessionStorage.removeItem(CHAT_TASK_ATTACH_KEY);
+    return null;
+  }
 }
 
 export async function deleteUpload(id: number): Promise<void> {

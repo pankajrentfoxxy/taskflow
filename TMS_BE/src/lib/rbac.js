@@ -55,10 +55,27 @@ export async function isManagerOf(user, otherUserId) {
   return !!member;
 }
 
-/** ETA editable by: assignee, assignee's manager, CEO, Admin. */
-export async function canEditEta(user, task) {
+/** @param {{ user_id: number, role: string }[]} members */
+export function isTaskCollaborator(members, userId) {
+  return members.some((m) => m.user_id === userId && m.role === "COLLABORATOR");
+}
+
+/** @param {{ user_id: number, role: string }[]} members */
+export function isTaskWatcher(members, userId) {
+  return members.some((m) => m.user_id === userId && m.role === "WATCHER");
+}
+
+/** Collaborators may perform the same task actions as the primary assignee. */
+export function canActAsTaskAssignee(user, task, members = []) {
+  if (task.assignee_id === user.id) return true;
+  return isTaskCollaborator(members, user.id);
+}
+
+/** ETA editable by: assignee, collaborator, assignee's manager, CEO, Admin. */
+export async function canEditEta(user, task, members = []) {
   if (user.role === "ADMIN" || user.role === "CEO") return true;
   if (task.assignee_id === user.id) return true;
+  if (isTaskCollaborator(members, user.id)) return true;
   return isManagerOf(user, task.assignee_id);
 }
 
@@ -81,28 +98,31 @@ export function canProvideTaskInput(user, task) {
   return task.creator_id === user.id;
 }
 
-export function canViewTaskInputRequest(user, task) {
+export function canViewTaskInputRequest(user, task, members = []) {
   if (!task.input_request_note) return false;
   if (user.role === "ADMIN" || user.role === "CEO") return true;
   if (task.creator_id === user.id) return true;
   if (task.assignee_id === user.id) return true;
+  if (isTaskCollaborator(members, user.id)) return true;
   return false;
 }
 
-export function canViewTaskInputPayload(user, task) {
+export function canViewTaskInputPayload(user, task, members = []) {
   if (!task.input_payload) return false;
   if (user.role === "ADMIN" || user.role === "CEO") return true;
   if (task.creator_id === user.id) return true;
   if (task.assignee_id === user.id) return true;
+  if (isTaskCollaborator(members, user.id)) return true;
   return false;
 }
 
-/** Add/remove collaborators & watchers. Primary assignee stays on tasks.assignee_id. */
-export function canManageTaskMembers(user, task) {
+/** Add/remove collaborators & watchers. Primary assignee and collaborators may manage members. */
+export function canManageTaskMembers(user, task, members = []) {
   if (["DONE", "CANCELLED", "REJECTED"].includes(task.status)) return false;
   if (user.role === "ADMIN" || user.role === "CEO") return true;
   if (task.creator_id === user.id) return true;
   if (task.assignee_id === user.id) return true;
+  if (isTaskCollaborator(members, user.id)) return true;
   return false;
 }
 
@@ -133,8 +153,16 @@ export default {
   taskVisibilityWhere,
   canSeeTask,
   isManagerOf,
+  isTaskCollaborator,
+  isTaskWatcher,
+  canActAsTaskAssignee,
   canEditEta,
   canReviewEscalation,
+  canReassignTask,
+  canProvideTaskInput,
+  canViewTaskInputRequest,
+  canViewTaskInputPayload,
+  canManageTaskMembers,
   canManageProject,
   isProjectMember,
 };

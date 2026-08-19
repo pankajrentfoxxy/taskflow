@@ -63,6 +63,10 @@ const ROLE_LABEL: Record<string, string> = {
   MEMBER: 'Member',
 };
 
+function canSeeReports(me: Me | null): boolean {
+  return !!me;
+}
+
 const userInitials = (name?: string | null) =>
   (name || '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 
@@ -184,7 +188,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     router.push('/login');
   };
 
-  const nav = NAV.filter((n) => !n.managerial || (me && me.role !== 'MEMBER'));
+  const nav = NAV.filter((n) => !n.managerial || canSeeReports(me));
   const canManage = me && ['ADMIN', 'CEO', 'MANAGER'].includes(me.role);
   const adminLabel = me?.role === 'ADMIN' ? 'Admin' : 'Manage';
   const roleLabel = ROLE_LABEL[me?.role || ''] || me?.role || '';

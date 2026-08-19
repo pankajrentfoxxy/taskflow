@@ -196,24 +196,27 @@ export const getReports = async (user, { days = 0, createdFrom, createdTo, teamI
   };
 
   let people = [];
-  if (user.role !== "MEMBER") {
-    people = await sequelize.query(
-      `SELECT u.id, u.name, tm.name AS team_name,
-        SUM(CASE WHEN t.status NOT IN ('DONE','CANCELLED') THEN 1 ELSE 0 END)::int AS open,
-        SUM(CASE WHEN t.status NOT IN ('DONE','CANCELLED') AND t.due_at < :t THEN 1 ELSE 0 END)::int AS overdue,
-        SUM(CASE WHEN t.status = 'ASSIGNED' AND t.sla_breached_at IS NOT NULL THEN 1 ELSE 0 END)::int AS no_response,
-        SUM(CASE WHEN t.escalated_at IS NOT NULL THEN 1 ELSE 0 END)::int AS escalations,
-        SUM(CASE WHEN t.status = 'DONE' THEN 1 ELSE 0 END)::int AS done,
-        SUM(CASE WHEN t.status = 'DONE' AND t.done_at <= t.due_at THEN 1 ELSE 0 END)::int AS done_ontime,
-        ROUND(AVG(CASE WHEN t.acknowledged_at IS NOT NULL THEN (t.acknowledged_at - t.created_at) / 60000.0 END))::int AS avg_response_min
-       FROM users u
-       LEFT JOIN teams tm ON tm.id = u.team_id
-       JOIN tasks t ON t.assignee_id = u.id AND ${createdFilter} AND ${scope}
-       WHERE u.is_active = true
-       GROUP BY u.id, tm.name ORDER BY overdue DESC, open DESC`,
-      { replacements: { ...sp, t, ...dateParams }, type: QueryTypes.SELECT }
-    );
+  const taskJoin = user.role === "MEMBER" ? "LEFT JOIN" : "JOIN";
+  let peopleWhere = "u.is_active = true";
+  if (user.role === "MEMBER") {
+    peopleWhere += " AND u.id = :scopeUid";
   }
+  people = await sequelize.query(
+    `SELECT u.id, u.name, tm.name AS team_name,
+      COALESCE(SUM(CASE WHEN t.id IS NOT NULL AND t.status NOT IN ('DONE','CANCELLED') THEN 1 ELSE 0 END), 0)::int AS open,
+      COALESCE(SUM(CASE WHEN t.id IS NOT NULL AND t.status NOT IN ('DONE','CANCELLED') AND t.due_at < :t THEN 1 ELSE 0 END), 0)::int AS overdue,
+      COALESCE(SUM(CASE WHEN t.id IS NOT NULL AND t.status = 'ASSIGNED' AND t.sla_breached_at IS NOT NULL THEN 1 ELSE 0 END), 0)::int AS no_response,
+      COALESCE(SUM(CASE WHEN t.id IS NOT NULL AND t.escalated_at IS NOT NULL THEN 1 ELSE 0 END), 0)::int AS escalations,
+      COALESCE(SUM(CASE WHEN t.id IS NOT NULL AND t.status = 'DONE' THEN 1 ELSE 0 END), 0)::int AS done,
+      COALESCE(SUM(CASE WHEN t.id IS NOT NULL AND t.status = 'DONE' AND t.done_at <= t.due_at THEN 1 ELSE 0 END), 0)::int AS done_ontime,
+      ROUND(AVG(CASE WHEN t.id IS NOT NULL AND t.acknowledged_at IS NOT NULL THEN (t.acknowledged_at - t.created_at) / 60000.0 END))::int AS avg_response_min
+     FROM users u
+     LEFT JOIN teams tm ON tm.id = u.team_id
+     ${taskJoin} tasks t ON t.assignee_id = u.id AND ${createdFilter} AND ${scope}
+     WHERE ${peopleWhere}
+     GROUP BY u.id, tm.name ORDER BY overdue DESC, open DESC`,
+    { replacements: { ...sp, t, ...dateParams }, type: QueryTypes.SELECT }
+  );
 
   const byType = await sequelize.query(
     `SELECT tt.id, tt.name, tm.name AS team_name,

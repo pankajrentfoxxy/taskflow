@@ -256,7 +256,9 @@ function ReportsInner() {
         <div className="mb-6">
           <div className="flex items-center gap-2.5 mb-3">
             <span className="w-6 h-6 rounded-md bg-violet-50 text-violet-500 flex items-center justify-center"><IconUsers className="w-3.5 h-3.5" /></span>
-            <h2 className="text-[13px] font-semibold uppercase tracking-wide text-gray-600">By person</h2>
+            <h2 className="text-[13px] font-semibold uppercase tracking-wide text-gray-600">
+              {data.scope === 'MEMBER' ? 'Your performance' : 'By person'}
+            </h2>
             <div className="flex-1 h-px bg-gray-200/70 ml-1" />
           </div>
           <Card className="overflow-hidden py-0 gap-0">
