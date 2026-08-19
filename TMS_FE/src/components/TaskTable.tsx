@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ChevronRight, Flag, MessageCircle, MessageSquare, User } from 'lucide-react';
-import { STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, STATUS_DOT, PRIORITY_COLOR, fmtShortDate, isTaskOverdue, getTaskRowClasses, canReassignTask, getTaskAssigneeChatHref, storeTaskForChatAttach } from '@/lib/util';
+import { STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, STATUS_DOT, PRIORITY_COLOR, fmtShortDate, isTaskOverdue, getTaskRowClasses, canReassignTask, getTaskAssigneeChatHref, getTaskChatLinkTitle, storeTaskForChatAttach } from '@/lib/util';
 import { useMe } from '@/components/Shell';
 import TaskCard from '@/components/TaskCard';
 import TaskStatusModal from '@/components/TaskStatusModal';
@@ -74,7 +74,7 @@ function TaskRow({
             <Link
               href={assigneeChatHref}
               className="shrink-0 rounded-md p-0.5 text-muted-foreground/50 outline-none ring-offset-background transition hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
-              title="Chat with assignee about this task"
+              title={getTaskChatLinkTitle(task, viewer?.id)}
               onClick={(e) => {
                 e.stopPropagation();
                 storeTaskForChatAttach(task);

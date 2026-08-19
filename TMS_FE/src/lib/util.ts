@@ -434,12 +434,30 @@ export function buildTaskMentionBody(
   return lines.join('\n').trim();
 }
 
+/** Chat shortcut from task list: assignee → creator; everyone else → assignee. */
 export function getTaskAssigneeChatHref(
-  task: { id: number; assignee_id?: number | null },
-  viewerId?: number | null
+  task: { id: number; assignee_id?: number | null; creator_id?: number | null },
+  viewerId?: number | null,
 ): string | null {
-  if (!task.assignee_id || task.assignee_id === viewerId) return null;
-  return `/chat?userId=${task.assignee_id}&taskId=${task.id}`;
+  if (!viewerId) return null;
+
+  let targetUserId: number | null = null;
+  if (task.assignee_id === viewerId) {
+    targetUserId = task.creator_id ?? null;
+  } else if (task.assignee_id) {
+    targetUserId = task.assignee_id;
+  }
+
+  if (!targetUserId || targetUserId === viewerId) return null;
+  return `/chat?userId=${targetUserId}&taskId=${task.id}`;
+}
+
+export function getTaskChatLinkTitle(
+  task: { assignee_id?: number | null; creator_id?: number | null },
+  viewerId?: number | null,
+): string {
+  if (viewerId && task.assignee_id === viewerId) return 'Chat with person who assigned this task';
+  return 'Chat with assignee about this task';
 }
 
 const CHAT_TASK_ATTACH_KEY = 'tf-chat-task-attach';

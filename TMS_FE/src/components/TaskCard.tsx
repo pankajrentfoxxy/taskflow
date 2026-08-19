@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { ChevronRight, MessageCircle, MessageSquare } from 'lucide-react';
-import { fmtShortDate, countdown, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, SLA_BREACH_BADGE, isTaskOverdue, getTaskRowClasses, canReassignTask, getTaskAssigneeChatHref, storeTaskForChatAttach } from '@/lib/util';
+import { fmtShortDate, countdown, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, SLA_BREACH_BADGE, isTaskOverdue, getTaskRowClasses, canReassignTask, getTaskAssigneeChatHref, getTaskChatLinkTitle, storeTaskForChatAttach } from '@/lib/util';
 import { IconClock, IconFlag, IconTag } from './Icons';
 import TaskActionsMenu from './TaskActionsMenu';
 import TaskDetailAccordion from './TaskDetailAccordion';
@@ -53,7 +53,7 @@ export default function TaskCard({
             <Link
               href={assigneeChatHref}
               className="mt-0.5 shrink-0 rounded-md p-0.5 text-muted-foreground/50 outline-none ring-offset-background transition hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
-              title="Chat with assignee about this task"
+              title={getTaskChatLinkTitle(task, viewer?.id)}
               onClick={() => storeTaskForChatAttach(task)}
             >
               <MessageCircle className="size-4" />
