@@ -1196,7 +1196,7 @@ function ChatInner() {
     setPickerFor(null);
   };
 
-  const switchConversation = (loadFn: () => void | Promise<void>) => {
+  const switchConversation = (loadFn: () => void | Promise<unknown>) => {
     void clearComposerUploads().finally(() => {
       resetComposerState();
       setMobileUsersOpen(false);
