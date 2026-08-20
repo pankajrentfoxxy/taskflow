@@ -344,7 +344,11 @@ function TaskDetailInner({ id }: { id: string }) {
                     Reject
                   </Button>
                 )}
-                {perm.canStart && <Button onClick={() => act({ action: 'start' })}>▶ Start</Button>}
+                {perm.canStart && (
+                  <Button onClick={() => act({ action: 'start' })}>
+                    {task.status === 'ESCALATED' ? 'Mark in progress' : '▶ Start'}
+                  </Button>
+                )}
                 {perm.canRequestInput && (
                   <Button variant="outline" onClick={() => { setInputRequestText(''); setInputRequestOpen(true); }}>
                     Request information
@@ -495,6 +499,9 @@ function TaskDetailInner({ id }: { id: string }) {
       <AckModal task={task} open={ackOpen} onClose={() => setAckOpen(false)} onDone={load} />
       <Composer open={subOpen} onClose={() => setSubOpen(false)} onCreated={load} presetParentId={task.id} />
       <Modal open={etaOpen} onClose={() => setEtaOpen(false)} title="Update ETA">
+        {task.status === 'ESCALATED' && (
+          <p className="mb-3 text-xs text-muted-foreground">The due date will be updated to match this ETA.</p>
+        )}
         <Input type="datetime-local" className="mb-3" value={etaVal} onChange={(e) => setEtaVal(e.target.value)} />
         <Button className="w-full" onClick={submitEta}>Save ETA</Button>
       </Modal>

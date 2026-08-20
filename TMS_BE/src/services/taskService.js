@@ -480,13 +480,17 @@ export const getTaskDetail = async (user, taskId) => {
       isCreator && !["DONE", "CANCELLED", "REJECTED"].includes(task.status),
     canAcknowledge: awaitingAccept && canRespond && !expPending,
     canDiscuss: task.status === "ASSIGNED" && canRespond && !expPending,
-    canReject: awaitingAccept && canRespond && !expPending,
-    canStart: task.status === "ACKNOWLEDGED" && canActAsAssignee && !expPending,
+    canReject:
+      (awaitingAccept && canRespond && !expPending) || (isEscalated && isBoss),
+    canStart:
+      (isEscalated && isBoss) ||
+      (task.status === "ACKNOWLEDGED" && canActAsAssignee && !expPending),
     canDone:
-      !isEscalated &&
-      ["ACKNOWLEDGED", "IN_PROGRESS"].includes(task.status) &&
-      (canActAsAssignee || isBoss || isCreator) &&
-      !expPending,
+      (isEscalated && isBoss) ||
+      (!isEscalated &&
+        ["ACKNOWLEDGED", "IN_PROGRESS"].includes(task.status) &&
+        (canActAsAssignee || isBoss || isCreator) &&
+        !expPending),
     canRequestInput:
       canActAsAssignee &&
       ["ACKNOWLEDGED", "IN_PROGRESS"].includes(task.status) &&
@@ -507,7 +511,8 @@ export const getTaskDetail = async (user, taskId) => {
       (isCreator || isBoss || isMgr) &&
       now() - (task.done_at || 0) < 7 * 24 * 3600 * 1000,
     canCancel:
-      !isEscalated && !["DONE", "CANCELLED", "REJECTED"].includes(task.status) && (isCreator || isBoss),
+      !["DONE", "CANCELLED", "REJECTED"].includes(task.status) &&
+      ((isEscalated && isBoss) || (!isEscalated && (isCreator || isBoss))),
     canBlock: ["ACKNOWLEDGED", "IN_PROGRESS"].includes(task.status) && canActAsAssignee,
     canUnblock: Boolean(task.blocked_reason) && (canActAsAssignee || isBoss),
     mustExplain: expPending && canActAsAssignee,
@@ -644,11 +649,15 @@ export const patchTask = async (user, taskId, body) => {
       break;
     }
     case "reject": {
-      if (!["ASSIGNED", "DISCUSS"].includes(task.status)) {
+      if (task.status === "ESCALATED") {
+        if (!isBoss) {
+          throw new ApiError(httpStatus.FORBIDDEN, "Only Admin or CEO can reject an escalated task");
+        }
+      } else if (!["ASSIGNED", "DISCUSS"].includes(task.status)) {
         throw new ApiError(httpStatus.BAD_REQUEST, "This task cannot be rejected in its current status");
       }
       const claimable = task.assigned_team_id && task.assigned_team_id === user.team_id;
-      if (!canActAsAssignee && !claimable && !isBoss) {
+      if (task.status !== "ESCALATED" && !canActAsAssignee && !claimable && !isBoss) {
         throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
       }
       if (!body.reason) throw new ApiError(httpStatus.BAD_REQUEST, "A reason is required to reject");
@@ -675,6 +684,17 @@ export const patchTask = async (user, taskId, body) => {
       break;
     }
     case "start": {
+      if (task.status === "ESCALATED") {
+        if (!isBoss) {
+          throw new ApiError(httpStatus.FORBIDDEN, "Only Admin or CEO can mark an escalated task in progress");
+        }
+        await Task.update(
+          { status: "IN_PROGRESS", started_at: task.started_at || t, updated_at: t },
+          { where: { id: task.id } }
+        );
+        await logActivity(task.id, user.id, "STARTED", { fromEscalated: true });
+        break;
+      }
       if (task.status !== "ACKNOWLEDGED") throw new ApiError(httpStatus.BAD_REQUEST, "Accept the task first");
       if (!canActAsAssignee && !isBoss) throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
       await Task.update({ status: "IN_PROGRESS", started_at: t, updated_at: t }, { where: { id: task.id } });
@@ -758,8 +778,17 @@ export const patchTask = async (user, taskId, body) => {
         throw new ApiError(httpStatus.FORBIDDEN, "You cannot edit the ETA of this task");
       }
       if (!body.etaAt) throw new ApiError(httpStatus.BAD_REQUEST, "etaAt required");
-      await Task.update({ eta_at: body.etaAt, updated_at: t }, { where: { id: task.id } });
-      await logActivity(task.id, user.id, "ETA_CHANGED", { from: task.eta_at, to: body.etaAt });
+      const etaUpdate = { eta_at: body.etaAt, updated_at: t };
+      if (task.status === "ESCALATED") {
+        etaUpdate.due_at = body.etaAt;
+        etaUpdate.due_soon_sent = false;
+      }
+      await Task.update(etaUpdate, { where: { id: task.id } });
+      await logActivity(task.id, user.id, "ETA_CHANGED", {
+        from: task.eta_at,
+        to: body.etaAt,
+        ...(task.status === "ESCALATED" ? { dueFrom: task.due_at, dueTo: body.etaAt } : {}),
+      });
       await notify(
         [task.assignee_id, task.creator_id],
         "ETA_CHANGED",
@@ -795,8 +824,8 @@ export const patchTask = async (user, taskId, body) => {
       break;
     }
     case "cancel": {
-      if (!isCreator && user.role !== "ADMIN") {
-        throw new ApiError(httpStatus.FORBIDDEN, "Only the creator or Admin can cancel");
+      if (!isCreator && !isBoss) {
+        throw new ApiError(httpStatus.FORBIDDEN, "Only the creator, Admin, or CEO can cancel");
       }
       if (!body.reason) throw new ApiError(httpStatus.BAD_REQUEST, "A reason is required to cancel");
       await Task.update(

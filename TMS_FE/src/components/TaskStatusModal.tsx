@@ -248,6 +248,35 @@ export default function TaskStatusModal({
   if (perm?.mustExplain) {
     // Explanation form shown below — blocks other actions until submitted.
   } else if (perm && isEscalated) {
+    if (perm.canReject) {
+      actionButtons.push({
+        label: 'Reject',
+        variant: 'outline',
+        className: 'text-red-600',
+        onClick: () => openReason('reject'),
+      });
+    }
+    if (perm.canDone) {
+      actionButtons.push({
+        label: 'Mark done',
+        onClick: () => act({ action: 'done' }),
+        className: 'bg-emerald-600 text-white hover:bg-emerald-700',
+      });
+    }
+    if (perm.canCancel) {
+      actionButtons.push({
+        label: 'Cancel task',
+        variant: 'outline',
+        className: 'text-red-600',
+        onClick: () => openReason('cancel'),
+      });
+    }
+    if (perm.canStart) {
+      actionButtons.push({
+        label: 'Mark in progress',
+        onClick: () => act({ action: 'start' }),
+      });
+    }
     if (perm.canEditEta) {
       actionButtons.push({
         label: 'Update ETA',
@@ -568,6 +597,9 @@ export default function TaskStatusModal({
 
         {!loading && view === 'eta' && (
           <div className="space-y-3">
+            {isEscalated && (
+              <p className="text-xs text-muted-foreground">The due date will be updated to match this ETA.</p>
+            )}
             <Input type="datetime-local" className="h-10" value={eta} onChange={(e) => setEta(e.target.value)} />
             <div className="flex gap-2">
               <Button type="button" variant="outline" onClick={() => setView('actions')} disabled={busy}>
