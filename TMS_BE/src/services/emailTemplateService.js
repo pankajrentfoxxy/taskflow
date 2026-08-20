@@ -1,7 +1,10 @@
 import config from "../config/config.js";
 
-function layout({ title, bodyHtml, previewText }) {
+function layout({ title, bodyHtml, previewText, footerText }) {
   const appName = config.app.name;
+  const footer =
+    footerText ||
+    `If you did not request this, you can ignore this email. This code expires in ${config.otp.expiryMinutes} minutes.`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -28,7 +31,7 @@ function layout({ title, bodyHtml, previewText }) {
           </tr>
           <tr>
             <td style="padding:16px 28px;background:#fafafa;border-top:1px solid #e4e4e7;color:#71717a;font-size:12px;line-height:1.5;">
-              If you did not request this, you can ignore this email. This code expires in ${config.otp.expiryMinutes} minutes.
+              ${footer}
             </td>
           </tr>
         </table>
@@ -62,4 +65,35 @@ export function passwordResetOtpTemplate({ userName, otp }) {
   return { subject, html, text };
 }
 
-export default { passwordResetOtpTemplate };
+export function ceoDailyReportEmail({ dateKey, taskCount, summary }) {
+  const appName = config.app.name;
+  const attention =
+    (summary?.overdue || 0) +
+    (summary?.noResponse || 0) +
+    (summary?.escalatedAwaiting || 0) +
+    (summary?.escalatedPendingReview || 0);
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px;">Hi,</p>
+    <p style="margin:0 0 16px;">Your daily ${appName} report for <strong>${dateKey}</strong> is attached.</p>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 16px;border-collapse:collapse;">
+      <tr><td style="padding:8px 0;border-bottom:1px solid #e4e4e7;">Open tasks</td><td align="right" style="padding:8px 0;border-bottom:1px solid #e4e4e7;font-weight:700;">${summary?.open ?? "—"}</td></tr>
+      <tr><td style="padding:8px 0;border-bottom:1px solid #e4e4e7;color:#dc2626;">Need attention</td><td align="right" style="padding:8px 0;border-bottom:1px solid #e4e4e7;font-weight:700;color:#dc2626;">${attention}</td></tr>
+      <tr><td style="padding:8px 0;">Tasks in attachment</td><td align="right" style="padding:8px 0;font-weight:700;">${taskCount}</td></tr>
+    </table>
+    <p style="margin:0;">The Excel file has two sheets: <strong>Report</strong> (summary) and <strong>Tasks</strong> (open tasks).</p>
+  `;
+
+  const subject = `${appName} daily report — ${dateKey}`;
+  const html = layout({
+    title: "Daily report",
+    previewText: `${appName} daily report for ${dateKey}`,
+    bodyHtml,
+    footerText: "This automated report is sent once daily at 9:00 PM IST to CEO users.",
+  });
+  const text = `Your ${appName} daily report for ${dateKey} is attached.\nOpen tasks: ${summary?.open ?? "—"}\nNeed attention: ${attention}\nTasks in attachment: ${taskCount}`;
+
+  return { subject, html, text };
+}
+
+export default { passwordResetOtpTemplate, ceoDailyReportEmail };

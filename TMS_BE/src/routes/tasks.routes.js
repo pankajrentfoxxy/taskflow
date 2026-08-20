@@ -104,6 +104,17 @@ router.post(
   tasksController.createComment
 );
 
+router.patch(
+  "/:id/comments/:commentId",
+  validate({
+    body: Joi.object({
+      content: Joi.string(),
+      body: Joi.string(),
+    }),
+  }),
+  tasksController.updateComment
+);
+
 router.post(
   "/:id/comments/:commentId/reactions",
   validate({

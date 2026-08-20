@@ -27,6 +27,12 @@ import {
   parseMentionDisplay,
   type MentionQuery,
 } from '@/lib/chatMentions';
+import {
+  clearTaskMentionToken,
+  detectTaskMentionQuery,
+  filterChatTasks,
+  type ChatTaskMention,
+} from '@/lib/chatTaskMentions';
 import { onChatUpdate, onPresenceUpdate, type ChatUpdatePayload } from '@/lib/socket';
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
 import { useChatTyping } from '@/hooks/useChatTyping';
@@ -34,6 +40,9 @@ import AttachmentMedia, { type AttachmentLike } from '@/components/AttachmentMed
 import VoiceRecordingBar from '@/components/VoiceRecordingBar';
 import ChatTypingIndicator from '@/components/ChatTypingIndicator';
 import ChatMentionPicker from '@/components/ChatMentionPicker';
+import ChatTaskMentionPicker from '@/components/ChatTaskMentionPicker';
+import ChatEmojiPicker from '@/components/ChatEmojiPicker';
+import ChatMessageReactionPicker from '@/components/ChatMessageReactionPicker';
 import { formatDuration } from '@/lib/formatDuration';
 import { cn } from '@/lib/utils';
 import Modal from '@/components/Modal';
@@ -49,9 +58,7 @@ import {
   Reply,
   Search,
   Send,
-  SmilePlus,
   Square,
-  ThumbsUp,
   Trash2,
   X,
   Mic,
@@ -105,8 +112,6 @@ type Target = {
   conversation_id: number | null;
   last_message_at: number | null;
 };
-
-const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉'];
 
 const initials = (n?: string | null) =>
   (n || '?').split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
@@ -413,23 +418,12 @@ function MessageBubble({
             ))}
 
             <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
-              <Button type="button" variant="ghost" size="icon-xs" className="text-muted-foreground" onClick={() => onToggleReaction(message.id, '👍')}>
-                <ThumbsUp className="size-3.5" />
-              </Button>
-              <div className="relative">
-                <Button type="button" variant="ghost" size="icon-xs" className="text-muted-foreground" onClick={() => onOpenPicker(pickerFor === message.id ? null : message.id)}>
-                  <SmilePlus className="size-3.5" />
-                </Button>
-                {pickerFor === message.id && (
-                  <div className="absolute bottom-full left-0 z-10 mb-1 flex gap-1 rounded-lg border bg-popover p-1 shadow-md">
-                    {QUICK_EMOJIS.map((emoji) => (
-                      <button key={emoji} type="button" className="rounded-md px-2 py-1 text-lg hover:bg-muted" onClick={() => onPickEmoji(message.id, emoji)}>
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <ChatMessageReactionPicker
+                open={pickerFor === message.id}
+                onOpenChange={(open) => onOpenPicker(open ? message.id : null)}
+                onSelect={(emoji) => onPickEmoji(message.id, emoji)}
+                placement="top"
+              />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button type="button" variant="ghost" size="icon-xs" className="text-muted-foreground">
@@ -793,10 +787,15 @@ function ChatInner() {
   const [text, setText] = useState('');
   const [mentionQuery, setMentionQuery] = useState<MentionQuery | null>(null);
   const [mentionHighlight, setMentionHighlight] = useState(0);
+  const [taskMentionQuery, setTaskMentionQuery] = useState<MentionQuery | null>(null);
+  const [taskMentionHighlight, setTaskMentionHighlight] = useState(0);
+  const [chatTasks, setChatTasks] = useState<ChatTaskMention[]>([]);
+  const [chatTasksLoading, setChatTasksLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [attachedTask, setAttachedTask] = useState<AttachedTask | null>(null);
   const [pickerFor, setPickerFor] = useState<number | null>(null);
+  const [composerReactionOpen, setComposerReactionOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editText, setEditText] = useState('');
   const [onlineUserIds, setOnlineUserIds] = useState<Set<number>>(new Set());
@@ -814,6 +813,22 @@ function ChatInner() {
   const activeConvIdRef = useRef<number | null>(null);
   const initForUserRef = useRef<number | null>(null);
   const handledTaskNavRef = useRef<string | null>(null);
+  const chatTasksFetchedRef = useRef(false);
+  const restoredChatRef = useRef(false);
+  const prevMeIdRef = useRef<number | null>(null);
+
+  const persistChatConversation = useCallback(
+    (conversationId: number) => {
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('tf-chat-conversation-id', String(conversationId));
+      }
+      const currentId = searchParams.get('conversationId');
+      const hasOtherParams = searchParams.get('userId') || searchParams.get('taskId');
+      if (currentId === String(conversationId) && !hasOtherParams) return;
+      router.replace(`/chat?conversationId=${conversationId}`, { scroll: false });
+    },
+    [router, searchParams],
+  );
 
   const groups = useMemo(
     () => conversations.filter((c) => c.kind === 'group'),
@@ -832,10 +847,59 @@ function ChatInner() {
     if (!mentionQuery || !groupMembers.length) return [];
     return filterMentionMembers(groupMembers, mentionQuery.query, me?.id);
   }, [mentionQuery, groupMembers, me?.id]);
-  const mentionPickerOpen = isGroupChat && mentionQuery !== null && mentionCandidates.length > 0;
+  const taskMentionCandidates = useMemo(() => {
+    if (!taskMentionQuery) return [];
+    return filterChatTasks(chatTasks, taskMentionQuery.query);
+  }, [taskMentionQuery, chatTasks]);
+  const mentionPickerOpen = isGroupChat && mentionQuery !== null && mentionCandidates.length > 0 && !taskMentionQuery;
+  const taskPickerOpen = taskMentionQuery !== null;
+
+  const loadChatTasks = useCallback(async () => {
+    setChatTasksLoading(true);
+    try {
+      if (isBoss) {
+        const d = await api<{ tasks: ChatTaskMention[] }>('/api/tasks?filter=all&status=all&limit=150');
+        setChatTasks(d.tasks || []);
+        return;
+      }
+      const [mineRes, createdRes] = await Promise.all([
+        api<{ tasks: ChatTaskMention[] }>('/api/tasks?filter=mine&status=all&limit=150'),
+        api<{ tasks: ChatTaskMention[] }>('/api/tasks?filter=created&status=all&limit=150'),
+      ]);
+      const byId = new Map<number, ChatTaskMention>();
+      [...(mineRes.tasks || []), ...(createdRes.tasks || [])].forEach((task) => {
+        byId.set(task.id, task);
+      });
+      setChatTasks(
+        Array.from(byId.values()).sort((a, b) => Number(b.id) - Number(a.id)),
+      );
+    } catch (e) {
+      toast.errorFrom(e);
+      setChatTasks([]);
+    } finally {
+      setChatTasksLoading(false);
+    }
+  }, [isBoss]);
+
+  useEffect(() => {
+    chatTasksFetchedRef.current = false;
+    setChatTasks([]);
+  }, [me?.id, isBoss]);
+
+  useEffect(() => {
+    if (!taskMentionQuery || chatTasksFetchedRef.current || chatTasksLoading) return;
+    chatTasksFetchedRef.current = true;
+    void loadChatTasks();
+  }, [taskMentionQuery, chatTasksLoading, loadChatTasks]);
+
   useEffect(() => {
     setMentionHighlight((i) => Math.min(i, Math.max(0, mentionCandidates.length - 1)));
   }, [mentionCandidates.length]);
+
+  useEffect(() => {
+    setTaskMentionHighlight((i) => Math.min(i, Math.max(0, taskMentionCandidates.length - 1)));
+  }, [taskMentionCandidates.length]);
+
   const { typingUserNames } = useChatTyping(activeConversation?.id ?? null, text, me?.id);
 
   const loadAllUsers = useCallback(async (excludeSelf = true) => {
@@ -917,6 +981,10 @@ function ChatInner() {
     requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }));
   }, []);
 
+  useEffect(() => {
+    if (typingUserNames.length > 0) scrollToBottom();
+  }, [typingUserNames, scrollToBottom]);
+
   const applyPayload = useCallback((payload: ChatUpdatePayload) => {
     applyChatPayload(payload, activeConvIdRef.current, setMessages, setConversations, setActiveConversation);
     if (payload.message && activeConvIdRef.current === payload.conversation?.id) {
@@ -949,13 +1017,14 @@ function ChatInner() {
       const d = await api(`/api/chat/conversations/${conversationId}/messages`);
       setActiveConversation(d.conversation);
       setMessages(d.messages || []);
+      persistChatConversation(conversationId);
       scrollToBottom();
     } catch (e) {
       toast.errorFrom(e);
     } finally {
       setLoadingMessages(false);
     }
-  }, [scrollToBottom]);
+  }, [scrollToBottom, persistChatConversation]);
 
   const openWithUser = useCallback(async (userId?: number) => {
     setLoadingMessages(true);
@@ -967,13 +1036,16 @@ function ChatInner() {
       setActiveConversation(d.conversation);
       setMessages(d.messages || []);
       setConversations((prev) => upsertConversation(prev, d.conversation));
+      if (d.conversation?.id) persistChatConversation(d.conversation.id);
       scrollToBottom();
+      return d.conversation as Conversation;
     } catch (e) {
       toast.errorFrom(e);
+      return null;
     } finally {
       setLoadingMessages(false);
     }
-  }, [scrollToBottom]);
+  }, [scrollToBottom, persistChatConversation]);
 
   // Load chat data once per signed-in user. Shell refreshes /api/me on an interval;
   // do not re-fetch chat endpoints when that object reference changes.
@@ -1051,23 +1123,51 @@ function ChatInner() {
         }
         if (taskAttach) setAttachedTask(taskAttach);
       }
-      router.replace('/chat', { scroll: false });
     })();
-  }, [me?.id, urlUserId, urlTaskId, openWithUser, router]);
+  }, [me?.id, urlUserId, urlTaskId, openWithUser]);
 
   const urlConversationId = searchParams.get('conversationId');
   useEffect(() => {
     if (!me?.id || !urlConversationId) return;
     const conversationId = Number(urlConversationId);
     if (!Number.isFinite(conversationId) || conversationId <= 0) return;
+    if (loadingMessages) return;
+    if (activeConversation?.id === conversationId) return;
 
     setReplyTo(null);
     setEditingId(null);
     setPickerFor(null);
     setMobileUsersOpen(false);
     void loadMessages(conversationId);
-    router.replace('/chat', { scroll: false });
-  }, [me?.id, urlConversationId, loadMessages, router]);
+  }, [me?.id, urlConversationId, activeConversation?.id, loadingMessages, loadMessages]);
+
+  useEffect(() => {
+    if (!me?.id || restoredChatRef.current) return;
+    if (urlConversationId || urlUserId) return;
+    if (activeConversation?.id) return;
+
+    const stored =
+      typeof window !== 'undefined' ? sessionStorage.getItem('tf-chat-conversation-id') : null;
+    if (!stored) return;
+
+    const conversationId = Number(stored);
+    if (!Number.isFinite(conversationId) || conversationId <= 0) return;
+
+    restoredChatRef.current = true;
+    router.replace(`/chat?conversationId=${conversationId}`, { scroll: false });
+  }, [me?.id, urlConversationId, urlUserId, activeConversation?.id, router]);
+
+  useEffect(() => {
+    if (!me?.id) return;
+    if (prevMeIdRef.current != null && prevMeIdRef.current !== me.id) {
+      restoredChatRef.current = false;
+      handledTaskNavRef.current = null;
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('tf-chat-conversation-id');
+      }
+    }
+    prevMeIdRef.current = me.id;
+  }, [me?.id]);
 
   const filteredTargets = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -1089,6 +1189,8 @@ function ChatInner() {
     setText('');
     setMentionQuery(null);
     setMentionHighlight(0);
+    setTaskMentionQuery(null);
+    setTaskMentionHighlight(0);
     setEditingId(null);
     setEditText('');
     setPickerFor(null);
@@ -1110,8 +1212,19 @@ function ChatInner() {
     switchConversation(() => openWithUser(target.id));
   };
 
-  const syncMentionQuery = useCallback(
+  const syncComposerQueries = useCallback(
     (value: string, cursor: number, resetHighlight = false) => {
+      const nextTask = detectTaskMentionQuery(value, cursor);
+      setTaskMentionQuery(nextTask);
+      if (nextTask) {
+        setMentionQuery(null);
+        if (resetHighlight) {
+          setTaskMentionHighlight(0);
+          setMentionHighlight(0);
+        }
+        return;
+      }
+
       if (!isGroupChat || !groupMembers.length) {
         setMentionQuery(null);
         if (resetHighlight) setMentionHighlight(0);
@@ -1126,7 +1239,7 @@ function ChatInner() {
 
   const handleMessageTextChange = (value: string, cursor: number) => {
     setText(value);
-    syncMentionQuery(value, cursor, true);
+    syncComposerQueries(value, cursor, true);
   };
 
   const pickMentionMember = useCallback(
@@ -1144,6 +1257,45 @@ function ChatInner() {
       });
     },
     [mentionQuery, text],
+  );
+
+  const pickTaskMention = useCallback(
+    async (task: ChatTaskMention) => {
+      if (!taskMentionQuery) return;
+      const { text: nextText, cursor } = clearTaskMentionToken(text, taskMentionQuery);
+      setText(nextText);
+      setTaskMentionQuery(null);
+      setTaskMentionHighlight(0);
+
+      let attach: AttachedTask = {
+        id: task.id,
+        title: task.title || 'Task',
+        description: task.description ?? null,
+      };
+      if (!attach.description) {
+        try {
+          const d = await api<{ task: AttachedTask }>(`/api/tasks/${task.id}`);
+          if (d.task) {
+            attach = {
+              id: d.task.id,
+              title: d.task.title || 'Task',
+              description: d.task.description ?? null,
+            };
+          }
+        } catch {
+          /* keep minimal task attach */
+        }
+      }
+      setAttachedTask(attach);
+
+      requestAnimationFrame(() => {
+        const el = messageInputRef.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(cursor, cursor);
+      });
+    },
+    [taskMentionQuery, text],
   );
 
   const openTaskComposerForUser = (userId: number) => {
@@ -1232,6 +1384,28 @@ function ChatInner() {
       setReplyTo(null);
       setAttachedTask(null);
       applyPayload({ action: 'message', conversation: d.conversation, message: d.message });
+    } catch (e) {
+      toast.errorFrom(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const sendReactionMessage = async (emoji: string) => {
+    if (!activeConversation || busy) return;
+    setBusy(true);
+    try {
+      const d = await api(`/api/chat/conversations/${activeConversation.id}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({
+          body: emoji,
+          parentMessageId: replyTo?.id ?? null,
+          attachmentIds: [],
+        }),
+      });
+      setReplyTo(null);
+      applyPayload({ action: 'message', conversation: d.conversation, message: d.message });
+      scrollToBottom();
     } catch (e) {
       toast.errorFrom(e);
     } finally {
@@ -1443,8 +1617,9 @@ function ChatInner() {
           )}
         </div>
 
+        <div className="flex min-h-0 flex-1 flex-col">
         <div className="min-h-0 flex-1 overflow-y-auto scrollbar-hide">
-          <div className="space-y-2 px-3 py-2">
+          <div className="space-y-2 px-3 py-2 pb-4">
             {!activeConversation ? (
               <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
                 Pick a user or group to start chatting.
@@ -1484,15 +1659,20 @@ function ChatInner() {
                     }}
                   />
                 ))}
-                <ChatTypingIndicator names={typingUserNames} />
                 <div ref={bottomRef} />
               </>
             )}
           </div>
         </div>
 
+        {activeConversation && typingUserNames.length > 0 && (
+          <div className="relative z-10 shrink-0 border-t border-border/60 bg-background px-3 py-1.5">
+            <ChatTypingIndicator names={typingUserNames} />
+          </div>
+        )}
+
         {activeConversation && (
-          <div className="shrink-0 border-t bg-background px-3 py-2">
+          <div className="relative z-10 shrink-0 border-t bg-background px-3 py-2">
             {replyTo && (
               <div className="mb-2 flex items-center justify-between rounded-lg bg-muted/50 px-3 py-1.5 text-xs">
                 <span>
@@ -1565,6 +1745,26 @@ function ChatInner() {
               }}
             />
             <div className="relative rounded-md border bg-muted/20 p-2">
+              {taskPickerOpen && (
+                <>
+                  {chatTasksLoading ? (
+                    <div className="absolute bottom-full left-0 right-0 z-20 mb-1 rounded-lg border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md">
+                      Loading tasks…
+                    </div>
+                  ) : taskMentionCandidates.length > 0 ? (
+                    <ChatTaskMentionPicker
+                      tasks={taskMentionCandidates}
+                      highlightIndex={taskMentionHighlight}
+                      onHighlight={setTaskMentionHighlight}
+                      onSelect={(task) => void pickTaskMention(task)}
+                    />
+                  ) : (
+                    <div className="absolute bottom-full left-0 right-0 z-20 mb-1 rounded-lg border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-md">
+                      No matching tasks
+                    </div>
+                  )}
+                </>
+              )}
               {mentionPickerOpen && (
                 <ChatMentionPicker
                   members={mentionCandidates}
@@ -1579,15 +1779,41 @@ function ChatInner() {
                 onChange={(e) => handleMessageTextChange(e.target.value, e.target.selectionStart ?? e.target.value.length)}
                 onClick={(e) => {
                   const el = e.currentTarget;
-                  syncMentionQuery(el.value, el.selectionStart ?? el.value.length);
+                  syncComposerQueries(el.value, el.selectionStart ?? el.value.length);
                 }}
                 onSelect={(e) => {
                   const el = e.currentTarget;
-                  syncMentionQuery(el.value, el.selectionStart ?? el.value.length);
+                  syncComposerQueries(el.value, el.selectionStart ?? el.value.length);
                 }}
-                placeholder={isGroupChat ? 'Write a message… (@ to mention)' : 'Write a message…'}
+                placeholder={
+                  isGroupChat
+                    ? 'Write a message… (@t task, @ member)'
+                    : 'Write a message… (@t to link a task)'
+                }
                 className="min-h-[44px] resize-none border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
                 onKeyDown={(e) => {
+                  if (taskPickerOpen && !chatTasksLoading && taskMentionCandidates.length > 0) {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setTaskMentionHighlight((i) => Math.min(i + 1, taskMentionCandidates.length - 1));
+                      return;
+                    }
+                    if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setTaskMentionHighlight((i) => Math.max(i - 1, 0));
+                      return;
+                    }
+                    if (e.key === 'Enter' || e.key === 'Tab') {
+                      e.preventDefault();
+                      void pickTaskMention(taskMentionCandidates[taskMentionHighlight] ?? taskMentionCandidates[0]);
+                      return;
+                    }
+                    if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setTaskMentionQuery(null);
+                      return;
+                    }
+                  }
                   if (mentionPickerOpen) {
                     if (e.key === 'ArrowDown') {
                       e.preventDefault();
@@ -1632,6 +1858,14 @@ function ChatInner() {
                       {recordingVoice ? <Square className="size-3.5 fill-current text-red-600" /> : <Mic className="size-4" />}
                     </Button>
                   )}
+                  <ChatEmojiPicker
+                    open={composerReactionOpen}
+                    onOpenChange={setComposerReactionOpen}
+                    onSelect={(emoji) => void sendReactionMessage(emoji)}
+                    disabled={busy}
+                    placement="top"
+                    title="Send reaction"
+                  />
                   <span className="hidden text-xs text-muted-foreground sm:inline">Enter to send</span>
                 </div>
                 <Button type="button" size="sm" disabled={busy || (!text.trim() && pendingFiles.length === 0 && !attachedTask)} onClick={() => void send()}>
@@ -1642,6 +1876,7 @@ function ChatInner() {
             </div>
           </div>
         )}
+        </div>
       </div>
 
       <GroupFormModal
@@ -1680,8 +1915,16 @@ function ChatInner() {
 export default function ChatPage() {
   return (
     <Shell>
-      <Suspense fallback={<div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">Loading chat…</div>}>
-        <ChatInner />
+      <Suspense
+        fallback={
+          <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-muted-foreground">
+            Loading chat…
+          </div>
+        }
+      >
+        <div className="flex min-h-0 flex-1 flex-col">
+          <ChatInner />
+        </div>
       </Suspense>
     </Shell>
   );

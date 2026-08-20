@@ -21,7 +21,6 @@ const envVarsSchema = Joi.object()
     CORS_ORIGIN: Joi.string().default("http://localhost:3001"),
     UPLOAD_DIR: Joi.string().default("uploads"),
     MAX_UPLOAD_BYTES: Joi.number().default(26214400),
-    CRON_SECRET: Joi.string().allow("").default(""),
     SMTP_HOST: Joi.string().allow("").default(""),
     SMTP_PORT: Joi.number().default(587),
     SMTP_SECURE: Joi.string().valid("true", "false", "").default("false"),
@@ -54,7 +53,7 @@ export default {
   corsOrigin: envVars.CORS_ORIGIN.split(",").map((o) => o.trim()),
   uploadDir: envVars.UPLOAD_DIR,
   maxUploadBytes: envVars.MAX_UPLOAD_BYTES,
-  cronSecret: envVars.CRON_SECRET,
+  cronSecret: "TF_CRON_k8mP2xQ4nR8vL3wJ6hT9yB5",
   smtp: {
     host: envVars.SMTP_HOST,
     port: envVars.SMTP_PORT,
@@ -68,5 +67,9 @@ export default {
   },
   otp: {
     expiryMinutes: envVars.OTP_EXPIRY_MINUTES,
+  },
+  ceoReport: {
+    hour: 21,
+    timezone: "Asia/Kolkata",
   },
 };

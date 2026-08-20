@@ -1228,6 +1228,33 @@ export const createComment = async (user, taskId, body) => {
   return { comment: created };
 };
 
+export const updateComment = async (user, taskId, commentId, body) => {
+  const task = await assertActiveTask(await Task.findByPk(taskId));
+  if (!(await canSeeTask(user, task))) throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
+
+  const members = await loadTaskMembers(task.id);
+  if (isTaskWatcher(members, user.id)) {
+    throw new ApiError(httpStatus.FORBIDDEN, "Watchers can only view this task");
+  }
+
+  const comment = await Comment.findOne({ where: { id: commentId, task_id: taskId } });
+  if (!comment) throw new ApiError(httpStatus.NOT_FOUND, "Comment not found");
+
+  if (comment.author_id !== user.id && !["ADMIN", "CEO"].includes(user.role)) {
+    throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");
+  }
+
+  const content = String(body.content || body.body || "").trim();
+  if (!content) throw new ApiError(httpStatus.BAD_REQUEST, "Comment cannot be empty");
+
+  const t = now();
+  await comment.update({ body: content, edited: true, edited_at: t, updated_at: t });
+
+  const comments = await loadCommentsWithReactions(task.id, user.id);
+  const updated = comments.find((c) => c.id === comment.id);
+  return { comment: updated };
+};
+
 export const toggleReaction = async (user, taskId, commentId, emoji) => {
   const task = await assertActiveTask(await Task.findByPk(taskId));
   if (!(await canSeeTask(user, task))) throw new ApiError(httpStatus.FORBIDDEN, "Forbidden");

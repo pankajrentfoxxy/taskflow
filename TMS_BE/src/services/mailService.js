@@ -22,7 +22,7 @@ function getTransporter() {
   return transporter;
 }
 
-export async function sendMail({ to, subject, html, text }) {
+export async function sendMail({ to, subject, html, text, attachments }) {
   const transport = getTransporter();
 
   if (!transport) {
@@ -39,6 +39,7 @@ export async function sendMail({ to, subject, html, text }) {
     subject,
     html,
     text,
+    attachments,
   });
 
   logger.info(`Email sent to ${to}: ${info.messageId}`);

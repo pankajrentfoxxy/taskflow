@@ -3,7 +3,16 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Shell, { useMe } from '@/components/Shell';
 import Modal from '@/components/Modal';
-import { api, fmtDateTime, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, SLA_BREACH_BADGE, reportsDateQueryParams, type ReportsDateFilterMode } from '@/lib/util';
+import {
+  api,
+  fmtDateTime,
+  STATUS_LABEL,
+  STATUS_COLOR,
+  STATUS_COLOR_FALLBACK,
+  SLA_BREACH_BADGE,
+  reportsDateQueryParams,
+  type ReportsDateFilterMode,
+} from '@/lib/util';
 import { IconInbox, IconClock, IconMute, IconAlert, IconScale, IconCalendar, IconCheckCircle, IconZap, IconActivity, IconTag, IconUsers, IconDownload } from '@/components/Icons';
 import ReportsDateRangeFilter from '@/components/ReportsDateRangeFilter';
 import { Button } from '@/components/ui/button';
@@ -98,7 +107,9 @@ function ReportsInner() {
   }, [dateMode, fromDate, toDate, teamId, typeId]);
 
   useEffect(() => {
-    if (me && ['ADMIN', 'CEO'].includes(me.role)) api('/api/teams').then((d) => setTeams(d.teams)).catch(() => {});
+    if (me && ['ADMIN', 'CEO'].includes(me.role)) {
+      api('/api/teams').then((d) => setTeams(d.teams)).catch(() => {});
+    }
   }, [me]);
 
   useEffect(() => {
@@ -159,8 +170,9 @@ function ReportsInner() {
         </Badge>
       </div>
 
-      {/* Filters */}
+      {/* Report filters */}
       <div className="mb-5 space-y-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Report filters</p>
         <div className="flex gap-2 flex-wrap items-center">
           {me && ['ADMIN', 'CEO'].includes(me.role) && (
             <NativeSelect className="w-auto" value={teamId} onChange={(e) => setTeamId(e.target.value)}>

@@ -42,6 +42,17 @@ export const createComment = catchAsync(async (req, res) => {
   res.json(await taskService.createComment(req.user, Number(req.params.id), req.body));
 });
 
+export const updateComment = catchAsync(async (req, res) => {
+  res.json(
+    await taskService.updateComment(
+      req.user,
+      Number(req.params.id),
+      Number(req.params.commentId),
+      req.body
+    )
+  );
+});
+
 export const toggleReaction = catchAsync(async (req, res) => {
   res.json(
     await taskService.toggleReaction(
@@ -73,6 +84,7 @@ export default {
   deleteTask,
   listComments,
   createComment,
+  updateComment,
   toggleReaction,
   handleEscalation,
   getTemplateData,

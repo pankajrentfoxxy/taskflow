@@ -1,10 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Send, SmilePlus, ThumbsUp } from 'lucide-react';
+import { Pencil, Send, SmilePlus, ThumbsUp } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { useMe } from '@/components/Shell';
 import { api, fmtTime, toast } from '@/lib/util';
 import { cn } from '@/lib/utils';
 
@@ -16,6 +17,8 @@ type Comment = {
   parent_comment_id: number | null;
   content: string;
   author_name: string;
+  edited: boolean;
+  edited_at: number | null;
   created_at: number;
   reactions: Reaction[];
 };
@@ -38,8 +41,15 @@ function buildTree(comments: Comment[]) {
 function CommentItem({
   comment,
   depth,
+  meId,
   pickerFor,
+  editingId,
+  editText,
+  onEditText,
   onReply,
+  onStartEdit,
+  onCancelEdit,
+  onSaveEdit,
   onToggleReaction,
   onOpenPicker,
   onPickEmoji,
@@ -47,13 +57,23 @@ function CommentItem({
 }: {
   comment: Comment;
   depth: number;
+  meId: number | null;
   pickerFor: number | null;
+  editingId: number | null;
+  editText: string;
+  onEditText: (value: string) => void;
   onReply: (c: Comment) => void;
+  onStartEdit: (c: Comment) => void;
+  onCancelEdit: () => void;
+  onSaveEdit: (commentId: number) => void;
   onToggleReaction: (commentId: number, emoji: string) => void;
   onOpenPicker: (commentId: number | null) => void;
   onPickEmoji: (commentId: number, emoji: string) => void;
   readOnly?: boolean;
 }) {
+  const isEditing = editingId === comment.id;
+  const canEdit = !readOnly && meId != null && comment.author_id === meId;
+
   return (
     <div className={cn('rounded-xl bg-muted/40 p-3', depth > 0 && 'ml-4 mt-2')}>
       <div className="flex gap-2.5">
@@ -65,51 +85,95 @@ function CommentItem({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-semibold">{comment.author_name.split(' (')[0]}</span>
-            <span className="text-xs text-muted-foreground">{fmtTime(comment.created_at)}</span>
+            <span className="text-xs text-muted-foreground">
+              {fmtTime(comment.created_at)}
+              {comment.edited && <span className="ml-1.5 italic">(edited)</span>}
+            </span>
           </div>
-          <p className="mt-1 text-sm whitespace-pre-wrap break-words">{comment.content}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            {comment.reactions.map((r) => (
-              <button
-                key={r.emoji}
-                type="button"
-                disabled={readOnly}
-                onClick={() => !readOnly && onToggleReaction(comment.id, r.emoji)}
-                className={cn(
-                  'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition',
-                  r.mine ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border bg-background hover:bg-muted',
-                  readOnly && 'cursor-default opacity-90',
-                )}
-              >
-                <span>{r.emoji}</span>
-                <span className="font-semibold tabular-nums">{r.count}</span>
-              </button>
-            ))}
-            {!readOnly && (
-              <>
-                <Button type="button" variant="ghost" size="icon-xs" className="text-muted-foreground" onClick={() => onToggleReaction(comment.id, '👍')}>
-                  <ThumbsUp className="size-3.5" />
+
+          {isEditing ? (
+            <div className="mt-2 space-y-2">
+              <Textarea
+                value={editText}
+                onChange={(e) => onEditText(e.target.value)}
+                className="min-h-[72px] resize-none text-sm"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    onSaveEdit(comment.id);
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    onCancelEdit();
+                  }
+                }}
+              />
+              <div className="flex gap-2">
+                <Button type="button" size="sm" disabled={!editText.trim()} onClick={() => onSaveEdit(comment.id)}>
+                  Save
                 </Button>
-                <div className="relative">
-                  <Button type="button" variant="ghost" size="icon-xs" className="text-muted-foreground" onClick={() => onOpenPicker(pickerFor === comment.id ? null : comment.id)}>
-                    <SmilePlus className="size-3.5" />
-                  </Button>
-                  {pickerFor === comment.id && (
-                    <div className="absolute bottom-full left-0 z-10 mb-1 flex gap-1 rounded-lg border bg-popover p-1 shadow-md">
-                      {QUICK_EMOJIS.map((emoji) => (
-                        <button key={emoji} type="button" className="rounded-md px-2 py-1 text-lg hover:bg-muted" onClick={() => onPickEmoji(comment.id, emoji)}>
-                          {emoji}
-                        </button>
-                      ))}
-                    </div>
+                <Button type="button" size="sm" variant="ghost" onClick={onCancelEdit}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-1 text-sm whitespace-pre-wrap break-words">{comment.content}</p>
+          )}
+
+          {!isEditing && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {comment.reactions.map((r) => (
+                <button
+                  key={r.emoji}
+                  type="button"
+                  disabled={readOnly}
+                  onClick={() => !readOnly && onToggleReaction(comment.id, r.emoji)}
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition',
+                    r.mine ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border bg-background hover:bg-muted',
+                    readOnly && 'cursor-default opacity-90',
                   )}
-                </div>
-                <Button type="button" variant="ghost" size="xs" className="ml-auto text-muted-foreground" onClick={() => onReply(comment)}>
-                  Reply
-                </Button>
-              </>
-            )}
-          </div>
+                >
+                  <span>{r.emoji}</span>
+                  <span className="font-semibold tabular-nums">{r.count}</span>
+                </button>
+              ))}
+              {!readOnly && (
+                <>
+                  <Button type="button" variant="ghost" size="icon-xs" className="text-muted-foreground" onClick={() => onToggleReaction(comment.id, '👍')}>
+                    <ThumbsUp className="size-3.5" />
+                  </Button>
+                  <div className="relative">
+                    <Button type="button" variant="ghost" size="icon-xs" className="text-muted-foreground" onClick={() => onOpenPicker(pickerFor === comment.id ? null : comment.id)}>
+                      <SmilePlus className="size-3.5" />
+                    </Button>
+                    {pickerFor === comment.id && (
+                      <div className="absolute bottom-full left-0 z-10 mb-1 flex gap-1 rounded-lg border bg-popover p-1 shadow-md">
+                        {QUICK_EMOJIS.map((emoji) => (
+                          <button key={emoji} type="button" className="rounded-md px-2 py-1 text-lg hover:bg-muted" onClick={() => onPickEmoji(comment.id, emoji)}>
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <div className="ml-auto flex items-center gap-1">
+                    {canEdit && (
+                      <Button type="button" variant="ghost" size="xs" className="text-muted-foreground" onClick={() => onStartEdit(comment)}>
+                        <Pencil className="size-3.5" />
+                        Edit
+                      </Button>
+                    )}
+                    <Button type="button" variant="ghost" size="xs" className="text-muted-foreground" onClick={() => onReply(comment)}>
+                      Reply
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -120,8 +184,15 @@ function CommentThread({
   comment,
   byParent,
   depth,
+  meId,
   pickerFor,
+  editingId,
+  editText,
+  onEditText,
   onReply,
+  onStartEdit,
+  onCancelEdit,
+  onSaveEdit,
   onToggleReaction,
   onOpenPicker,
   onPickEmoji,
@@ -130,8 +201,15 @@ function CommentThread({
   comment: Comment;
   byParent: Map<number | null, Comment[]>;
   depth: number;
+  meId: number | null;
   pickerFor: number | null;
+  editingId: number | null;
+  editText: string;
+  onEditText: (value: string) => void;
   onReply: (c: Comment) => void;
+  onStartEdit: (c: Comment) => void;
+  onCancelEdit: () => void;
+  onSaveEdit: (commentId: number) => void;
   onToggleReaction: (commentId: number, emoji: string) => void;
   onOpenPicker: (commentId: number | null) => void;
   onPickEmoji: (commentId: number, emoji: string) => void;
@@ -143,8 +221,15 @@ function CommentThread({
       <CommentItem
         comment={comment}
         depth={depth}
+        meId={meId}
         pickerFor={pickerFor}
+        editingId={editingId}
+        editText={editText}
+        onEditText={onEditText}
         onReply={onReply}
+        onStartEdit={onStartEdit}
+        onCancelEdit={onCancelEdit}
+        onSaveEdit={onSaveEdit}
         onToggleReaction={onToggleReaction}
         onOpenPicker={onOpenPicker}
         onPickEmoji={onPickEmoji}
@@ -156,8 +241,15 @@ function CommentThread({
           comment={reply}
           byParent={byParent}
           depth={depth + 1}
+          meId={meId}
           pickerFor={pickerFor}
+          editingId={editingId}
+          editText={editText}
+          onEditText={onEditText}
           onReply={onReply}
+          onStartEdit={onStartEdit}
+          onCancelEdit={onCancelEdit}
+          onSaveEdit={onSaveEdit}
           onToggleReaction={onToggleReaction}
           onOpenPicker={onOpenPicker}
           onPickEmoji={onPickEmoji}
@@ -179,12 +271,15 @@ export default function CommentsPanel({
   className?: string;
   canComment?: boolean;
 }) {
+  const me = useMe();
   const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [replyTo, setReplyTo] = useState<Comment | null>(null);
   const [pickerFor, setPickerFor] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editText, setEditText] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -201,6 +296,8 @@ export default function CommentsPanel({
     setText('');
     setReplyTo(null);
     setPickerFor(null);
+    setEditingId(null);
+    setEditText('');
   }, [load]);
 
   const byParent = useMemo(() => buildTree(comments), [comments]);
@@ -241,6 +338,39 @@ export default function CommentsPanel({
     }
   };
 
+  const startEdit = (comment: Comment) => {
+    setReplyTo(null);
+    setPickerFor(null);
+    setEditingId(comment.id);
+    setEditText(comment.content);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditText('');
+  };
+
+  const saveEdit = async (commentId: number) => {
+    const next = editText.trim();
+    if (!next) return;
+    setBusy(true);
+    try {
+      await api(`/api/tasks/${taskId}/comments/${commentId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ content: next }),
+      });
+      setEditingId(null);
+      setEditText('');
+      await load();
+      onChanged?.();
+      toast.success('Comment updated');
+    } catch (e) {
+      toast.errorFrom(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className={cn('flex min-h-0 flex-1 flex-col overflow-hidden', className)}>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
@@ -260,8 +390,15 @@ export default function CommentsPanel({
                 comment={comment}
                 byParent={byParent}
                 depth={0}
+                meId={me?.id ?? null}
                 pickerFor={pickerFor}
+                editingId={editingId}
+                editText={editText}
+                onEditText={setEditText}
                 onReply={setReplyTo}
+                onStartEdit={startEdit}
+                onCancelEdit={cancelEdit}
+                onSaveEdit={saveEdit}
                 onToggleReaction={toggleReaction}
                 onOpenPicker={setPickerFor}
                 onPickEmoji={(commentId, emoji) => {

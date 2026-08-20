@@ -15,4 +15,14 @@ export const slaCheck = catchAsync(async (req, res) => {
   res.json(result);
 });
 
-export default { slaCheck };
+export const ceoDailyReport = catchAsync(async (req, res) => {
+  const result = await cronService.runCeoReport(req.headers.authorization, req.query.secret, {
+    force: req.query.force === "true",
+  });
+  if (result.unauthorized) {
+    throw new ApiError(httpStatus.UNAUTHORIZED, "Unauthorized");
+  }
+  res.json(result);
+});
+
+export default { slaCheck, ceoDailyReport };

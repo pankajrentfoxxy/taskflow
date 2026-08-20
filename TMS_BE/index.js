@@ -6,6 +6,11 @@ import { initSocket } from "./src/lib/socket.js";
 
 await initApp();
 
+if (config.env === "production") {
+  const { startCeoReportScheduler } = await import("./src/lib/ceoReportScheduler.js");
+  startCeoReportScheduler();
+}
+
 const server = http.createServer(app);
 initSocket(server);
 
