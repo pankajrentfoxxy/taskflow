@@ -21,7 +21,7 @@ export default function Modal({
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent
-        className="flex max-h-[92vh] w-full max-w-lg flex-col gap-0 overflow-hidden p-0 sm:max-w-lg"
+        className="flex max-h-[92vh] w-full max-w-lg flex-col gap-0 overflow-visible p-0 sm:max-w-lg"
         showCloseButton
       >
         <DialogHeader className="sticky top-0 z-10 shrink-0 border-b bg-background px-5 py-3.5">

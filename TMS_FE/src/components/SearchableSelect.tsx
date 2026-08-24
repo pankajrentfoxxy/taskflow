@@ -32,7 +32,13 @@ type MenuPosition = {
   left: number;
   width: number;
   maxHeight: number;
+  positionMode: 'fixed' | 'absolute';
 };
+
+function getPortalContainer(trigger: HTMLElement | null): HTMLElement {
+  const dialog = trigger?.closest('[data-slot="dialog-content"]');
+  return (dialog as HTMLElement | null) ?? document.body;
+}
 
 export function buildUserSelectOptions(
   users: UserLike[],
@@ -87,20 +93,39 @@ export function buildUserTeamSelectOptions(
   return opts?.emptyOption ? [opts.emptyOption, ...options] : options;
 }
 
-function computeMenuPosition(trigger: HTMLElement): MenuPosition {
-  const rect = trigger.getBoundingClientRect();
+function computeMenuPosition(trigger: HTMLElement, container: HTMLElement): MenuPosition {
+  const triggerRect = trigger.getBoundingClientRect();
   const viewportPadding = 8;
   const gap = 4;
   const preferredHeight = 320;
-  const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
-  const spaceAbove = rect.top - viewportPadding;
+  const spaceBelow = window.innerHeight - triggerRect.bottom - viewportPadding;
+  const spaceAbove = triggerRect.top - viewportPadding;
   const openUp = spaceBelow < 220 && spaceAbove > spaceBelow;
   const maxHeight = Math.min(preferredHeight, openUp ? spaceAbove - gap : spaceBelow - gap);
-  const top = openUp ? Math.max(viewportPadding, rect.top - gap - maxHeight) : rect.bottom + gap;
-  const width = Math.max(rect.width, 220);
-  const left = Math.min(Math.max(viewportPadding, rect.left), window.innerWidth - width - viewportPadding);
+  const height = Math.max(160, maxHeight);
+  const width = Math.max(triggerRect.width, 220);
 
-  return { top, left, width, maxHeight: Math.max(160, maxHeight) };
+  if (container === document.body) {
+    const top = openUp
+      ? Math.max(viewportPadding, triggerRect.top - gap - height)
+      : triggerRect.bottom + gap;
+    const left = Math.min(
+      Math.max(viewportPadding, triggerRect.left),
+      window.innerWidth - width - viewportPadding
+    );
+    return { top, left, width, maxHeight: height, positionMode: 'fixed' };
+  }
+
+  const containerRect = container.getBoundingClientRect();
+  const top = openUp
+    ? triggerRect.top - gap - height - containerRect.top
+    : triggerRect.bottom + gap - containerRect.top;
+  const left = Math.min(
+    Math.max(0, triggerRect.left - containerRect.left),
+    Math.max(0, containerRect.width - width)
+  );
+
+  return { top, left, width, maxHeight: height, positionMode: 'absolute' };
 }
 
 export default function SearchableSelect({
@@ -127,12 +152,12 @@ export default function SearchableSelect({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
   const [mounted, setMounted] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
-  const ignoreOutsideCloseRef = useRef(false);
 
   const selected = options.find((o) => o.value === value);
 
@@ -159,7 +184,9 @@ export default function SearchableSelect({
 
   const updateMenuPosition = useCallback(() => {
     if (!triggerRef.current) return;
-    setMenuPosition(computeMenuPosition(triggerRef.current));
+    const container = getPortalContainer(triggerRef.current);
+    setPortalContainer(container);
+    setMenuPosition(computeMenuPosition(triggerRef.current, container));
   }, []);
 
   useEffect(() => {
@@ -169,10 +196,14 @@ export default function SearchableSelect({
   useEffect(() => {
     if (!open) {
       setMenuPosition(null);
+      setPortalContainer(null);
       return;
     }
     updateMenuPosition();
-    const onLayout = () => updateMenuPosition();
+    const onLayout = (event: Event) => {
+      if (event.target instanceof Node && menuRef.current?.contains(event.target)) return;
+      updateMenuPosition();
+    };
     window.addEventListener('resize', onLayout);
     window.addEventListener('scroll', onLayout, true);
     return () => {
@@ -184,22 +215,22 @@ export default function SearchableSelect({
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: PointerEvent) => {
-      if (ignoreOutsideCloseRef.current) {
-        ignoreOutsideCloseRef.current = false;
-        return;
-      }
       const target = event.target as Node;
       if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) {
         setOpen(false);
       }
     };
-    document.addEventListener('pointerdown', onPointerDown, true);
-    return () => document.removeEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [open]);
 
   useEffect(() => {
-    if (!open) setQuery('');
-    else requestAnimationFrame(() => searchRef.current?.focus());
+    if (!open) {
+      setQuery('');
+      return;
+    }
+    const id = window.requestAnimationFrame(() => searchRef.current?.focus());
+    return () => window.cancelAnimationFrame(id);
   }, [open]);
 
   const pick = (next: string) => {
@@ -208,27 +239,31 @@ export default function SearchableSelect({
   };
 
   const toggleOpen = () => {
-    ignoreOutsideCloseRef.current = true;
     setOpen((current) => {
       const next = !current;
-      if (next) updateMenuPosition();
+      if (next && triggerRef.current) {
+        const container = getPortalContainer(triggerRef.current);
+        setPortalContainer(container);
+        setMenuPosition(computeMenuPosition(triggerRef.current, container));
+      }
       return next;
     });
   };
 
   const menu =
-    open && menuPosition && mounted ? (
+    open && menuPosition && portalContainer && mounted ? (
       <div
         ref={menuRef}
         data-searchable-select-menu
         style={{
-          position: 'fixed',
+          position: menuPosition.positionMode,
           top: menuPosition.top,
           left: menuPosition.left,
           width: menuPosition.width,
-          zIndex: 100000,
+          zIndex: menuPosition.positionMode === 'absolute' ? 60 : 100000,
         }}
-        className="pointer-events-auto overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg"
+        className="overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg"
+        onWheel={(e) => e.stopPropagation()}
       >
         <div className="border-b p-2">
           <div className="relative">
@@ -241,14 +276,17 @@ export default function SearchableSelect({
               className="h-8 pl-8 text-sm"
               onKeyDown={(e) => {
                 if (e.key === 'Escape') setOpen(false);
+                e.stopPropagation();
               }}
+              onMouseDown={(e) => e.stopPropagation()}
             />
           </div>
         </div>
         <div
-          className="overflow-y-auto p-1"
+          className="overflow-y-auto overscroll-contain p-1"
           style={{ maxHeight: Math.max(120, menuPosition.maxHeight - 52) }}
           role="listbox"
+          onWheel={(e) => e.stopPropagation()}
         >
           {filtered.length === 0 ? (
             <p className="px-3 py-4 text-center text-sm text-muted-foreground">{emptyMessage}</p>
@@ -267,9 +305,8 @@ export default function SearchableSelect({
                     role="option"
                     aria-selected={value === opt.value}
                     disabled={opt.disabled}
-                    onPointerDown={(e) => {
+                    onMouseDown={(e) => {
                       e.preventDefault();
-                      e.stopPropagation();
                       pick(opt.value);
                     }}
                     className={cn(
@@ -297,11 +334,7 @@ export default function SearchableSelect({
         aria-label={ariaLabel}
         aria-expanded={open}
         aria-haspopup="listbox"
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
-          toggleOpen();
-        }}
+        onClick={() => toggleOpen()}
         className={cn(
           'flex h-full w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs transition-colors',
           'hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none',
@@ -313,7 +346,7 @@ export default function SearchableSelect({
         <ChevronDown className={cn('size-4 shrink-0 opacity-50 transition', open && 'rotate-180')} />
       </button>
 
-      {mounted && menu ? createPortal(menu, document.body) : null}
+      {mounted && menu ? createPortal(menu, portalContainer) : null}
     </div>
   );
 }
