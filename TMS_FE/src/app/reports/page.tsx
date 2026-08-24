@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Shell, { useMe } from '@/components/Shell';
 import Modal from '@/components/Modal';
@@ -11,7 +11,6 @@ import {
   STATUS_COLOR_FALLBACK,
   SLA_BREACH_BADGE,
   reportsDateQueryParams,
-  type ReportsDateFilterMode,
 } from '@/lib/util';
 import { IconInbox, IconClock, IconMute, IconAlert, IconScale, IconCalendar, IconCheckCircle, IconZap, IconActivity, IconTag, IconUsers, IconDownload } from '@/components/Icons';
 import ReportsDateRangeFilter from '@/components/ReportsDateRangeFilter';
@@ -22,6 +21,12 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@
 import { NativeSelect } from '@/components/ui/native-select';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
+import {
+  clearReportsPageFilters,
+  DEFAULT_REPORTS_PAGE_FILTERS,
+  loadReportsPageFilters,
+  saveReportsPageFilters,
+} from '@/lib/taskListFilters';
 
 function Stat({ icon, chip, label, value, tone, onClick, bar }: {
   icon: React.ReactNode; chip: string; label: string; value: any; tone?: string; onClick?: () => void; bar?: number | null;
@@ -68,16 +73,18 @@ const TD = 'px-3 py-3';
 
 function ReportsInner() {
   const me = useMe();
-  const [dateMode, setDateMode] = useState<ReportsDateFilterMode>('all');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
+  const [dateMode, setDateMode] = useState(DEFAULT_REPORTS_PAGE_FILTERS.dateMode);
+  const [fromDate, setFromDate] = useState(DEFAULT_REPORTS_PAGE_FILTERS.fromDate);
+  const [toDate, setToDate] = useState(DEFAULT_REPORTS_PAGE_FILTERS.toDate);
   const [data, setData] = useState<any>(null);
   const [teams, setTeams] = useState<any[]>([]);
   const [types, setTypes] = useState<any[]>([]);
-  const [teamId, setTeamId] = useState('');
-  const [typeId, setTypeId] = useState('');
+  const [teamId, setTeamId] = useState(DEFAULT_REPORTS_PAGE_FILTERS.teamId);
+  const [typeId, setTypeId] = useState(DEFAULT_REPORTS_PAGE_FILTERS.typeId);
+  const [filtersReady, setFiltersReady] = useState(false);
   const [drill, setDrill] = useState<{ title: string; tasks: any[] } | null>(null);
   const [drillLoading, setDrillLoading] = useState(false);
+  const skipTypeResetRef = useRef(true);
 
   const buildQueryParams = (extra: Record<string, string> = {}) => {
     const sp = new URLSearchParams(reportsDateQueryParams(dateMode, fromDate, toDate));
@@ -95,16 +102,40 @@ function ReportsInner() {
     !!toDate;
 
   const resetFilters = () => {
-    setTeamId('');
-    setTypeId('');
-    setDateMode('all');
-    setFromDate('');
-    setToDate('');
+    setTeamId(DEFAULT_REPORTS_PAGE_FILTERS.teamId);
+    setTypeId(DEFAULT_REPORTS_PAGE_FILTERS.typeId);
+    setDateMode(DEFAULT_REPORTS_PAGE_FILTERS.dateMode);
+    setFromDate(DEFAULT_REPORTS_PAGE_FILTERS.fromDate);
+    setToDate(DEFAULT_REPORTS_PAGE_FILTERS.toDate);
+    clearReportsPageFilters();
   };
 
   useEffect(() => {
+    const stored = loadReportsPageFilters();
+    setDateMode(stored.dateMode);
+    setFromDate(stored.fromDate);
+    setToDate(stored.toDate);
+    setTeamId(stored.teamId);
+    setTypeId(stored.typeId);
+    skipTypeResetRef.current = true;
+    setFiltersReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!filtersReady) return;
+    saveReportsPageFilters({
+      dateMode,
+      fromDate,
+      toDate,
+      teamId,
+      typeId,
+    });
+  }, [dateMode, fromDate, toDate, teamId, typeId, filtersReady]);
+
+  useEffect(() => {
+    if (!filtersReady) return;
     api(`/api/reports?${buildQueryParams()}`).then(setData);
-  }, [dateMode, fromDate, toDate, teamId, typeId]);
+  }, [dateMode, fromDate, toDate, teamId, typeId, filtersReady]);
 
   useEffect(() => {
     if (me && ['ADMIN', 'CEO'].includes(me.role)) {
@@ -113,11 +144,16 @@ function ReportsInner() {
   }, [me]);
 
   useEffect(() => {
-    setTypeId('');
+    if (!filtersReady) return;
+    if (skipTypeResetRef.current) {
+      skipTypeResetRef.current = false;
+    } else {
+      setTypeId('');
+    }
     const tid = me && ['ADMIN', 'CEO'].includes(me.role) ? teamId : me?.team_id ? String(me.team_id) : '';
     if (!tid) { setTypes([]); return; }
     api(`/api/task-types?teamId=${tid}`).then((d) => setTypes(d.types)).catch(() => setTypes([]));
-  }, [teamId, me]);
+  }, [teamId, me, filtersReady]);
 
   const openDrill = async (metric: string, title: string, extra: Record<string, any> = {}) => {
     setDrillLoading(true);

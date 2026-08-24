@@ -7,7 +7,6 @@ import Composer from '@/components/Composer';
 import AckModal from '@/components/AckModal';
 import CommentsPanel from '@/components/CommentsPanel';
 import AuthImage from '@/components/AuthImage';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { api, fmtDateTime, timeAgo, countdown, toLocalInput, fromLocalInput, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, SLA_BREACH_BADGE, PRIORITY_COLOR, uploadUrl, isTaskOverdue, TASK_ACTION_TOAST, activityTypeLabel, toast } from '@/lib/util';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,9 +24,9 @@ import AttachmentMedia from '@/components/AttachmentMedia';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex justify-between items-start gap-3 py-2 border-b border-gray-50 last:border-0">
-      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide pt-0.5">{label}</span>
-      <span className="text-sm text-right">{children}</span>
+    <div className="flex items-start justify-between gap-3 border-b border-gray-50 py-2 last:border-0">
+      <span className="shrink-0 pt-0.5 text-xs font-semibold uppercase tracking-wide text-gray-400">{label}</span>
+      <span className="min-w-0 text-right text-sm break-words">{children}</span>
     </div>
   );
 }
@@ -163,14 +162,14 @@ function TaskDetailInner({ id }: { id: string }) {
   const showActivity = perm.canViewActivity;
 
   return (
-    <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-3">
+    <div className="flex max-h-[calc(100dvh-8rem)] min-h-[calc(100dvh-8rem)] flex-col gap-3">
       <Link href="/tasks" className="shrink-0 text-sm text-muted-foreground hover:text-foreground">← Back to tasks</Link>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card lg:flex-row">
+      <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden rounded-xl border border-border bg-card lg:grid-cols-2">
         {/* Left — Task details */}
-        <section className="flex min-h-0 flex-1 flex-col border-b lg:w-1/2 lg:border-b-0 lg:border-r">
+        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden border-b lg:border-b-0 lg:border-r">
           <PanelHeader title="Task details" />
-          <ScrollArea className="min-h-0 flex-1">
+          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
             <div className="space-y-4 p-4">
               <div>
                 <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -416,15 +415,15 @@ function TaskDetailInner({ id }: { id: string }) {
               )}
 
               {!task.parent_id && (
-                <div>
-                  <div className="mb-2 flex items-center justify-between">
-                    <h3 className="text-sm font-bold">
+                <div className="min-w-0">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="min-w-0 text-sm font-bold">
                       Subtasks{subtasks.length > 0 && (
                         <span className="ml-2 text-emerald-600">{subtasks.filter((s: any) => s.status === 'DONE').length} of {subtasks.length} done</span>
                       )}
                     </h3>
                     {perm.canAddSubtask && (
-                      <Button variant="outline" size="xs" onClick={() => setSubOpen(true)}>+ Add subtask</Button>
+                      <Button variant="outline" size="xs" className="shrink-0" onClick={() => setSubOpen(true)}>+ Add subtask</Button>
                     )}
                   </div>
                   {subtasks.length > 0 && (
@@ -434,7 +433,7 @@ function TaskDetailInner({ id }: { id: string }) {
                   )}
                   <div className="space-y-2">
                     {subtasks.map((s: any) => (
-                      <div key={s.id} className="flex items-center gap-2.5">
+                      <div key={s.id} className="flex min-w-0 items-start gap-2.5">
                         <Checkbox
                           checked={s.status === 'DONE'}
                           disabled={s.status === 'DONE'}
@@ -443,10 +442,10 @@ function TaskDetailInner({ id }: { id: string }) {
                               .then(() => { load(); toast.success('Subtask marked done'); })
                               .catch((e) => { setErr(e.message); toast.errorFrom(e); })
                           }
-                          className="size-5"
+                          className="mt-0.5 size-5 shrink-0"
                         />
                         <div className="min-w-0 flex-1">
-                          <Link href={`/tasks/${s.id}`} className={`block truncate text-sm ${s.status === 'DONE' ? 'text-muted-foreground line-through' : 'font-medium'}`}>{s.title}</Link>
+                          <Link href={`/tasks/${s.id}`} className={`block text-sm break-words ${s.status === 'DONE' ? 'text-muted-foreground line-through' : 'font-medium'}`}>{s.title}</Link>
                           <div className="text-[11px] text-muted-foreground">
                             {s.assignee_name || 'Unassigned'}
                             {s.done_at && <> · ✔ done {fmtDateTime(s.done_at)}</>}
@@ -459,11 +458,11 @@ function TaskDetailInner({ id }: { id: string }) {
                 </div>
               )}
             </div>
-          </ScrollArea>
+          </div>
         </section>
 
         {/* Right — Activity (Admin/CEO) + Comments */}
-        <section className="flex min-h-0 flex-1 flex-col lg:w-1/2">
+        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-background">
           {showActivity && (
             <div className="flex h-44 shrink-0 flex-col overflow-hidden border-b">
               <PanelHeader title="Activity" />

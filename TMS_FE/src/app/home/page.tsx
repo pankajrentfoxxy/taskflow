@@ -8,13 +8,19 @@ import AckModal from '@/components/AckModal';
 import Composer from '@/components/Composer';
 import TaskTemplateButton from '@/components/TaskTemplateButton';
 import TaskDateRangeFilter from '@/components/TaskDateRangeFilter';
-import { api, isDueInWindow, taskDueDateQueryParams, type TaskDueDateFilterMode } from '@/lib/util';
+import { api, isDueInWindow, taskDueDateQueryParams } from '@/lib/util';
 import { onPresenceUpdate, onTaskChanged } from '@/lib/socket';
 import { IconZap, IconAlert, IconActivity, IconCalendar, IconPlus, IconPen, IconSend, IconCheckCircle } from '@/components/Icons';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import SearchableSelect, { buildUserTeamSelectOptions } from '@/components/SearchableSelect';
+import {
+  clearHomePageFilters,
+  DEFAULT_HOME_PAGE_FILTERS,
+  loadHomePageFilters,
+  saveHomePageFilters,
+} from '@/lib/taskListFilters';
 import { cn } from '@/lib/utils';
 
 function Metric({ icon, chip, value, label, hot }: { icon: React.ReactNode; chip: string; value: number; label: string; hot?: boolean }) {
@@ -58,10 +64,11 @@ function HomeInner() {
   const [created, setCreated] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
-  const [filterAssignee, setFilterAssignee] = useState('');
-  const [dueDateMode, setDueDateMode] = useState<TaskDueDateFilterMode>('all');
-  const [dueFromDate, setDueFromDate] = useState('');
-  const [dueToDate, setDueToDate] = useState('');
+  const [filterAssignee, setFilterAssignee] = useState(DEFAULT_HOME_PAGE_FILTERS.filterAssignee);
+  const [dueDateMode, setDueDateMode] = useState(DEFAULT_HOME_PAGE_FILTERS.dueDateMode);
+  const [dueFromDate, setDueFromDate] = useState(DEFAULT_HOME_PAGE_FILTERS.dueFromDate);
+  const [dueToDate, setDueToDate] = useState(DEFAULT_HOME_PAGE_FILTERS.dueToDate);
+  const [filtersReady, setFiltersReady] = useState(false);
   const [ackTask, setAckTask] = useState<any>(null);
   const [commentsTask, setCommentsTask] = useState<any>(null);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -74,6 +81,25 @@ function HomeInner() {
     api('/api/users').then((d) => setUsers(d.users.filter((u: any) => u.is_active)));
     api('/api/teams').then((d) => setTeams(d.teams));
   }, [canFilter]);
+
+  useEffect(() => {
+    const stored = loadHomePageFilters();
+    setFilterAssignee(stored.filterAssignee);
+    setDueDateMode(stored.dueDateMode);
+    setDueFromDate(stored.dueFromDate);
+    setDueToDate(stored.dueToDate);
+    setFiltersReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!filtersReady) return;
+    saveHomePageFilters({
+      filterAssignee,
+      dueDateMode,
+      dueFromDate,
+      dueToDate,
+    });
+  }, [filterAssignee, dueDateMode, dueFromDate, dueToDate, filtersReady]);
 
   useEffect(() => {
     const d = new Date();
@@ -108,7 +134,12 @@ function HomeInner() {
     api(`/api/tasks?${withDue({ filter: 'mine', limit: '300' })}`).then((d) => setMine(d.tasks));
     api(`/api/tasks?${withDue({ filter: 'created', limit: '300' })}`).then((d) => setCreated(d.tasks));
   }, [viewingFiltered, filterAssignee, dueDateMode, dueFromDate, dueToDate]);
-  useEffect(() => { load(); const iv = setInterval(load, 30000); return () => clearInterval(iv); }, [load]);
+  useEffect(() => {
+    if (!filtersReady) return;
+    load();
+    const iv = setInterval(load, 30000);
+    return () => clearInterval(iv);
+  }, [load, filtersReady]);
 
   useEffect(() => onTaskChanged(() => load()), [load]);
   useEffect(() => {
@@ -138,10 +169,11 @@ function HomeInner() {
     !!dueToDate;
 
   const resetFilters = () => {
-    setFilterAssignee('');
-    setDueDateMode('all');
-    setDueFromDate('');
-    setDueToDate('');
+    setFilterAssignee(DEFAULT_HOME_PAGE_FILTERS.filterAssignee);
+    setDueDateMode(DEFAULT_HOME_PAGE_FILTERS.dueDateMode);
+    setDueFromDate(DEFAULT_HOME_PAGE_FILTERS.dueFromDate);
+    setDueToDate(DEFAULT_HOME_PAGE_FILTERS.dueToDate);
+    clearHomePageFilters();
   };
 
   const now = Date.now();

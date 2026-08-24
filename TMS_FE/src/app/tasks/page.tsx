@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback, Suspense } from 'react';
+import { useEffect, useState, useCallback, Suspense, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Shell, { useMe } from '@/components/Shell';
 import TaskTable, { TaskTableSkeleton } from '@/components/TaskTable';
@@ -8,7 +8,7 @@ import CommentsModal from '@/components/CommentsModal';
 import Composer from '@/components/Composer';
 import TaskTemplateButton from '@/components/TaskTemplateButton';
 import TaskDateRangeFilter from '@/components/TaskDateRangeFilter';
-import { api, STATUS_LABEL, taskDueDateQueryParams, type TaskDueDateFilterMode } from '@/lib/util';
+import { api, STATUS_LABEL, taskDueDateQueryParams } from '@/lib/util';
 import { onTaskChanged } from '@/lib/socket';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,12 @@ import { NativeSelect } from '@/components/ui/native-select';
 import SearchableSelect, { buildUserTeamSelectOptions } from '@/components/SearchableSelect';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import {
+  clearTasksPageFilters,
+  DEFAULT_TASKS_PAGE_FILTERS,
+  loadTasksPageFilters,
+  saveTasksPageFilters,
+} from '@/lib/taskListFilters';
 
 const PAGE_SIZE = 15;
 
@@ -23,17 +29,18 @@ function TasksInner() {
   const me = useMe();
   const canFilter = me && ['ADMIN', 'CEO'].includes(me.role);
   const params = useSearchParams();
-  const [filter, setFilter] = useState('mine');
-  const [status, setStatus] = useState('');
-  const [q, setQ] = useState('');
+  const [filter, setFilter] = useState(DEFAULT_TASKS_PAGE_FILTERS.filter);
+  const [status, setStatus] = useState(DEFAULT_TASKS_PAGE_FILTERS.status);
+  const [q, setQ] = useState(DEFAULT_TASKS_PAGE_FILTERS.q);
   const [users, setUsers] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
-  const [filterAssignee, setFilterAssignee] = useState('');
-  const [dueDateMode, setDueDateMode] = useState<TaskDueDateFilterMode>('all');
-  const [dueFromDate, setDueFromDate] = useState('');
-  const [dueToDate, setDueToDate] = useState('');
+  const [filterAssignee, setFilterAssignee] = useState(DEFAULT_TASKS_PAGE_FILTERS.filterAssignee);
+  const [dueDateMode, setDueDateMode] = useState(DEFAULT_TASKS_PAGE_FILTERS.dueDateMode);
+  const [dueFromDate, setDueFromDate] = useState(DEFAULT_TASKS_PAGE_FILTERS.dueFromDate);
+  const [dueToDate, setDueToDate] = useState(DEFAULT_TASKS_PAGE_FILTERS.dueToDate);
   const [tasks, setTasks] = useState<any[]>([]);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(DEFAULT_TASKS_PAGE_FILTERS.page);
+  const [filtersReady, setFiltersReady] = useState(false);
   const [pagination, setPagination] = useState<TaskPaginationMeta>({
     page: 1,
     limit: PAGE_SIZE,
@@ -43,6 +50,21 @@ function TasksInner() {
   const [composerOpen, setComposerOpen] = useState(params.get('new') === '1');
   const [commentsTask, setCommentsTask] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const skipPageResetRef = useRef(true);
+
+  useEffect(() => {
+    const stored = loadTasksPageFilters();
+    setFilter(stored.filter);
+    setStatus(stored.status);
+    setQ(stored.q);
+    setFilterAssignee(stored.filterAssignee);
+    setDueDateMode(stored.dueDateMode);
+    setDueFromDate(stored.dueFromDate);
+    setDueToDate(stored.dueToDate);
+    setPage(stored.page);
+    skipPageResetRef.current = true;
+    setFiltersReady(true);
+  }, []);
 
   useEffect(() => {
     if (!canFilter) return;
@@ -51,6 +73,24 @@ function TasksInner() {
   }, [canFilter]);
 
   useEffect(() => {
+    if (!filtersReady) return;
+    saveTasksPageFilters({
+      filter,
+      status,
+      q,
+      filterAssignee,
+      dueDateMode,
+      dueFromDate,
+      dueToDate,
+      page,
+    });
+  }, [filter, status, q, filterAssignee, dueDateMode, dueFromDate, dueToDate, page, filtersReady]);
+
+  useEffect(() => {
+    if (skipPageResetRef.current) {
+      skipPageResetRef.current = false;
+      return;
+    }
     setPage(1);
   }, [filter, status, q, filterAssignee, dueDateMode, dueFromDate, dueToDate]);
 
@@ -81,7 +121,10 @@ function TasksInner() {
       })
       .finally(() => setLoading(false));
   }, [filter, status, q, canFilter, filterAssignee, page, dueDateMode, dueFromDate, dueToDate]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!filtersReady) return;
+    load();
+  }, [load, filtersReady]);
 
   useEffect(() => onTaskChanged(() => load()), [load]);
 
@@ -95,14 +138,15 @@ function TasksInner() {
     !!dueToDate;
 
   const resetFilters = () => {
-    setFilter('mine');
-    setStatus('');
-    setQ('');
-    setFilterAssignee('');
-    setDueDateMode('all');
-    setDueFromDate('');
-    setDueToDate('');
-    setPage(1);
+    setFilter(DEFAULT_TASKS_PAGE_FILTERS.filter);
+    setStatus(DEFAULT_TASKS_PAGE_FILTERS.status);
+    setQ(DEFAULT_TASKS_PAGE_FILTERS.q);
+    setFilterAssignee(DEFAULT_TASKS_PAGE_FILTERS.filterAssignee);
+    setDueDateMode(DEFAULT_TASKS_PAGE_FILTERS.dueDateMode);
+    setDueFromDate(DEFAULT_TASKS_PAGE_FILTERS.dueFromDate);
+    setDueToDate(DEFAULT_TASKS_PAGE_FILTERS.dueToDate);
+    setPage(DEFAULT_TASKS_PAGE_FILTERS.page);
+    clearTasksPageFilters();
   };
 
   const segments = [

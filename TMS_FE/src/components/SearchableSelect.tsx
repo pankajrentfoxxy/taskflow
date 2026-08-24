@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -24,6 +25,13 @@ type UserLike = {
 type TeamLike = {
   id: number;
   name: string;
+};
+
+type MenuPosition = {
+  top: number;
+  left: number;
+  width: number;
+  maxHeight: number;
 };
 
 export function buildUserSelectOptions(
@@ -79,6 +87,22 @@ export function buildUserTeamSelectOptions(
   return opts?.emptyOption ? [opts.emptyOption, ...options] : options;
 }
 
+function computeMenuPosition(trigger: HTMLElement): MenuPosition {
+  const rect = trigger.getBoundingClientRect();
+  const viewportPadding = 8;
+  const gap = 4;
+  const preferredHeight = 320;
+  const spaceBelow = window.innerHeight - rect.bottom - viewportPadding;
+  const spaceAbove = rect.top - viewportPadding;
+  const openUp = spaceBelow < 220 && spaceAbove > spaceBelow;
+  const maxHeight = Math.min(preferredHeight, openUp ? spaceAbove - gap : spaceBelow - gap);
+  const top = openUp ? Math.max(viewportPadding, rect.top - gap - maxHeight) : rect.bottom + gap;
+  const width = Math.max(rect.width, 220);
+  const left = Math.min(Math.max(viewportPadding, rect.left), window.innerWidth - width - viewportPadding);
+
+  return { top, left, width, maxHeight: Math.max(160, maxHeight) };
+}
+
 export default function SearchableSelect({
   value,
   onChange,
@@ -102,7 +126,11 @@ export default function SearchableSelect({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [menuPosition, setMenuPosition] = useState<MenuPosition | null>(null);
+  const [mounted, setMounted] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const selected = options.find((o) => o.value === value);
@@ -128,10 +156,37 @@ export default function SearchableSelect({
     return [...map.entries()];
   }, [filtered]);
 
+  const updateMenuPosition = useCallback(() => {
+    if (!triggerRef.current) return;
+    setMenuPosition(computeMenuPosition(triggerRef.current));
+  }, []);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!open) {
+      setMenuPosition(null);
+      return;
+    }
+    updateMenuPosition();
+    const onLayout = () => updateMenuPosition();
+    window.addEventListener('resize', onLayout);
+    window.addEventListener('scroll', onLayout, true);
+    return () => {
+      window.removeEventListener('resize', onLayout);
+      window.removeEventListener('scroll', onLayout, true);
+    };
+  }, [open, updateMenuPosition]);
+
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) {
+        setOpen(false);
+      }
     };
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
@@ -147,9 +202,77 @@ export default function SearchableSelect({
     setOpen(false);
   };
 
+  const menu =
+    open && menuPosition && mounted ? (
+      <div
+        ref={menuRef}
+        style={{
+          position: 'fixed',
+          top: menuPosition.top,
+          left: menuPosition.left,
+          width: menuPosition.width,
+          zIndex: 9999,
+        }}
+        className="overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
+      >
+        <div className="border-b p-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              ref={searchRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={searchPlaceholder}
+              className="h-8 pl-8 text-sm"
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setOpen(false);
+              }}
+            />
+          </div>
+        </div>
+        <div
+          className="overflow-y-auto p-1"
+          style={{ maxHeight: Math.max(120, menuPosition.maxHeight - 52) }}
+          role="listbox"
+        >
+          {filtered.length === 0 ? (
+            <p className="px-3 py-4 text-center text-sm text-muted-foreground">{emptyMessage}</p>
+          ) : (
+            groups.map(([group, items]) => (
+              <div key={group || 'default'}>
+                {group && (
+                  <div className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {group}
+                  </div>
+                )}
+                {items.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    role="option"
+                    aria-selected={value === opt.value}
+                    disabled={opt.disabled}
+                    onClick={() => pick(opt.value)}
+                    className={cn(
+                      'flex w-full rounded-sm px-2 py-1.5 text-left text-sm transition-colors',
+                      value === opt.value ? 'bg-accent text-accent-foreground' : 'hover:bg-muted',
+                      opt.disabled && 'cursor-not-allowed opacity-50'
+                    )}
+                  >
+                    <span className="truncate">{opt.label}</span>
+                  </button>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    ) : null;
+
   return (
     <div ref={rootRef} className={cn('relative', className)}>
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled}
         aria-label={ariaLabel}
@@ -167,57 +290,7 @@ export default function SearchableSelect({
         <ChevronDown className={cn('size-4 shrink-0 opacity-50 transition', open && 'rotate-180')} />
       </button>
 
-      {open && (
-        <div className="absolute z-50 mt-1 w-full min-w-[220px] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md">
-          <div className="border-b p-2">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                ref={searchRef}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={searchPlaceholder}
-                className="h-8 pl-8 text-sm"
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') setOpen(false);
-                }}
-              />
-            </div>
-          </div>
-          <div className="max-h-60 overflow-y-auto p-1" role="listbox">
-            {filtered.length === 0 ? (
-              <p className="px-3 py-4 text-center text-sm text-muted-foreground">{emptyMessage}</p>
-            ) : (
-              groups.map(([group, items]) => (
-                <div key={group || 'default'}>
-                  {group && (
-                    <div className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      {group}
-                    </div>
-                  )}
-                  {items.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      role="option"
-                      aria-selected={value === opt.value}
-                      disabled={opt.disabled}
-                      onClick={() => pick(opt.value)}
-                      className={cn(
-                        'flex w-full rounded-sm px-2 py-1.5 text-left text-sm transition-colors',
-                        value === opt.value ? 'bg-accent text-accent-foreground' : 'hover:bg-muted',
-                        opt.disabled && 'cursor-not-allowed opacity-50'
-                      )}
-                    >
-                      <span className="truncate">{opt.label}</span>
-                    </button>
-                  ))}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
+      {mounted && menu ? createPortal(menu, document.body) : null}
     </div>
   );
 }
