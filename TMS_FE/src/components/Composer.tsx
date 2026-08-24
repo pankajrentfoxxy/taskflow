@@ -225,14 +225,16 @@ export default function Composer({
             />
           </div>
         )}
-        <div className="space-y-2">
+        <div className="relative z-20 space-y-2">
           <Label>Assign to</Label>
           <SearchableSelect
             className="h-10"
             value={assignee}
             onChange={setAssignee}
-            placeholder="Choose person or team…"
+            placeholder={users.length ? 'Choose person or team…' : 'Loading people…'}
             searchPlaceholder="Search people or teams…"
+            emptyMessage={users.length ? 'No matching people or teams' : 'No users available'}
+            disabled={users.length === 0 && teams.length === 0}
             options={buildUserTeamSelectOptions(users, teams, { includeTeams: !presetParentId })}
           />
         </div>

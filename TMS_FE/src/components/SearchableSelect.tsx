@@ -132,6 +132,7 @@ export default function SearchableSelect({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const ignoreOutsideCloseRef = useRef(false);
 
   const selected = options.find((o) => o.value === value);
 
@@ -182,14 +183,18 @@ export default function SearchableSelect({
 
   useEffect(() => {
     if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      const target = e.target as Node;
+    const onPointerDown = (event: PointerEvent) => {
+      if (ignoreOutsideCloseRef.current) {
+        ignoreOutsideCloseRef.current = false;
+        return;
+      }
+      const target = event.target as Node;
       if (!rootRef.current?.contains(target) && !menuRef.current?.contains(target)) {
         setOpen(false);
       }
     };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onPointerDown, true);
   }, [open]);
 
   useEffect(() => {
@@ -202,18 +207,28 @@ export default function SearchableSelect({
     setOpen(false);
   };
 
+  const toggleOpen = () => {
+    ignoreOutsideCloseRef.current = true;
+    setOpen((current) => {
+      const next = !current;
+      if (next) updateMenuPosition();
+      return next;
+    });
+  };
+
   const menu =
     open && menuPosition && mounted ? (
       <div
         ref={menuRef}
+        data-searchable-select-menu
         style={{
           position: 'fixed',
           top: menuPosition.top,
           left: menuPosition.left,
           width: menuPosition.width,
-          zIndex: 9999,
+          zIndex: 100000,
         }}
-        className="overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
+        className="pointer-events-auto overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg"
       >
         <div className="border-b p-2">
           <div className="relative">
@@ -252,7 +267,11 @@ export default function SearchableSelect({
                     role="option"
                     aria-selected={value === opt.value}
                     disabled={opt.disabled}
-                    onClick={() => pick(opt.value)}
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      pick(opt.value);
+                    }}
                     className={cn(
                       'flex w-full rounded-sm px-2 py-1.5 text-left text-sm transition-colors',
                       value === opt.value ? 'bg-accent text-accent-foreground' : 'hover:bg-muted',
@@ -278,9 +297,13 @@ export default function SearchableSelect({
         aria-label={ariaLabel}
         aria-expanded={open}
         aria-haspopup="listbox"
-        onClick={() => setOpen((v) => !v)}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleOpen();
+        }}
         className={cn(
-          'flex h-full w-full items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-colors',
+          'flex h-full w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs transition-colors',
           'hover:bg-muted/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none',
           'disabled:cursor-not-allowed disabled:opacity-50',
           !selected && 'text-muted-foreground'
