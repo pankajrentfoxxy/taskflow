@@ -89,11 +89,70 @@ export function ceoDailyReportEmail({ dateKey, taskCount, summary }) {
     title: "Daily report",
     previewText: `${appName} daily report for ${dateKey}`,
     bodyHtml,
-    footerText: "This automated report is sent once daily at 9:00 PM IST to CEO users.",
+    footerText: "This automated report is sent once daily at 9:00 PM IST.",
   });
   const text = `Your ${appName} daily report for ${dateKey} is attached.\nOpen tasks: ${summary?.open ?? "—"}\nNeed attention: ${attention}\nTasks in attachment: ${taskCount}`;
 
   return { subject, html, text };
 }
 
-export default { passwordResetOtpTemplate, ceoDailyReportEmail };
+function roleIntro(role) {
+  switch (role) {
+    case "COLLABORATOR":
+      return "You have been added as a <strong>collaborator</strong> on a new task.";
+    case "WATCHER":
+      return "You have been added as a <strong>watcher</strong> on a new task.";
+    default:
+      return "A new task has been <strong>assigned to you</strong>.";
+  }
+}
+
+export function taskCreatedEmailTemplate({
+  userName,
+  role = "ASSIGNEE",
+  taskTitle,
+  taskTitles = [],
+  dueAt,
+  creatorName,
+  taskUrl,
+}) {
+  const greeting = userName ? `Hi ${userName},` : "Hi,";
+  const intro = roleIntro(role);
+  const titles =
+    taskTitles.length > 1
+      ? `<ul style="margin:12px 0 0;padding-left:20px;">${taskTitles.map((t) => `<li style="margin:4px 0;">${t}</li>`).join("")}</ul>`
+      : `<p style="margin:12px 0 0;font-weight:700;color:#18181b;">${taskTitle}</p>`;
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px;">${greeting}</p>
+    <p style="margin:0 0 8px;">${intro}</p>
+    ${titles}
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:20px 0 0;border-collapse:collapse;">
+      <tr><td style="padding:8px 0;border-bottom:1px solid #e4e4e7;color:#71717a;">Created by</td><td align="right" style="padding:8px 0;border-bottom:1px solid #e4e4e7;font-weight:600;">${creatorName || "—"}</td></tr>
+      <tr><td style="padding:8px 0;color:#71717a;">Due</td><td align="right" style="padding:8px 0;font-weight:600;">${dueAt || "—"}</td></tr>
+    </table>
+    <p style="margin:24px 0 0;text-align:center;">
+      <a href="${taskUrl}" style="display:inline-block;padding:12px 24px;border-radius:8px;background:#18181b;color:#ffffff;text-decoration:none;font-weight:600;">Open task</a>
+    </p>
+  `;
+
+  const subject =
+    taskTitles.length > 1
+      ? `${config.app.name}: ${taskTitles.length} new tasks`
+      : `${config.app.name}: New task — ${taskTitle}`;
+
+  const html = layout({
+    title: "New task",
+    previewText: taskTitles.length > 1 ? `${taskTitles.length} new tasks assigned` : `New task: ${taskTitle}`,
+    bodyHtml,
+    footerText: `You received this because you are involved in this task on ${config.app.name}.`,
+  });
+
+  const text = `${greeting}\n\n${intro.replace(/<[^>]+>/g, "")}\n\n${
+    taskTitles.length > 1 ? taskTitles.map((t) => `- ${t}`).join("\n") : taskTitle
+  }\n\nCreated by: ${creatorName || "—"}\nDue: ${dueAt || "—"}\n\nOpen: ${taskUrl}`;
+
+  return { subject, html, text };
+}
+
+export default { passwordResetOtpTemplate, ceoDailyReportEmail, taskCreatedEmailTemplate };

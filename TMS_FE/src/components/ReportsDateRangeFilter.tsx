@@ -2,6 +2,8 @@
 
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import type { ReportsDateFilterMode } from '@/lib/util';
 import { cn } from '@/lib/utils';
 
@@ -23,6 +25,8 @@ export default function ReportsDateRangeFilter({
   onToDateChange,
   onReset,
   showReset = false,
+  showOverall = true,
+  onShowOverallChange,
   className,
 }: {
   mode: ReportsDateFilterMode;
@@ -33,8 +37,11 @@ export default function ReportsDateRangeFilter({
   onToDateChange: (value: string) => void;
   onReset?: () => void;
   showReset?: boolean;
+  showOverall?: boolean;
+  onShowOverallChange?: (checked: boolean) => void;
   className?: string;
 }) {
+  const dateFilterActive = mode !== 'all';
   return (
     <div className={cn('flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center', className)}>
       <div className="flex flex-wrap gap-1.5">
@@ -70,6 +77,16 @@ export default function ReportsDateRangeFilter({
             aria-label="To date"
           />
         </div>
+      )}
+      {dateFilterActive && onShowOverallChange && (
+        <label className="flex h-8 cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 text-xs">
+          <Checkbox
+            checked={showOverall}
+            onCheckedChange={(checked) => onShowOverallChange(checked === true)}
+            aria-label="Show overall data"
+          />
+          <Label className="cursor-pointer font-normal text-muted-foreground">Show overall</Label>
+        </label>
       )}
       {showReset && onReset && (
         <Button type="button" variant="ghost" size="sm" className="h-8 shrink-0 text-muted-foreground" onClick={onReset}>

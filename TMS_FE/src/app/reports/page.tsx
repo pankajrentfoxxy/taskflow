@@ -81,6 +81,7 @@ function ReportsInner() {
   const [types, setTypes] = useState<any[]>([]);
   const [teamId, setTeamId] = useState(DEFAULT_REPORTS_PAGE_FILTERS.teamId);
   const [typeId, setTypeId] = useState(DEFAULT_REPORTS_PAGE_FILTERS.typeId);
+  const [showOverall, setShowOverall] = useState(DEFAULT_REPORTS_PAGE_FILTERS.showOverall);
   const [filtersReady, setFiltersReady] = useState(false);
   const [drill, setDrill] = useState<{ title: string; tasks: any[] } | null>(null);
   const [drillLoading, setDrillLoading] = useState(false);
@@ -90,6 +91,8 @@ function ReportsInner() {
     const sp = new URLSearchParams(reportsDateQueryParams(dateMode, fromDate, toDate));
     if (teamId) sp.set('teamId', teamId);
     if (typeId) sp.set('taskTypeId', typeId);
+    const hasDateRange = sp.has('createdFrom') || sp.has('days');
+    if (hasDateRange) sp.set('overall', showOverall ? 'true' : 'false');
     for (const [k, v] of Object.entries(extra)) sp.set(k, v);
     return sp;
   };
@@ -99,7 +102,8 @@ function ReportsInner() {
     !!typeId ||
     dateMode !== 'all' ||
     !!fromDate ||
-    !!toDate;
+    !!toDate ||
+    !showOverall;
 
   const resetFilters = () => {
     setTeamId(DEFAULT_REPORTS_PAGE_FILTERS.teamId);
@@ -107,6 +111,7 @@ function ReportsInner() {
     setDateMode(DEFAULT_REPORTS_PAGE_FILTERS.dateMode);
     setFromDate(DEFAULT_REPORTS_PAGE_FILTERS.fromDate);
     setToDate(DEFAULT_REPORTS_PAGE_FILTERS.toDate);
+    setShowOverall(DEFAULT_REPORTS_PAGE_FILTERS.showOverall);
     clearReportsPageFilters();
   };
 
@@ -117,6 +122,7 @@ function ReportsInner() {
     setToDate(stored.toDate);
     setTeamId(stored.teamId);
     setTypeId(stored.typeId);
+    setShowOverall(stored.showOverall);
     skipTypeResetRef.current = true;
     setFiltersReady(true);
   }, []);
@@ -129,13 +135,14 @@ function ReportsInner() {
       toDate,
       teamId,
       typeId,
+      showOverall,
     });
-  }, [dateMode, fromDate, toDate, teamId, typeId, filtersReady]);
+  }, [dateMode, fromDate, toDate, teamId, typeId, showOverall, filtersReady]);
 
   useEffect(() => {
     if (!filtersReady) return;
     api(`/api/reports?${buildQueryParams()}`).then(setData);
-  }, [dateMode, fromDate, toDate, teamId, typeId, filtersReady]);
+  }, [dateMode, fromDate, toDate, teamId, typeId, showOverall, filtersReady]);
 
   useEffect(() => {
     if (me && ['ADMIN', 'CEO'].includes(me.role)) {
@@ -235,6 +242,8 @@ function ReportsInner() {
           onModeChange={setDateMode}
           onFromDateChange={setFromDate}
           onToDateChange={setToDate}
+          showOverall={showOverall}
+          onShowOverallChange={setShowOverall}
           showReset={hasActiveFilters}
           onReset={resetFilters}
         />
@@ -367,33 +376,82 @@ function ReportsInner() {
       )}
 
       {/* Drill-down modal */}
-      <Modal open={!!drill} onClose={() => setDrill(null)} title={drill?.title || ''}>
+      <Modal open={!!drill} onClose={() => setDrill(null)} title={drill?.title || ''} wide>
         {drillLoading ? (
-          <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-14 bg-gray-100 rounded-xl animate-pulse" />)}</div>
-        ) : (
+          <div className="space-y-2">{[1, 2, 3].map((i) => <div key={i} className="h-12 bg-gray-100 rounded-xl animate-pulse" />)}</div>
+        ) : drill && drill.tasks.length > 0 ? (
           <div className="space-y-2">
-            {drill?.tasks.map((tk: any) => (
-              <Link key={tk.id} href={`/tasks/${tk.id}`}
-                className="block border border-gray-200 rounded-xl px-3.5 py-3 hover:border-brand-400 hover:shadow-sm transition"
-                onClick={() => setDrill(null)}>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[11px] font-bold text-gray-400">#{tk.id}</span>
-                  <Badge className={STATUS_COLOR[tk.status] || STATUS_COLOR_FALLBACK}>{STATUS_LABEL[tk.status] || tk.status}</Badge>
-                  {tk.sla_breached_at && tk.status === 'ASSIGNED' && <Badge className={SLA_BREACH_BADGE}>NO RESPONSE</Badge>}
+            <div className="hidden md:grid md:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1.1fr)_minmax(0,0.9fr)] md:gap-3 px-3.5 py-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+              <span>Task</span>
+              <span>Assignee</span>
+              <span>Due date</span>
+              <span>ETA</span>
+              <span>Status</span>
+            </div>
+            {drill.tasks.map((tk: any) => (
+              <Link
+                key={tk.id}
+                href={`/tasks/${tk.id}`}
+                className="block border border-gray-200 rounded-xl px-3.5 py-3 hover:border-brand-400 hover:shadow-sm transition text-sm"
+                onClick={() => setDrill(null)}
+              >
+                {/* Mobile card */}
+                <div className="md:hidden space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <span className="text-[11px] font-bold text-gray-400">#{tk.id}</span>
+                      <div className="font-semibold text-gray-900 break-words leading-snug mt-0.5">{tk.title}</div>
+                    </div>
+                    <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                      <Badge className={cn('shrink-0', STATUS_COLOR[tk.status] || STATUS_COLOR_FALLBACK)}>
+                        {STATUS_LABEL[tk.status] || tk.status}
+                      </Badge>
+                      {tk.sla_breached_at && tk.status === 'ASSIGNED' && (
+                        <Badge className={cn('shrink-0', SLA_BREACH_BADGE)}>NO RESPONSE</Badge>
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs border-t border-gray-100 pt-2.5">
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Assignee</div>
+                      <div className="text-gray-700 mt-0.5 break-words">{tk.assignee_name || 'Unassigned'}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Due date</div>
+                      <div className="text-gray-700 mt-0.5">{fmtDateTime(tk.due_at)}</div>
+                    </div>
+                    <div className="col-span-2">
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">ETA</div>
+                      <div className="text-gray-700 mt-0.5">{tk.eta_at ? fmtDateTime(tk.eta_at) : '—'}</div>
+                    </div>
+                  </div>
                 </div>
-                <div className="font-semibold text-sm mt-1.5">{tk.title}</div>
-                <div className="text-[11px] text-gray-500 mt-1">
-                  {tk.assignee_name || 'Unassigned'} · due {fmtDateTime(tk.due_at)}
-                  {tk.type_name && <> · {tk.type_name}</>}
+
+                {/* Desktop row */}
+                <div className="hidden md:grid md:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1.1fr)_minmax(0,0.9fr)] md:gap-3 md:items-start">
+                  <div className="min-w-0">
+                    <span className="text-[11px] font-bold text-gray-400 mr-1.5">#{tk.id}</span>
+                    <span className="font-semibold text-gray-900 break-words leading-snug">{tk.title}</span>
+                  </div>
+                  <div className="min-w-0 break-words text-gray-600">{tk.assignee_name || 'Unassigned'}</div>
+                  <div className="min-w-0 text-xs text-gray-500">{fmtDateTime(tk.due_at)}</div>
+                  <div className="min-w-0 text-xs text-gray-500">{tk.eta_at ? fmtDateTime(tk.eta_at) : '—'}</div>
+                  <div className="flex flex-wrap items-start gap-1">
+                    <Badge className={cn('shrink-0', STATUS_COLOR[tk.status] || STATUS_COLOR_FALLBACK)}>
+                      {STATUS_LABEL[tk.status] || tk.status}
+                    </Badge>
+                    {tk.sla_breached_at && tk.status === 'ASSIGNED' && (
+                      <Badge className={cn('shrink-0', SLA_BREACH_BADGE)}>NO RESPONSE</Badge>
+                    )}
+                  </div>
                 </div>
               </Link>
             ))}
-            {drill && drill.tasks.length === 0 && (
-              <div className="text-center py-8">
-                <div className="text-3xl mb-2">🎉</div>
-                <div className="text-sm text-gray-400">No tasks in this bucket.</div>
-              </div>
-            )}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <div className="text-3xl mb-2">🎉</div>
+            <div className="text-sm text-gray-400">No tasks in this bucket.</div>
           </div>
         )}
       </Modal>

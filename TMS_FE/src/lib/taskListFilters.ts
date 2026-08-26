@@ -24,6 +24,7 @@ export type ReportsPageFilters = {
   toDate: string;
   teamId: string;
   typeId: string;
+  showOverall: boolean;
 };
 
 const TASKS_KEY = 'tf-tasks-filters';
@@ -54,6 +55,7 @@ export const DEFAULT_REPORTS_PAGE_FILTERS: ReportsPageFilters = {
   toDate: '',
   teamId: '',
   typeId: '',
+  showOverall: true,
 };
 
 function readStored<T>(key: string, defaults: T): T {
@@ -112,12 +114,16 @@ export function clearHomePageFilters() {
   sessionStorage.removeItem(HOME_KEY);
 }
 
+const REPORTS_DATE_MODES: ReportsDateFilterMode[] = ['all', 'today', '7', '30', '90', 'range'];
+
 export function loadReportsPageFilters(): ReportsPageFilters {
   const stored = readStored(REPORTS_KEY, DEFAULT_REPORTS_PAGE_FILTERS);
   return {
     ...stored,
-    dateMode:
-      stored.dateMode === 'today' || stored.dateMode === 'range' ? stored.dateMode : 'all',
+    dateMode: REPORTS_DATE_MODES.includes(stored.dateMode as ReportsDateFilterMode)
+      ? stored.dateMode
+      : 'all',
+    showOverall: stored.showOverall !== false,
   };
 }
 

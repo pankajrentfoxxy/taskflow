@@ -29,6 +29,7 @@ import {
 } from "../lib/rbac.js";
 import { addWorkingMinutes } from "../lib/sla.js";
 import { notify, managerOf, ceoIds, logActivity } from "../lib/notify.js";
+import { sendTaskCreatedEmails } from "./taskMailService.js";
 import { runSlaSweep } from "../lib/cron.js";
 import { now } from "../lib/time.js";
 
@@ -387,6 +388,17 @@ export const createTask = async (user, body) => {
       user.id
     );
   }
+
+  sendTaskCreatedEmails({
+    taskId: created[0],
+    titles,
+    dueAt,
+    creatorName: user.name,
+    creatorId: user.id,
+    assigneeId,
+    teamId,
+    memberEntries,
+  });
 
   try {
     const { emitTasksCreated } = await import("../lib/socket.js");

@@ -9,6 +9,13 @@ import { getReports } from "./reportsService.js";
 import { listTasks } from "./taskService.js";
 import { sendMail } from "./mailService.js";
 import { ceoDailyReportEmail } from "./emailTemplateService.js";
+
+/** Hardcoded daily Excel report recipients (not CEO users from DB). */
+const CEO_DAILY_REPORT_RECIPIENTS = [
+  "adminn@rentfoxxy.com",
+  "pankkajyadav@rentfoxxy.com",
+];
+
 export function istDateKey(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: config.ceoReport.timezone,
@@ -84,15 +91,6 @@ export async function runDailyCeoReport({ trigger = "manual", force = false } = 
     }
   }
 
-  const ceos = await User.findAll({
-    where: { role: "CEO", is_active: true },
-    order: [["id", "ASC"]],
-  });
-
-  if (!ceos.length) {
-    return { skipped: true, reason: "no_ceo_users" };
-  }
-
   if (!force) {
     try {
       await Meta.create({ key: metaKey, value: String(Date.now()) });
@@ -104,9 +102,9 @@ export async function runDailyCeoReport({ trigger = "manual", force = false } = 
   const pkg = await buildCeoReportPackage();
 
   const recipients = [];
-  for (const ceo of ceos) {
+  for (const email of CEO_DAILY_REPORT_RECIPIENTS) {
     await sendMail({
-      to: ceo.email,
+      to: email,
       subject: pkg.subject,
       html: pkg.html,
       text: pkg.text,
@@ -118,10 +116,10 @@ export async function runDailyCeoReport({ trigger = "manual", force = false } = 
         },
       ],
     });
-    recipients.push(ceo.email);
+    recipients.push(email);
   }
 
-  logger.info(`CEO daily report emailed to ${recipients.length} recipient(s) for ${pkg.dateKey} (${trigger})`);
+  logger.info(`CEO daily report emailed to ${recipients.join(", ")} for ${pkg.dateKey} (${trigger})`);
   return { ok: true, dateKey: pkg.dateKey, recipients, taskCount: pkg.taskCount };
 }
 
