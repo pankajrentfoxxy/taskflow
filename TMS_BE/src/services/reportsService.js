@@ -31,7 +31,7 @@ function eventInRangeSql(column, window) {
   return `${column} >= :since`;
 }
 
-/** Assign-date filter for open/done; event-date filter for overdue / SLA / escalation when a date range is set. */
+/** Assign-date filter for open/total; event-date filter for overdue / SLA / escalation / done when a date range is set. */
 function buildReportDateFilters({ days, createdFrom, createdTo, overall, t }) {
   const window = resolveAssignDateWindow({ days, createdFrom, createdTo, t });
   const useAssignFilter = !overall && window.hasRange;
@@ -40,12 +40,6 @@ function buildReportDateFilters({ days, createdFrom, createdTo, overall, t }) {
     ? window.until != null
       ? "t.created_at >= :since AND t.created_at <= :until"
       : "t.created_at >= :since"
-    : "1=1";
-
-  const doneSql = useAssignFilter
-    ? window.until != null
-      ? "t.done_at >= :since AND t.done_at <= :until"
-      : "t.done_at >= :since"
     : "1=1";
 
   const dateParams = window.hasRange
@@ -57,27 +51,30 @@ function buildReportDateFilters({ days, createdFrom, createdTo, overall, t }) {
   const overdueEventSql = eventInRangeSql("t.due_at", window);
   const slaEventSql = eventInRangeSql("t.sla_breached_at", window);
   const escalatedEventSql = eventInRangeSql("t.escalated_at", window);
+  const doneEventSql = eventInRangeSql("t.done_at", window);
 
   return {
     window,
     useAssignFilter,
     assignSql,
-    doneSql,
     dateParams,
     overdueEventSql,
     slaEventSql,
     escalatedEventSql,
+    doneEventSql,
   };
 }
 
-/** Date clause for list drill-down: event dates for status metrics, assign date for open/done/total. */
+/** Date clause for list drill-down: event dates for status metrics, assign date for open/total. */
 function listDateClause(listMetric, filters) {
-  const { assignSql, overdueEventSql, slaEventSql, escalatedEventSql, window } = filters;
+  const { assignSql, overdueEventSql, slaEventSql, escalatedEventSql, doneEventSql, window } =
+    filters;
   if (!window.hasRange) return assignSql;
   if (listMetric === "overdue" && overdueEventSql) return overdueEventSql;
   if (listMetric === "no_response" && slaEventSql) return slaEventSql;
   if (listMetric === "esc_awaiting" && escalatedEventSql) return escalatedEventSql;
   if (listMetric === "esc_pending" && escalatedEventSql) return escalatedEventSql;
+  if (listMetric === "done" && doneEventSql) return doneEventSql;
   return assignSql;
 }
 
@@ -97,12 +94,13 @@ export const getReports = async (
     overall: useOverall,
     t,
   });
-  const { assignSql, doneSql, dateParams, window, overdueEventSql, slaEventSql, escalatedEventSql } =
+  const { assignSql, dateParams, window, overdueEventSql, slaEventSql, escalatedEventSql, doneEventSql } =
     filters;
 
-  const overdueDateSql = overdueEventSql || assignSql;
-  const slaDateSql = slaEventSql || assignSql;
-  const escalatedDateSql = escalatedEventSql || assignSql;
+  const overdueDateSql = overdueEventSql || "1=1";
+  const slaDateSql = slaEventSql || "1=1";
+  const escalatedDateSql = escalatedEventSql || "1=1";
+  const doneDateSql = doneEventSql || "1=1";
 
   const teamFilter = teamId ? Number(teamId) : null;
   const typeFilter = taskTypeId ? Number(taskTypeId) : null;
@@ -169,7 +167,7 @@ export const getReports = async (
         cp.weekEnd = t + 7 * 24 * 3600 * 1000;
         break;
       case "done":
-        cond = `t.status = 'DONE' AND (${doneSql})`;
+        cond = "t.status = 'DONE'";
         break;
       case "escalations":
         cond = "t.escalated_at IS NOT NULL";
@@ -244,7 +242,7 @@ export const getReports = async (
 
   const doneRow = await one(
     `SELECT COUNT(*)::int AS c, SUM(CASE WHEN t.done_at <= t.due_at THEN 1 ELSE 0 END)::int AS ontime
-     FROM tasks t WHERE ${scope} AND t.status = 'DONE' AND (${assignSql}) AND (${doneSql})`,
+     FROM tasks t WHERE ${scope} AND t.status = 'DONE' AND (${doneDateSql})`,
     baseRepl
   );
 
@@ -278,8 +276,8 @@ export const getReports = async (
       COALESCE(SUM(CASE WHEN t.id IS NOT NULL AND t.status NOT IN ('DONE','CANCELLED') AND t.due_at < :t AND (${overdueDateSql}) THEN 1 ELSE 0 END), 0)::int AS overdue,
       COALESCE(SUM(CASE WHEN t.id IS NOT NULL AND t.status = 'ASSIGNED' AND t.sla_breached_at IS NOT NULL AND (${slaDateSql}) THEN 1 ELSE 0 END), 0)::int AS no_response,
       COALESCE(SUM(CASE WHEN t.id IS NOT NULL AND t.escalated_at IS NOT NULL AND (${escalatedDateSql}) THEN 1 ELSE 0 END), 0)::int AS escalations,
-      COALESCE(SUM(CASE WHEN t.id IS NOT NULL AND t.status = 'DONE' AND (${assignSql}) AND (${doneSql}) THEN 1 ELSE 0 END), 0)::int AS done,
-      COALESCE(SUM(CASE WHEN t.id IS NOT NULL AND t.status = 'DONE' AND t.done_at <= t.due_at AND (${assignSql}) AND (${doneSql}) THEN 1 ELSE 0 END), 0)::int AS done_ontime,
+      COALESCE(SUM(CASE WHEN t.id IS NOT NULL AND t.status = 'DONE' AND (${doneDateSql}) THEN 1 ELSE 0 END), 0)::int AS done,
+      COALESCE(SUM(CASE WHEN t.id IS NOT NULL AND t.status = 'DONE' AND t.done_at <= t.due_at AND (${doneDateSql}) THEN 1 ELSE 0 END), 0)::int AS done_ontime,
       ROUND(AVG(CASE WHEN t.id IS NOT NULL AND t.acknowledged_at IS NOT NULL AND (${assignSql}) THEN (t.acknowledged_at - t.created_at) / 60000.0 END))::int AS avg_response_min
      FROM users u
      LEFT JOIN teams tm ON tm.id = u.team_id
@@ -289,17 +287,21 @@ export const getReports = async (
     { replacements: { ...baseRepl, t }, type: QueryTypes.SELECT }
   );
 
+  const byTypeWhere = window.hasRange
+    ? `${scope} AND ((${assignSql}) OR (t.status = 'DONE' AND (${doneDateSql})))`
+    : `${scope} AND (${assignSql})`;
+
   const byType = await sequelize.query(
     `SELECT tt.id, tt.name, tm.name AS team_name,
       COUNT(*)::int AS total,
       SUM(CASE WHEN t.status NOT IN ('DONE','CANCELLED') THEN 1 ELSE 0 END)::int AS open,
       SUM(CASE WHEN t.status NOT IN ('DONE','CANCELLED') AND t.due_at < :t AND (${overdueDateSql}) THEN 1 ELSE 0 END)::int AS overdue,
       SUM(CASE WHEN t.status = 'ASSIGNED' AND t.sla_breached_at IS NOT NULL AND (${slaDateSql}) THEN 1 ELSE 0 END)::int AS no_response,
-      SUM(CASE WHEN t.status = 'DONE' AND (${doneSql}) THEN 1 ELSE 0 END)::int AS done
+      SUM(CASE WHEN t.status = 'DONE' AND (${doneDateSql}) THEN 1 ELSE 0 END)::int AS done
      FROM tasks t
      JOIN task_types tt ON tt.id = t.task_type_id
      JOIN teams tm ON tm.id = tt.team_id
-     WHERE ${scope} AND (${assignSql})
+     WHERE ${byTypeWhere}
      GROUP BY tt.id, tt.name, tm.name
      ORDER BY tm.name, tt.name`,
     { replacements: { ...baseRepl, t }, type: QueryTypes.SELECT }
