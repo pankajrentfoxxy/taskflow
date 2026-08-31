@@ -102,31 +102,7 @@ export const getReports = async (
   const escalatedDateSql = escalatedEventSql || "1=1";
   const doneDateSql = doneEventSql || "1=1";
 
-  const teamFilter = teamId ? Number(teamId) : null;
-  const typeFilter = taskTypeId ? Number(taskTypeId) : null;
-
-  let scope = "t.deleted = false";
-  const sp = {};
-
-  if (user.role === "MEMBER") {
-    scope += " AND t.assignee_id = :scopeUid";
-    sp.scopeUid = user.id;
-  } else if (user.role === "MANAGER" && user.team_id) {
-    scope += " AND (t.assignee_id IN (SELECT id FROM users WHERE team_id = :scopeTeamId) OR t.assigned_team_id = :scopeTeamId2)";
-    sp.scopeTeamId = user.team_id;
-    sp.scopeTeamId2 = user.team_id;
-  }
-
-  if (teamFilter && ["ADMIN", "CEO"].includes(user.role)) {
-    scope += " AND (t.assignee_id IN (SELECT id FROM users WHERE team_id = :filterTeamId) OR t.assigned_team_id = :filterTeamId2)";
-    sp.filterTeamId = teamFilter;
-    sp.filterTeamId2 = teamFilter;
-  }
-  if (typeFilter) {
-    scope += " AND t.task_type_id = :typeFilter";
-    sp.typeFilter = typeFilter;
-  }
-
+  const { scope, sp } = buildReportScope(user, { teamId, taskTypeId });
   const baseRepl = { ...sp, ...dateParams };
 
   if (listMetric) {
@@ -310,4 +286,64 @@ export const getReports = async (
   return { summary, people, byType, scope: user.role };
 };
 
-export default { getReports };
+function buildReportScope(user, { teamId, taskTypeId } = {}) {
+  let scope = "t.deleted = false";
+  const sp = {};
+
+  if (user.role === "MEMBER") {
+    scope += " AND t.assignee_id = :scopeUid";
+    sp.scopeUid = user.id;
+  } else if (user.role === "MANAGER" && user.team_id) {
+    scope += " AND (t.assignee_id IN (SELECT id FROM users WHERE team_id = :scopeTeamId) OR t.assigned_team_id = :scopeTeamId2)";
+    sp.scopeTeamId = user.team_id;
+    sp.scopeTeamId2 = user.team_id;
+  }
+
+  const teamFilter = teamId ? Number(teamId) : null;
+  const typeFilter = taskTypeId ? Number(taskTypeId) : null;
+
+  if (teamFilter && ["ADMIN", "CEO"].includes(user.role)) {
+    scope += " AND (t.assignee_id IN (SELECT id FROM users WHERE team_id = :filterTeamId) OR t.assigned_team_id = :filterTeamId2)";
+    sp.filterTeamId = teamFilter;
+    sp.filterTeamId2 = teamFilter;
+  }
+  if (typeFilter) {
+    scope += " AND t.task_type_id = :typeFilter";
+    sp.typeFilter = typeFilter;
+  }
+
+  return { scope, sp };
+}
+
+/** Tasks for Excel export — same assign-date window as reports page "Today" (overall off). */
+export async function fetchReportTasksForExcel(user, { createdFrom, createdTo }) {
+  await runSlaSweep();
+
+  const filters = buildReportDateFilters({
+    days: 0,
+    createdFrom,
+    createdTo,
+    overall: false,
+    t: now(),
+  });
+  const { scope, sp } = buildReportScope(user);
+  const repl = { ...sp, ...filters.dateParams };
+
+  return sequelize.query(
+    `SELECT t.id, t.title, t.status, t.priority, t.due_at, t.eta_at, t.created_at,
+      ua.name AS assignee_name, uc.name AS creator_name,
+      tm.name AS team_name, tt.name AS type_name,
+      (SELECT COUNT(*)::int FROM comments c WHERE c.task_id = t.id) AS comment_count
+     FROM tasks t
+     LEFT JOIN users ua ON ua.id = t.assignee_id
+     LEFT JOIN users uc ON uc.id = t.creator_id
+     LEFT JOIN teams tm ON tm.id = t.assigned_team_id
+     LEFT JOIN task_types tt ON tt.id = t.task_type_id
+     WHERE ${scope} AND (${filters.assignSql}) AND t.deleted = false
+     ORDER BY t.created_at DESC
+     LIMIT 5000`,
+    { replacements: repl, type: QueryTypes.SELECT }
+  );
+};
+
+export default { getReports, fetchReportTasksForExcel };

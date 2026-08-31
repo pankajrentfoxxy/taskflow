@@ -238,13 +238,16 @@ export function taskNeedsEscalationReview(task: {
 
 /** Creator, Admin, or CEO may change assignee from the task list (managers via API). */
 export function canReassignTask(
-  task: { creator_id?: number; status?: string },
+  task: { creator_id?: number; status?: string; parent_id?: number | null },
   viewer?: { id?: number; role?: string } | null,
+  parentTask?: { creator_id?: number } | null,
 ): boolean {
   if (!viewer?.id) return false;
   if (['DONE', 'CANCELLED', 'REJECTED'].includes(task.status || '')) return false;
   if (viewer.role === 'ADMIN' || viewer.role === 'CEO') return true;
-  return task.creator_id === viewer.id;
+  if (task.creator_id === viewer.id) return true;
+  if (parentTask?.creator_id === viewer.id) return true;
+  return false;
 }
 
 /** Pulse + badge for creator (discuss/block/reject) or Admin/CEO (escalation review). */

@@ -1,13 +1,14 @@
 'use client';
 import { useEffect, useState, useCallback, use } from 'react';
 import Link from 'next/link';
-import Shell from '@/components/Shell';
+import Shell, { useMe } from '@/components/Shell';
+import ReassignAssigneeModal from '@/components/ReassignAssigneeModal';
 import Modal from '@/components/Modal';
 import Composer from '@/components/Composer';
 import AckModal from '@/components/AckModal';
 import CommentsPanel from '@/components/CommentsPanel';
 import AuthImage from '@/components/AuthImage';
-import { api, fmtDateTime, timeAgo, countdown, toLocalInput, fromLocalInput, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, SLA_BREACH_BADGE, PRIORITY_COLOR, uploadUrl, isTaskOverdue, TASK_ACTION_TOAST, activityTypeLabel, toast } from '@/lib/util';
+import { api, fmtDateTime, timeAgo, countdown, toLocalInput, fromLocalInput, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, SLA_BREACH_BADGE, PRIORITY_COLOR, uploadUrl, isTaskOverdue, canReassignTask, TASK_ACTION_TOAST, activityTypeLabel, toast } from '@/lib/util';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -57,6 +58,9 @@ function TaskDetailInner({ id }: { id: string }) {
   const [addMemberUserId, setAddMemberUserId] = useState('');
   const [addMemberRole, setAddMemberRole] = useState<'COLLABORATOR' | 'WATCHER'>('COLLABORATOR');
   const [users, setUsers] = useState<any[]>([]);
+  const [reassignSubtask, setReassignSubtask] = useState<any>(null);
+  const me = useMe();
+  const viewer = me ? { id: me.id, role: me.role } : null;
 
   const load = useCallback(() => {
     api(`/api/tasks/${id}`).then(setData).catch((e) => setErr(e.message));
@@ -447,7 +451,18 @@ function TaskDetailInner({ id }: { id: string }) {
                         <div className="min-w-0 flex-1">
                           <Link href={`/tasks/${s.id}`} className={`block text-sm break-words ${s.status === 'DONE' ? 'text-muted-foreground line-through' : 'font-medium'}`}>{s.title}</Link>
                           <div className="text-[11px] text-muted-foreground">
-                            {s.assignee_name || 'Unassigned'}
+                            {canReassignTask(s, viewer, task) ? (
+                              <button
+                                type="button"
+                                className="rounded underline decoration-dotted underline-offset-2 hover:text-foreground"
+                                title="Change assignee"
+                                onClick={() => setReassignSubtask(s)}
+                              >
+                                {s.assignee_name || 'Assign someone'}
+                              </button>
+                            ) : (
+                              s.assignee_name || 'Unassigned'
+                            )}
                             {s.done_at && <> · ✔ done {fmtDateTime(s.done_at)}</>}
                           </div>
                         </div>
@@ -533,6 +548,12 @@ function TaskDetailInner({ id }: { id: string }) {
         <Textarea className="mb-3 min-h-[80px]" value={reasonText} onChange={(e) => setReasonText(e.target.value)} />
         <Button className="w-full" onClick={submitReason} disabled={!reasonText.trim()}>Submit</Button>
       </Modal>
+      <ReassignAssigneeModal
+        task={reassignSubtask}
+        open={!!reassignSubtask}
+        onClose={() => setReassignSubtask(null)}
+        onDone={load}
+      />
     </div>
   );
 }

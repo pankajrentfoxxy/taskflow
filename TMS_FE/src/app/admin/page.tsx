@@ -17,13 +17,26 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { Pencil, Trash2 } from 'lucide-react';
 
+function digitsOnlyPhone(value: string) {
+  return value.replace(/\D/g, '').slice(0, 10);
+}
+
+function phoneValidationError(phone: string): string | null {
+  const trimmed = phone.trim();
+  if (!trimmed) return null;
+  if (!/^\d{10}$/.test(digitsOnlyPhone(trimmed))) {
+    return 'Enter a valid 10-digit phone number';
+  }
+  return null;
+}
+
 function AdminInner() {
   const me = useMe();
   const [users, setUsers] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [userOpen, setUserOpen] = useState(false);
   const [teamOpen, setTeamOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'MEMBER', teamId: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', phone: '', role: 'MEMBER', teamId: '' });
   const [teamForm, setTeamForm] = useState({ name: '', managerId: '' });
   const [editTeam, setEditTeam] = useState<any>(null);
   const [editTeamForm, setEditTeamForm] = useState({ name: '', managerId: '', memberIds: [] as number[] });
@@ -33,6 +46,9 @@ function AdminInner() {
   const [editType, setEditType] = useState<any>(null);
   const [editTypeForm, setEditTypeForm] = useState({ name: '' });
   const [savingType, setSavingType] = useState(false);
+  const [editPhoneUser, setEditPhoneUser] = useState<any>(null);
+  const [phoneForm, setPhoneForm] = useState('');
+  const [savingPhone, setSavingPhone] = useState(false);
   const [err, setErr] = useState('');
 
   const notifyErr = (e: unknown) => {
@@ -71,12 +87,22 @@ function AdminInner() {
 
   const createUser = async () => {
     setErr('');
+    const phoneErr = phoneValidationError(form.phone);
+    if (phoneErr) {
+      setErr(phoneErr);
+      toast.error(phoneErr);
+      return;
+    }
     try {
       await api('/api/users', {
         method: 'POST',
-        body: JSON.stringify({ ...form, teamId: form.teamId ? Number(form.teamId) : null }),
+        body: JSON.stringify({
+          ...form,
+          phone: form.phone.trim() ? digitsOnlyPhone(form.phone) : null,
+          teamId: form.teamId ? Number(form.teamId) : null,
+        }),
       });
-      setUserOpen(false); setForm({ name: '', email: '', password: '', role: 'MEMBER', teamId: '' }); load();
+      setUserOpen(false); setForm({ name: '', email: '', password: '', phone: '', role: 'MEMBER', teamId: '' }); load();
       toast.success('User created');
     } catch (e: any) { notifyErr(e); }
   };
@@ -97,6 +123,44 @@ function AdminInner() {
     api('/api/users', { method: 'PATCH', body: JSON.stringify({ id, ...body }) })
       .then(() => { toast.success('User updated'); load(); })
       .catch((e) => notifyErr(e));
+
+  const openEditPhone = (u: any) => {
+    setErr('');
+    setEditPhoneUser(u);
+    setPhoneForm(u.phone || '');
+  };
+
+  const savePhoneEdit = async () => {
+    if (!editPhoneUser) return;
+    setErr('');
+    const phoneErr = phoneValidationError(phoneForm);
+    if (phoneErr) {
+      setErr(phoneErr);
+      toast.error(phoneErr);
+      return;
+    }
+    setSavingPhone(true);
+    try {
+      const next = phoneForm.trim();
+      await api('/api/users', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          id: editPhoneUser.id,
+          phone: next ? digitsOnlyPhone(next) : null,
+        }),
+      });
+      setEditPhoneUser(null);
+      toast.success('Phone updated');
+      load();
+    } catch (e: any) {
+      notifyErr(e);
+    } finally {
+      setSavingPhone(false);
+    }
+  };
+
+  const phoneEditError = phoneValidationError(phoneForm);
+  const createPhoneError = phoneValidationError(form.phone);
 
   const deleteType = async (tt: any) => {
     if (Number(tt.used_count) > 0) {
@@ -334,6 +398,7 @@ function AdminInner() {
                 <TableHead className="px-4 py-2.5">Name</TableHead>
                 <TableHead className="px-2 py-2.5">Role</TableHead>
                 <TableHead className="px-2 py-2.5">Team</TableHead>
+                <TableHead className="px-2 py-2.5">Phone</TableHead>
                 <TableHead className="px-2 py-2.5">Status</TableHead>
                 <TableHead className="px-2 py-2.5"></TableHead>
               </TableRow>
@@ -355,6 +420,21 @@ function AdminInner() {
                       <option value="">—</option>
                       {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                     </NativeSelect>
+                  </TableCell>
+                  <TableCell className="px-2 py-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="min-w-[4.5rem] text-xs tabular-nums">{u.phone || '—'}</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon-xs"
+                        title={`Edit phone for ${u.name}`}
+                        onClick={() => openEditPhone(u)}
+                      >
+                        <Pencil />
+                        <span className="sr-only">Edit phone</span>
+                      </Button>
+                    </div>
                   </TableCell>
                   <TableCell className="px-2 py-2">
                     <Badge
@@ -466,6 +546,30 @@ function AdminInner() {
         </div>
       </Modal>
 
+      <Modal open={!!editPhoneUser} onClose={() => setEditPhoneUser(null)} title={editPhoneUser ? `Edit phone — ${editPhoneUser.name}` : 'Edit phone'}>
+        <div className="space-y-4">
+          <div>
+            <Label>Phone (WhatsApp)</Label>
+            <Input
+              placeholder="7081002501"
+              inputMode="numeric"
+              maxLength={10}
+              value={phoneForm}
+              onChange={(e) => setPhoneForm(digitsOnlyPhone(e.target.value))}
+              autoFocus
+            />
+            {phoneEditError ? (
+              <p className="mt-1.5 text-xs text-destructive">{phoneEditError}</p>
+            ) : (
+              <p className="mt-1.5 text-xs text-muted-foreground">10-digit mobile number for task WhatsApp notifications.</p>
+            )}
+          </div>
+          <Button className="w-full" onClick={savePhoneEdit} disabled={savingPhone || !!phoneEditError}>
+            {savingPhone ? 'Saving…' : 'Save'}
+          </Button>
+        </div>
+      </Modal>
+
       <Modal open={userOpen} onClose={() => setUserOpen(false)} title="Add user">
         <div className="space-y-3">
           <div>
@@ -475,6 +579,19 @@ function AdminInner() {
           <div>
             <Label>Email</Label>
             <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          </div>
+          <div>
+            <Label>Phone (WhatsApp)</Label>
+            <Input
+              placeholder="7081002501"
+              inputMode="numeric"
+              maxLength={10}
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: digitsOnlyPhone(e.target.value) })}
+            />
+            {createPhoneError && (
+              <p className="mt-1 text-xs text-destructive">{createPhoneError}</p>
+            )}
           </div>
           <div>
             <Label>Password</Label>
@@ -495,7 +612,13 @@ function AdminInner() {
               </NativeSelect>
             </div>
           </div>
-          <Button className="w-full" onClick={createUser} disabled={!form.name || !form.email || !form.password}>Create user</Button>
+          <Button
+            className="w-full"
+            onClick={createUser}
+            disabled={!form.name || !form.email || !form.password || !!createPhoneError}
+          >
+            Create user
+          </Button>
         </div>
       </Modal>
 

@@ -4,6 +4,7 @@ import logger from "../config/logger.js";
 import { User, Team } from "../models/index.js";
 import { sendMail } from "./mailService.js";
 import { taskCreatedEmailTemplate } from "./emailTemplateService.js";
+import { sendInteraktTemplate, INTERAKT_TEMPLATES } from "./interaktService.js";
 
 function appBaseUrl() {
   const origin = config.corsOrigin?.[0] || "http://localhost:6070";
@@ -21,7 +22,48 @@ function fmtDue(dueAt) {
   });
 }
 
-async function sendTaskCreatedEmailsAsync({
+/** DD-MM-YYYY for Interakt templates */
+function fmtDueWhatsApp(dueAt) {
+  if (dueAt == null || dueAt === "") return "—";
+  const d = new Date(Number(dueAt));
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${day}-${month}-${year}`;
+}
+
+function buildWhatsAppMessage({ role, userName, titles, creatorName, dueWhatsApp }) {
+  const name = userName || "User";
+  const primaryTitle = titles[0] || "New task";
+
+  if (role === "COLLABORATOR") {
+    return {
+      templateName: INTERAKT_TEMPLATES.ADDED_AS_COLLABORATOR,
+      bodyValues: [name, primaryTitle, creatorName || "—", dueWhatsApp],
+    };
+  }
+
+  if (role === "WATCHER") {
+    return {
+      templateName: INTERAKT_TEMPLATES.ADDED_AS_WATCHER,
+      bodyValues: [name, primaryTitle, creatorName || "—", dueWhatsApp],
+    };
+  }
+
+  if (titles.length > 1) {
+    return {
+      templateName: INTERAKT_TEMPLATES.MULTIPLE_TASKS,
+      bodyValues: [name, String(titles.length)],
+    };
+  }
+
+  return {
+    templateName: INTERAKT_TEMPLATES.TASK_ADD,
+    bodyValues: [name, primaryTitle, creatorName || "—", dueWhatsApp],
+  };
+}
+
+async function sendTaskCreatedNotificationsAsync({
   taskId,
   titles,
   dueAt,
@@ -59,16 +101,16 @@ async function sendTaskCreatedEmailsAsync({
 
   const users = await User.findAll({
     where: { id: { [Op.in]: [...recipients.keys()] }, is_active: true },
-    attributes: ["id", "name", "email"],
+    attributes: ["id", "name", "email", "phone"],
   });
 
   const taskUrl = `${appBaseUrl()}/tasks/${taskId}`;
   const dueLabel = fmtDue(dueAt);
+  const dueWhatsApp = fmtDueWhatsApp(dueAt);
   const primaryTitle = titles[0] || "New task";
   const titleLabel = titles.length > 1 ? `${titles.length} new tasks` : primaryTitle;
 
   for (const user of users) {
-    if (!user.email) continue;
     const role = recipients.get(user.id) || "ASSIGNEE";
     const template = taskCreatedEmailTemplate({
       userName: user.name,
@@ -80,20 +122,40 @@ async function sendTaskCreatedEmailsAsync({
       taskUrl,
     });
 
-    await sendMail({
-      to: user.email,
-      subject: template.subject,
-      html: template.html,
-      text: template.text,
-    });
+    if (user.email) {
+      await sendMail({
+        to: user.email,
+        subject: template.subject,
+        html: template.html,
+        text: template.text,
+      });
+    }
+
+    if (user.phone && config.interakt.apiKey) {
+      const { templateName, bodyValues } = buildWhatsAppMessage({
+        role,
+        userName: user.name,
+        titles,
+        creatorName,
+        dueWhatsApp,
+      });
+
+      try {
+        await sendInteraktTemplate({ phone: user.phone, templateName, bodyValues });
+      } catch (err) {
+        logger.error(`WhatsApp to ${user.phone} failed (${templateName}): ${err.message}`);
+      }
+    }
   }
 }
 
-/** Fire-and-forget emails when a task is created. */
+/** Fire-and-forget email + WhatsApp when a task is created (production only). */
 export function sendTaskCreatedEmails(params) {
+  if (config.env !== "production") return;
+
   setImmediate(() => {
-    sendTaskCreatedEmailsAsync(params).catch((err) => {
-      logger.error(`Task created email batch failed: ${err.message}`);
+    sendTaskCreatedNotificationsAsync(params).catch((err) => {
+      logger.error(`Task created notification batch failed: ${err.message}`);
     });
   });
 }

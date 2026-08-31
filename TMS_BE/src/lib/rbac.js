@@ -1,6 +1,6 @@
 import { QueryTypes } from "sequelize";
 import sequelize from "../config/db.js";
-import { User } from "../models/index.js";
+import { User, Task } from "../models/index.js";
 
 /**
  * SQL fragment (aliased t) restricting tasks to what `user` may see, with bind params.
@@ -84,11 +84,15 @@ export async function canReviewEscalation(user, task) {
   return isManagerOf(user, task.assignee_id);
 }
 
-/** Reassign assignee: creator, Admin/CEO, or assignee's manager. Not on closed tasks. */
+/** Reassign assignee: creator, parent-task creator (subtasks), Admin/CEO, or assignee's manager. Not on closed tasks. */
 export async function canReassignTask(user, task) {
   if (["DONE", "CANCELLED", "REJECTED"].includes(task.status)) return false;
   if (user.role === "ADMIN" || user.role === "CEO") return true;
   if (task.creator_id === user.id) return true;
+  if (task.parent_id) {
+    const parent = await Task.findByPk(task.parent_id, { attributes: ["creator_id"] });
+    if (parent?.creator_id === user.id) return true;
+  }
   return isManagerOf(user, task.assignee_id);
 }
 

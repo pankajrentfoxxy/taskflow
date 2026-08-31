@@ -7,8 +7,9 @@ import Composer from '@/components/Composer';
 import CommentsModal from '@/components/CommentsModal';
 import TaskStatusModal from '@/components/TaskStatusModal';
 import TaskAssignerUrgentBadge from '@/components/TaskAssignerUrgentBadge';
-import { api, deleteUpload, fmtShortDate, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, STATUS_DOT, PRIORITY_COLOR, isTaskOverdue, getTaskRowClasses, TASK_ACTION_TOAST, toast } from '@/lib/util';
+import { api, deleteUpload, fmtShortDate, STATUS_LABEL, STATUS_COLOR, STATUS_COLOR_FALLBACK, STATUS_DOT, PRIORITY_COLOR, isTaskOverdue, getTaskRowClasses, canReassignTask, TASK_ACTION_TOAST, toast } from '@/lib/util';
 import { useMe } from '@/components/Shell';
+import ReassignAssigneeModal from '@/components/ReassignAssigneeModal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -67,15 +68,83 @@ function CommentsButton({ task, onOpenComments }: { task: any; onOpenComments: (
   );
 }
 
+function SubtaskAssigneeCell({
+  subtask,
+  viewer,
+  parentTask,
+  onAssigneeClick,
+}: {
+  subtask: any;
+  viewer?: { id?: number; role?: string } | null;
+  parentTask?: { creator_id?: number } | null;
+  onAssigneeClick?: (task: any) => void;
+}) {
+  const assignee = subtask.assignee_name || (subtask.team_name ? `Team ${subtask.team_name}` : null);
+  const canEditAssignee = canReassignTask(subtask, viewer, parentTask);
+
+  if (assignee) {
+    if (canEditAssignee) {
+      return (
+        <button
+          type="button"
+          className="flex items-center gap-2 rounded-md outline-none ring-offset-background transition hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring"
+          title="Change assignee"
+          onClick={() => onAssigneeClick?.(subtask)}
+        >
+          <Avatar className="size-6 bg-muted">
+            <AvatarFallback className="bg-muted text-[9px] font-semibold text-muted-foreground">
+              {initials(subtask.assignee_name || subtask.team_name)}
+            </AvatarFallback>
+          </Avatar>
+          <span className="max-w-[100px] truncate text-xs text-muted-foreground">
+            {assignee.split(' (')[0]}
+          </span>
+        </button>
+      );
+    }
+    return (
+      <div className="flex items-center gap-2">
+        <Avatar className="size-6 bg-muted">
+          <AvatarFallback className="bg-muted text-[9px] font-semibold text-muted-foreground">
+            {initials(subtask.assignee_name || subtask.team_name)}
+          </AvatarFallback>
+        </Avatar>
+        <span className="max-w-[100px] truncate text-xs text-muted-foreground">
+          {assignee.split(' (')[0]}
+        </span>
+      </div>
+    );
+  }
+
+  if (canEditAssignee) {
+    return (
+      <button
+        type="button"
+        className="rounded-md p-1 text-muted-foreground/60 outline-none ring-offset-background transition hover:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        title="Assign someone"
+        onClick={() => onAssigneeClick?.(subtask)}
+      >
+        <User className="size-4" />
+      </button>
+    );
+  }
+
+  return <User className="size-4 text-muted-foreground/60" />;
+}
+
 function SubtaskTable({
   subtasks,
   onStatusClick,
   onOpenComments,
+  onAssigneeClick,
+  parentTask,
   viewer,
 }: {
   subtasks: any[];
   onStatusClick: (task: any) => void;
   onOpenComments: (task: any) => void;
+  onAssigneeClick?: (task: any) => void;
+  parentTask?: { creator_id?: number } | null;
   viewer?: { id?: number; role?: string } | null;
 }) {
   return (
@@ -84,7 +153,6 @@ function SubtaskTable({
         {subtasks.map((s) => {
           const overdue = isTaskOverdue(s.due_at, s.status);
           const rowHighlight = getTaskRowClasses(s, viewer);
-          const assignee = s.assignee_name || (s.team_name ? `Team ${s.team_name}` : null);
           return (
             <div key={s.id} className={cn('rounded-lg border p-3', rowHighlight)}>
               <Link href={`/tasks/${s.id}`} className="flex items-center gap-2">
@@ -94,7 +162,10 @@ function SubtaskTable({
                 </span>
               </Link>
               <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                <div><span className="text-muted-foreground">Assignee </span>{assignee || '—'}</div>
+                <div className="flex min-w-0 items-center gap-1">
+                  <span className="shrink-0 text-muted-foreground">Assignee </span>
+                  <SubtaskAssigneeCell subtask={s} viewer={viewer} parentTask={parentTask} onAssigneeClick={onAssigneeClick} />
+                </div>
                 <div><span className="text-muted-foreground">Type </span>{s.type_name || '—'}</div>
                 <div>
                   <span className="text-muted-foreground">Due </span>
@@ -133,7 +204,6 @@ function SubtaskTable({
             {subtasks.map((s) => {
               const overdue = isTaskOverdue(s.due_at, s.status);
               const rowHighlight = getTaskRowClasses(s, viewer);
-              const assignee = s.assignee_name || (s.team_name ? `Team ${s.team_name}` : null);
               return (
                 <TableRow key={s.id} className={cn('group', rowHighlight)}>
                   <TableCell className="max-w-[220px] py-2.5 pl-3">
@@ -145,20 +215,7 @@ function SubtaskTable({
                     </Link>
                   </TableCell>
                   <TableCell className="py-2.5">
-                    {assignee ? (
-                      <div className="flex items-center gap-2">
-                        <Avatar className="size-6 bg-muted">
-                          <AvatarFallback className="bg-muted text-[9px] font-semibold text-muted-foreground">
-                            {initials(s.assignee_name || s.team_name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="max-w-[100px] truncate text-xs text-muted-foreground">
-                          {assignee.split(' (')[0]}
-                        </span>
-                      </div>
-                    ) : (
-                      <User className="size-4 text-muted-foreground/60" />
-                    )}
+                    <SubtaskAssigneeCell subtask={s} viewer={viewer} parentTask={parentTask} onAssigneeClick={onAssigneeClick} />
                   </TableCell>
                   <TableCell className={cn('py-2.5 text-xs', overdue ? 'font-medium text-red-600' : 'text-muted-foreground')}>
                     {fmtShortDate(s.due_at)}
@@ -205,6 +262,7 @@ export default function TaskDetailAccordion({
   const [subOpen, setSubOpen] = useState(false);
   const [statusTask, setStatusTask] = useState<any>(null);
   const [commentsTask, setCommentsTask] = useState<any>(null);
+  const [reassignTask, setReassignTask] = useState<any>(null);
   const [users, setUsers] = useState<any[]>([]);
   const [addMemberUserId, setAddMemberUserId] = useState('');
   const [addMemberRole, setAddMemberRole] = useState<'COLLABORATOR' | 'WATCHER'>('COLLABORATOR');
@@ -499,7 +557,14 @@ export default function TaskDetailAccordion({
           )}
 
           {subtasks.length > 0 ? (
-            <SubtaskTable subtasks={subtasks} onStatusClick={setStatusTask} onOpenComments={setCommentsTask} viewer={viewer} />
+            <SubtaskTable
+              subtasks={subtasks}
+              onStatusClick={setStatusTask}
+              onOpenComments={setCommentsTask}
+              onAssigneeClick={setReassignTask}
+              parentTask={task}
+              viewer={viewer}
+            />
           ) : (
             <div className="rounded-lg border border-dashed bg-card px-4 py-6 text-center text-sm text-muted-foreground">
               No subtasks yet.
@@ -538,6 +603,16 @@ export default function TaskDetailAccordion({
         open={!!statusTask}
         onClose={() => setStatusTask(null)}
         onDone={handleStatusDone}
+      />
+
+      <ReassignAssigneeModal
+        task={reassignTask}
+        open={!!reassignTask}
+        onClose={() => setReassignTask(null)}
+        onDone={() => {
+          load();
+          onUpdated?.();
+        }}
       />
 
       <CommentsModal

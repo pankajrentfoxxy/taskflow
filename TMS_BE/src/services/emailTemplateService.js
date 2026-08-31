@@ -81,7 +81,7 @@ export function ceoDailyReportEmail({ dateKey, taskCount, summary }) {
       <tr><td style="padding:8px 0;border-bottom:1px solid #e4e4e7;color:#dc2626;">Need attention</td><td align="right" style="padding:8px 0;border-bottom:1px solid #e4e4e7;font-weight:700;color:#dc2626;">${attention}</td></tr>
       <tr><td style="padding:8px 0;">Tasks in attachment</td><td align="right" style="padding:8px 0;font-weight:700;">${taskCount}</td></tr>
     </table>
-    <p style="margin:0;">The Excel file has two sheets: <strong>Report</strong> (summary) and <strong>Tasks</strong> (open tasks).</p>
+    <p style="margin:0;">The Excel file has two sheets: <strong>Report</strong> (today&apos;s summary) and <strong>Tasks</strong> (tasks assigned today).</p>
   `;
 
   const subject = `${appName} daily report — ${dateKey}`;
@@ -91,7 +91,7 @@ export function ceoDailyReportEmail({ dateKey, taskCount, summary }) {
     bodyHtml,
     footerText: "This automated report is sent once daily at 9:00 PM IST.",
   });
-  const text = `Your ${appName} daily report for ${dateKey} is attached.\nOpen tasks: ${summary?.open ?? "—"}\nNeed attention: ${attention}\nTasks in attachment: ${taskCount}`;
+  const text = `Your ${appName} daily report for ${dateKey} is attached.\nOpen tasks (today): ${summary?.open ?? "—"}\nNeed attention: ${attention}\nTasks assigned today: ${taskCount}`;
 
   return { subject, html, text };
 }

@@ -149,6 +149,9 @@ const syncModels = async () => {
   await sequelize.query(
     "ALTER TABLE attachments ADD COLUMN IF NOT EXISTS context VARCHAR(32) NOT NULL DEFAULT 'file'"
   );
+  await sequelize.query(
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(20)"
+  );
   // await sequelize.query(
   //   "ALTER TABLE chat_conversations ADD COLUMN IF NOT EXISTS user_one_id INTEGER"
   // );

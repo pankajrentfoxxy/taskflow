@@ -10,6 +10,17 @@ import { now } from "../lib/time.js";
 const q = (sql, replacements, transaction) =>
   sequelize.query(sql, { replacements, transaction, type: QueryTypes.SELECT });
 
+function normalizePhone(phone) {
+  if (phone == null || String(phone).trim() === "") return null;
+  let digits = String(phone).replace(/\D/g, "");
+  if (digits.length === 12 && digits.startsWith("91")) digits = digits.slice(2);
+  if (digits.length === 11 && digits.startsWith("0")) digits = digits.slice(1);
+  if (digits.length !== 10) {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Phone must be a 10-digit number");
+  }
+  return digits;
+}
+
 const exec = (sql, replacements, transaction) =>
   sequelize.query(sql, { replacements, transaction });
 
@@ -185,7 +196,7 @@ async function purgeUserData(userId, transaction) {
 
 export const listUsers = async () => {
   const users = await sequelize.query(
-    `SELECT u.id, u.name, u.email, u.role, u.team_id, u.is_active, tm.name AS team_name
+    `SELECT u.id, u.name, u.email, u.phone, u.role, u.team_id, u.is_active, tm.name AS team_name
      FROM users u LEFT JOIN teams tm ON tm.id = u.team_id
      ORDER BY u.name`,
     { type: QueryTypes.SELECT }
@@ -193,7 +204,7 @@ export const listUsers = async () => {
   return { users };
 };
 
-export const createUser = async ({ name, email, password, role = "MEMBER", teamId = null }) => {
+export const createUser = async ({ name, email, password, phone = null, role = "MEMBER", teamId = null }) => {
   if (!name || !email || !password) {
     throw new ApiError(httpStatus.BAD_REQUEST, "name, email, password required");
   }
@@ -205,6 +216,7 @@ export const createUser = async ({ name, email, password, role = "MEMBER", teamI
     const user = await User.create({
       name,
       email: String(email).toLowerCase().trim(),
+      phone: normalizePhone(phone),
       password_hash: bcrypt.hashSync(password, 10),
       role,
       team_id: teamId,
@@ -224,7 +236,7 @@ export const createUser = async ({ name, email, password, role = "MEMBER", teamI
   }
 };
 
-export const updateUser = async ({ id, role, teamId, isActive, password }) => {
+export const updateUser = async ({ id, role, teamId, isActive, password, phone }) => {
   if (!id) throw new ApiError(httpStatus.BAD_REQUEST, "id required");
 
   const user = await User.findByPk(id);
@@ -234,6 +246,7 @@ export const updateUser = async ({ id, role, teamId, isActive, password }) => {
   if (teamId !== undefined) await user.update({ team_id: teamId });
   if (isActive !== undefined) await user.update({ is_active: !!isActive });
   if (password) await user.update({ password_hash: bcrypt.hashSync(password, 10) });
+  if (phone !== undefined) await user.update({ phone: normalizePhone(phone) });
 
   return { ok: true };
 };

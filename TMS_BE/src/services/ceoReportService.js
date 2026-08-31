@@ -5,8 +5,7 @@ import config from "../config/config.js";
 import logger from "../config/logger.js";
 import ApiError from "../utils/ApiError.js";
 import { buildReportsWorkbook } from "../lib/reportsExcel.js";
-import { getReports } from "./reportsService.js";
-import { listTasks } from "./taskService.js";
+import { getReports, fetchReportTasksForExcel } from "./reportsService.js";
 import { sendMail } from "./mailService.js";
 import { ceoDailyReportEmail } from "./emailTemplateService.js";
 
@@ -15,6 +14,8 @@ const CEO_DAILY_REPORT_RECIPIENTS = [
   "adminn@rentfoxxy.com",
   "pankkajyadav@rentfoxxy.com",
 ];
+
+const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
 
 export function istDateKey(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -25,23 +26,12 @@ export function istDateKey(date = new Date()) {
   }).format(date);
 }
 
-async function fetchAllOpenTasks(ceoUser) {
-  const all = [];
-  let page = 1;
-  let totalPages = 1;
-
-  do {
-    const { tasks, pagination } = await listTasks(ceoUser, {
-      filter: "all",
-      page,
-      limit: 100,
-    });
-    all.push(...tasks);
-    totalPages = pagination?.totalPages ?? 1;
-    page += 1;
-  } while (page <= totalPages && page <= 100);
-
-  return all;
+/** Start/end of today in Asia/Kolkata — matches reports page "Today" filter. */
+export function istTodayBounds(date = new Date()) {
+  const [year, month, day] = istDateKey(date).split("-").map(Number);
+  const since = Date.UTC(year, month - 1, day, 0, 0, 0, 0) - IST_OFFSET_MS;
+  const until = Date.UTC(year, month - 1, day, 23, 59, 59, 999) - IST_OFFSET_MS;
+  return { createdFrom: since, createdTo: until };
 }
 
 async function resolveReportUser() {
@@ -62,9 +52,11 @@ async function resolveReportUser() {
 
 async function buildCeoReportPackage() {
   const dateKey = istDateKey();
+  const { createdFrom, createdTo } = istTodayBounds();
   const reportUser = await resolveReportUser();
-  const reportData = await getReports(reportUser, { days: 0 });
-  const tasks = await fetchAllOpenTasks(reportUser);
+  const reportOpts = { createdFrom, createdTo, overall: false };
+  const reportData = await getReports(reportUser, reportOpts);
+  const tasks = await fetchReportTasksForExcel(reportUser, { createdFrom, createdTo });
   const buffer = await buildReportsWorkbook({ reportData, tasks });
   const filename = `taskflow-reports-${dateKey}.xlsx`;
   const { subject, html, text } = ceoDailyReportEmail({
@@ -123,4 +115,4 @@ export async function runDailyCeoReport({ trigger = "manual", force = false } = 
   return { ok: true, dateKey: pkg.dateKey, recipients, taskCount: pkg.taskCount };
 }
 
-export default { runDailyCeoReport, istDateKey };
+export default { runDailyCeoReport, istDateKey, istTodayBounds };

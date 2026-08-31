@@ -29,6 +29,8 @@ const envVarsSchema = Joi.object()
     SMTP_FROM: Joi.string().allow("").default(""),
     APP_NAME: Joi.string().default("TaskFlow"),
     OTP_EXPIRY_MINUTES: Joi.number().default(10),
+    INTERAKT_API_KEY: Joi.string().allow("").default(""),
+    INTERAKT_COUNTRY_CODE: Joi.string().default("+91"),
   })
   .unknown();
 
@@ -71,5 +73,9 @@ export default {
   ceoReport: {
     hour: 21,
     timezone: "Asia/Kolkata",
+  },
+  interakt: {
+    apiKey: envVars.INTERAKT_API_KEY,
+    countryCode: envVars.INTERAKT_COUNTRY_CODE,
   },
 };
