@@ -20,6 +20,23 @@ export function parsePhoneForInterakt(phone) {
   return null;
 }
 
+/** Build Authorization header — accepts raw API key or pre-encoded Basic token from Interakt/curl. */
+function buildInteraktAuthorization(credential) {
+  const value = String(credential).trim().replace(/^Basic\s+/i, "");
+
+  // Pre-encoded Basic token (curl: Authorization: Basic xyz=)
+  try {
+    const decoded = Buffer.from(value, "base64").toString("utf8");
+    if (decoded.endsWith(":") && decoded.length > 1) {
+      return `Basic ${value}`;
+    }
+  } catch {
+    // not base64 — treat as raw key below
+  }
+
+  return `Basic ${Buffer.from(`${value}:`).toString("base64")}`;
+}
+
 export async function sendInteraktTemplate({ phone, templateName, bodyValues, languageCode = "en" }) {
   if (!config.interakt.apiKey) {
     logger.warn("Interakt not configured — WhatsApp skipped");
@@ -32,7 +49,7 @@ export async function sendInteraktTemplate({ phone, templateName, bodyValues, la
     return { ok: false, skipped: true };
   }
 
-  const auth = Buffer.from(`${config.interakt.apiKey}:`).toString("base64");
+  const auth = buildInteraktAuthorization(config.interakt.apiKey);
   const payload = {
     countryCode: config.interakt.countryCode,
     phoneNumber,
@@ -47,7 +64,7 @@ export async function sendInteraktTemplate({ phone, templateName, bodyValues, la
   const res = await fetch(INTERAKT_URL, {
     method: "POST",
     headers: {
-      Authorization: `Basic ${auth}`,
+      Authorization: auth,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
