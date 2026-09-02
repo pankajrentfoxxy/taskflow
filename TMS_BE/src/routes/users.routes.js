@@ -3,6 +3,7 @@ import Joi from "joi";
 import auth from "../middlewares/auth.js";
 import validate from "../middlewares/validate.js";
 import * as usersController from "../controllers/usersController.js";
+import { USER_ROLES } from "../lib/roles.js";
 
 const router = express.Router();
 
@@ -31,7 +32,7 @@ router.post(
       email: Joi.string().email().required(),
       password: Joi.string().min(6).required(),
       phone: phoneSchema.optional(),
-      role: Joi.string().valid("ADMIN", "CEO", "MANAGER", "MEMBER"),
+      role: Joi.string().valid(...USER_ROLES),
       teamId: Joi.number().integer().allow(null),
     }),
   }),
@@ -44,7 +45,7 @@ router.patch(
   validate({
     body: Joi.object({
       id: Joi.number().integer().required(),
-      role: Joi.string().valid("ADMIN", "CEO", "MANAGER", "MEMBER"),
+      role: Joi.string().valid(...USER_ROLES),
       teamId: Joi.number().integer().allow(null),
       isActive: Joi.boolean(),
       password: Joi.string().min(6),

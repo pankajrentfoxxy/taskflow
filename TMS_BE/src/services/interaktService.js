@@ -8,6 +8,7 @@ export const INTERAKT_TEMPLATES = {
   MULTIPLE_TASKS: "multiple_tasks",
   ADDED_AS_COLLABORATOR: "added_as_collaborator",
   ADDED_AS_WATCHER: "added_as_watcher",
+  DAILY_REPORT: "daily_report",
 };
 
 /** Parse stored phone into 10-digit local number for Interakt. */
@@ -37,7 +38,13 @@ function buildInteraktAuthorization(credential) {
   return `Basic ${Buffer.from(`${value}:`).toString("base64")}`;
 }
 
-export async function sendInteraktTemplate({ phone, templateName, bodyValues, languageCode = "en" }) {
+export async function sendInteraktTemplate({
+  phone,
+  templateName,
+  bodyValues,
+  languageCode = "en",
+  buttonValues,
+}) {
   if (!config.interakt.apiKey) {
     logger.warn("Interakt not configured — WhatsApp skipped");
     return { ok: false, skipped: true };
@@ -58,6 +65,7 @@ export async function sendInteraktTemplate({ phone, templateName, bodyValues, la
       name: templateName,
       languageCode,
       bodyValues,
+      ...(buttonValues ? { buttonValues } : {}),
     },
   };
 

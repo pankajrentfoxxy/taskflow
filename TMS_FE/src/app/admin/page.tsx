@@ -412,7 +412,7 @@ function AdminInner() {
                   </TableCell>
                   <TableCell className="px-2 py-2">
                     <NativeSelect className="w-auto py-1 text-xs h-auto" value={u.role} onChange={(e) => patchUser(u.id, { role: e.target.value })}>
-                      <option>ADMIN</option><option>CEO</option><option>MANAGER</option><option>MEMBER</option>
+                      <option>ADMIN</option><option>CEO</option><option>MANAGER</option><option>MEMBER</option><option>QA</option>
                     </NativeSelect>
                   </TableCell>
                   <TableCell className="px-2 py-2">
@@ -601,7 +601,7 @@ function AdminInner() {
             <div>
               <Label>Role</Label>
               <NativeSelect value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-                <option>MEMBER</option><option>MANAGER</option><option>CEO</option><option>ADMIN</option>
+                <option>MEMBER</option><option>QA</option><option>MANAGER</option><option>CEO</option><option>ADMIN</option>
               </NativeSelect>
             </div>
             <div>

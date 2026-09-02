@@ -1,5 +1,4 @@
-import fs from "fs";
-import bcrypt from "bcryptjs";
+import { USER_ROLES } from "../lib/roles.js";
 import { QueryTypes } from "sequelize";
 import httpStatus from "http-status";
 import sequelize from "../config/db.js";
@@ -208,7 +207,7 @@ export const createUser = async ({ name, email, password, phone = null, role = "
   if (!name || !email || !password) {
     throw new ApiError(httpStatus.BAD_REQUEST, "name, email, password required");
   }
-  if (!["ADMIN", "CEO", "MANAGER", "MEMBER"].includes(role)) {
+  if (!USER_ROLES.includes(role)) {
     throw new ApiError(httpStatus.BAD_REQUEST, "Invalid role");
   }
 

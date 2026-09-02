@@ -65,7 +65,7 @@ export function passwordResetOtpTemplate({ userName, otp }) {
   return { subject, html, text };
 }
 
-export function ceoDailyReportEmail({ dateKey, taskCount, summary }) {
+export function ceoDailyReportEmail({ dateKey, taskCount, summary, downloadUrl }) {
   const appName = config.app.name;
   const attention =
     (summary?.overdue || 0) +
@@ -73,15 +73,23 @@ export function ceoDailyReportEmail({ dateKey, taskCount, summary }) {
     (summary?.escalatedAwaiting || 0) +
     (summary?.escalatedPendingReview || 0);
 
+  const downloadBlock = downloadUrl
+    ? `<p style="margin:24px 0 0;text-align:center;">
+      <a href="${downloadUrl}" style="display:inline-block;padding:12px 24px;border-radius:8px;background:#18181b;color:#ffffff;text-decoration:none;font-weight:600;">Download report</a>
+    </p>
+    <p style="margin:12px 0 0;text-align:center;font-size:12px;color:#71717a;">Or use the Excel file attached to this email.</p>`
+    : "";
+
   const bodyHtml = `
     <p style="margin:0 0 16px;">Hi,</p>
-    <p style="margin:0 0 16px;">Your daily ${appName} report for <strong>${dateKey}</strong> is attached.</p>
+    <p style="margin:0 0 16px;">Your daily ${appName} report for <strong>${dateKey}</strong> is ready.</p>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 16px;border-collapse:collapse;">
       <tr><td style="padding:8px 0;border-bottom:1px solid #e4e4e7;">Open tasks</td><td align="right" style="padding:8px 0;border-bottom:1px solid #e4e4e7;font-weight:700;">${summary?.open ?? "—"}</td></tr>
       <tr><td style="padding:8px 0;border-bottom:1px solid #e4e4e7;color:#dc2626;">Need attention</td><td align="right" style="padding:8px 0;border-bottom:1px solid #e4e4e7;font-weight:700;color:#dc2626;">${attention}</td></tr>
-      <tr><td style="padding:8px 0;">Tasks in attachment</td><td align="right" style="padding:8px 0;font-weight:700;">${taskCount}</td></tr>
+      <tr><td style="padding:8px 0;">Tasks in report</td><td align="right" style="padding:8px 0;font-weight:700;">${taskCount}</td></tr>
     </table>
-    <p style="margin:0;">The Excel file has two sheets: <strong>Report</strong> (today&apos;s summary) and <strong>Tasks</strong> (tasks assigned today).</p>
+    <p style="margin:0;">Two sheets: <strong>Report</strong> (today&apos;s summary) and <strong>Tasks</strong> (assigned today).</p>
+    ${downloadBlock}
   `;
 
   const subject = `${appName} daily report — ${dateKey}`;
@@ -91,7 +99,7 @@ export function ceoDailyReportEmail({ dateKey, taskCount, summary }) {
     bodyHtml,
     footerText: "This automated report is sent once daily at 9:00 PM IST.",
   });
-  const text = `Your ${appName} daily report for ${dateKey} is attached.\nOpen tasks (today): ${summary?.open ?? "—"}\nNeed attention: ${attention}\nTasks assigned today: ${taskCount}`;
+  const text = `Your ${appName} daily report for ${dateKey} is ready.\nOpen tasks (today): ${summary?.open ?? "—"}\nNeed attention: ${attention}\nTasks assigned today: ${taskCount}${downloadUrl ? `\nDownload: ${downloadUrl}` : ""}`;
 
   return { subject, html, text };
 }

@@ -178,7 +178,7 @@ export async function buildReportsWorkbook({ reportData, tasks }) {
   if (reportData.people?.length) {
     addTableSection(
       summarySheet,
-      reportData.scope === "MEMBER" ? "Your performance" : "By person",
+      reportData.scope === "MEMBER" || reportData.scope === "QA" ? "Your performance" : "By person",
       ["Person", "Team", "Open", "Overdue", "No resp.", "Escalations", "Done", "Done on time", "Avg resp. (min)"],
       reportData.people.map((p) => [
         p.name,

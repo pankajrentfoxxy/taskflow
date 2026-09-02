@@ -203,7 +203,7 @@ function ReportsInner() {
       <div className="flex items-end justify-between flex-wrap gap-4 mb-5">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-400">
-            {data.scope === 'MEMBER' ? 'Your tasks' : data.scope === 'MANAGER' ? 'Your team' : 'Entire organization'}
+            {data.scope === 'MEMBER' || data.scope === 'QA' ? 'Your tasks' : data.scope === 'MANAGER' ? 'Your team' : 'Entire organization'}
           </p>
           <h1 className="text-[24px] font-bold tracking-tight mt-1">Reports</h1>
         </div>
@@ -314,7 +314,7 @@ function ReportsInner() {
           <div className="flex items-center gap-2.5 mb-3">
             <span className="w-6 h-6 rounded-md bg-violet-50 text-violet-500 flex items-center justify-center"><IconUsers className="w-3.5 h-3.5" /></span>
             <h2 className="text-[13px] font-semibold uppercase tracking-wide text-gray-600">
-              {data.scope === 'MEMBER' ? 'Your performance' : 'By person'}
+              {data.scope === 'MEMBER' || data.scope === 'QA' ? 'Your performance' : 'By person'}
             </h2>
             <div className="flex-1 h-px bg-gray-200/70 ml-1" />
           </div>

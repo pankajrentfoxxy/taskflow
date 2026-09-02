@@ -1,3 +1,7 @@
+import fs from "fs";
+import path from "path";
+import { randomUUID } from "crypto";
+import { fileURLToPath } from "url";
 import httpStatus from "http-status";
 import Meta from "../models/Meta.js";
 import User from "../models/User.js";
@@ -8,14 +12,32 @@ import { buildReportsWorkbook } from "../lib/reportsExcel.js";
 import { getReports, fetchReportTasksForExcel } from "./reportsService.js";
 import { sendMail } from "./mailService.js";
 import { ceoDailyReportEmail } from "./emailTemplateService.js";
+import { sendInteraktTemplate, INTERAKT_TEMPLATES } from "./interaktService.js";
 
-/** Hardcoded daily Excel report recipients (not CEO users from DB). */
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/** Daily Excel report recipients — email + WhatsApp (name, phone). */
 const CEO_DAILY_REPORT_RECIPIENTS = [
-  "adminn@rentfoxxy.com",
-  "pankkajyadav@rentfoxxy.com",
+  { name: "Kumar Bibhaw", email: "adminn@rentfoxxy.com", phone: "9535312310" },
+  { name: "Pankaj", email: "pankkajyadav@rentfoxxy.com", phone: "8076473811" },
 ];
 
 const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
+
+export function appPublicBaseUrl() {
+  const origins = config.corsOrigin || [];
+  const https = origins.find((o) => o.startsWith("https://"));
+  return (https || origins[0] || "http://localhost:6070").replace(/\/$/, "");
+}
+
+export function getReportsDir() {
+  const base = path.isAbsolute(config.uploadDir)
+    ? config.uploadDir
+    : path.join(__dirname, "../..", config.uploadDir);
+  const dir = path.join(base, "reports");
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
 
 export function istDateKey(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -26,12 +48,17 @@ export function istDateKey(date = new Date()) {
   }).format(date);
 }
 
-/** Start/end of today in Asia/Kolkata — matches reports page "Today" filter. */
-export function istTodayBounds(date = new Date()) {
+/** Start/end of a calendar day in Asia/Kolkata — matches reports page "Today" filter. */
+export function istDayBounds(date = new Date()) {
   const [year, month, day] = istDateKey(date).split("-").map(Number);
   const since = Date.UTC(year, month - 1, day, 0, 0, 0, 0) - IST_OFFSET_MS;
   const until = Date.UTC(year, month - 1, day, 23, 59, 59, 999) - IST_OFFSET_MS;
   return { createdFrom: since, createdTo: until };
+}
+
+/** @deprecated use istDayBounds */
+export function istTodayBounds(date = new Date()) {
+  return istDayBounds(date);
 }
 
 async function resolveReportUser() {
@@ -50,22 +77,101 @@ async function resolveReportUser() {
   throw new ApiError(httpStatus.NOT_FOUND, "No CEO or Admin user found to build the report");
 }
 
-async function buildCeoReportPackage() {
-  const dateKey = istDateKey();
-  const { createdFrom, createdTo } = istTodayBounds();
+export async function buildCeoReportForDateKey(dateKey) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  const { createdFrom, createdTo } = istDayBounds(date);
   const reportUser = await resolveReportUser();
   const reportOpts = { createdFrom, createdTo, overall: false };
   const reportData = await getReports(reportUser, reportOpts);
   const tasks = await fetchReportTasksForExcel(reportUser, { createdFrom, createdTo });
   const buffer = await buildReportsWorkbook({ reportData, tasks });
   const filename = `taskflow-reports-${dateKey}.xlsx`;
-  const { subject, html, text } = ceoDailyReportEmail({
+
+  return {
     dateKey,
+    filename,
+    buffer,
     taskCount: tasks.length,
-    summary: reportData.summary,
+    reportData,
+  };
+}
+
+function saveReportFile(filename, buffer) {
+  const filePath = path.join(getReportsDir(), filename);
+  fs.writeFileSync(filePath, Buffer.from(buffer));
+  return filePath;
+}
+
+async function registerReportToken({ token, dateKey, filename, taskCount }) {
+  const key = `ceo_report_token_${token}`;
+  await Meta.upsert({
+    key,
+    value: JSON.stringify({ dateKey, filename, taskCount }),
+  });
+  return token;
+}
+
+export function publicReportPageUrl(token) {
+  return `${appPublicBaseUrl()}/report/${token}`;
+}
+
+async function buildCeoReportPackage() {
+  const dateKey = istDateKey();
+  const built = await buildCeoReportForDateKey(dateKey);
+  const token = randomUUID().replace(/-/g, "");
+  saveReportFile(built.filename, built.buffer);
+  await registerReportToken({
+    token,
+    dateKey: built.dateKey,
+    filename: built.filename,
+    taskCount: built.taskCount,
   });
 
-  return { dateKey, filename, buffer, subject, html, text, taskCount: tasks.length, reportData };
+  const downloadUrl = publicReportPageUrl(token);
+  const { subject, html, text } = ceoDailyReportEmail({
+    dateKey: built.dateKey,
+    taskCount: built.taskCount,
+    summary: built.reportData.summary,
+    downloadUrl,
+  });
+
+  return {
+    dateKey: built.dateKey,
+    filename: built.filename,
+    buffer: built.buffer,
+    subject,
+    html,
+    text,
+    taskCount: built.taskCount,
+    reportData: built.reportData,
+    token,
+    downloadUrl,
+  };
+}
+
+async function sendDailyReportWhatsApp({ dateKey, token }) {
+  if (!config.interakt.apiKey) return [];
+
+  const sent = [];
+  for (const recipient of CEO_DAILY_REPORT_RECIPIENTS) {
+    if (!recipient.phone) {
+      logger.warn(`Daily report WhatsApp skipped — no phone for ${recipient.name}`);
+      continue;
+    }
+    try {
+      await sendInteraktTemplate({
+        phone: recipient.phone,
+        templateName: INTERAKT_TEMPLATES.DAILY_REPORT,
+        bodyValues: [recipient.name || "User", dateKey],
+        buttonValues: { "0": [token] },
+      });
+      sent.push(recipient.phone);
+    } catch (err) {
+      logger.error(`Daily report WhatsApp to ${recipient.phone} failed: ${err.message}`);
+    }
+  }
+  return sent;
 }
 
 export async function runDailyCeoReport({ trigger = "manual", force = false } = {}) {
@@ -93,10 +199,10 @@ export async function runDailyCeoReport({ trigger = "manual", force = false } = 
 
   const pkg = await buildCeoReportPackage();
 
-  const recipients = [];
-  for (const email of CEO_DAILY_REPORT_RECIPIENTS) {
+  const emailRecipients = [];
+  for (const recipient of CEO_DAILY_REPORT_RECIPIENTS) {
     await sendMail({
-      to: email,
+      to: recipient.email,
       subject: pkg.subject,
       html: pkg.html,
       text: pkg.text,
@@ -108,11 +214,36 @@ export async function runDailyCeoReport({ trigger = "manual", force = false } = 
         },
       ],
     });
-    recipients.push(email);
+    emailRecipients.push(recipient.email);
   }
 
-  logger.info(`CEO daily report emailed to ${recipients.join(", ")} for ${pkg.dateKey} (${trigger})`);
-  return { ok: true, dateKey: pkg.dateKey, recipients, taskCount: pkg.taskCount };
+  const whatsappRecipients = await sendDailyReportWhatsApp({
+    dateKey: pkg.dateKey,
+    token: pkg.token,
+  });
+
+  logger.info(
+    `CEO daily report for ${pkg.dateKey}: emailed ${emailRecipients.join(", ")}; WhatsApp ${whatsappRecipients.length ? whatsappRecipients.join(", ") : "none"} (${trigger})`
+  );
+
+  return {
+    ok: true,
+    dateKey: pkg.dateKey,
+    recipients: emailRecipients,
+    whatsappRecipients,
+    taskCount: pkg.taskCount,
+    downloadUrl: pkg.downloadUrl,
+    token: pkg.token,
+  };
 }
 
-export default { runDailyCeoReport, istDateKey, istTodayBounds };
+export default {
+  runDailyCeoReport,
+  istDateKey,
+  istTodayBounds,
+  istDayBounds,
+  buildCeoReportForDateKey,
+  getReportsDir,
+  publicReportPageUrl,
+  appPublicBaseUrl,
+};

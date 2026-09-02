@@ -13,9 +13,11 @@ import reportsRoutes from "./routes/reports.routes.js";
 import cronRoutes from "./routes/cron.routes.js";
 import chatRoutes from "./routes/chat.routes.js";
 import sqlRoutes from "./routes/sql.routes.js";
+import publicRoutes from "./routes/public.routes.js";
 
 const router = express.Router();
 
+router.use("/public", publicRoutes);
 router.use("/auth", authRoutes);
 router.use("/me", meRoutes);
 router.use("/users", usersRoutes);
