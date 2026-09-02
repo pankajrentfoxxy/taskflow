@@ -25,4 +25,28 @@ export function qaDoneCreditForUserIdSql(taskAlias = "t", userIdRepl = ":personI
   )`;
 }
 
-export default { USER_ROLES, isMemberScopeRole, isQaRole, qaDoneCreditSql, qaDoneCreditForUserIdSql };
+export function qaDoneAssignedForUserIdSql(taskAlias = "t", userIdRepl = ":personId") {
+  return `(
+    ${taskAlias}.creator_id = ${userIdRepl}
+    AND ${taskAlias}.assignee_id IS DISTINCT FROM ${userIdRepl}
+    AND EXISTS (SELECT 1 FROM users qu WHERE qu.id = ${userIdRepl} AND qu.role = 'QA')
+  )`;
+}
+
+export function qaAssignedOutForUserIdSql(taskAlias = "t", userIdRepl = ":personId") {
+  return `(
+    ${taskAlias}.creator_id = ${userIdRepl}
+    AND ${taskAlias}.assignee_id IS DISTINCT FROM ${userIdRepl}
+    AND EXISTS (SELECT 1 FROM users qu WHERE qu.id = ${userIdRepl} AND qu.role = 'QA')
+  )`;
+}
+
+export default {
+  USER_ROLES,
+  isMemberScopeRole,
+  isQaRole,
+  qaDoneCreditSql,
+  qaDoneCreditForUserIdSql,
+  qaDoneAssignedForUserIdSql,
+  qaAssignedOutForUserIdSql,
+};

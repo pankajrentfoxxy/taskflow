@@ -2,7 +2,14 @@ import { QueryTypes } from "sequelize";
 import httpStatus from "http-status";
 import sequelize from "../config/db.js";
 import ApiError from "../utils/ApiError.js";
-import { isMemberScopeRole, isQaRole, qaDoneCreditSql, qaDoneCreditForUserIdSql } from "../lib/roles.js";
+import {
+  isMemberScopeRole,
+  isQaRole,
+  qaDoneCreditSql,
+  qaDoneCreditForUserIdSql,
+  qaDoneAssignedForUserIdSql,
+  qaAssignedOutForUserIdSql,
+} from "../lib/roles.js";
 import { runSlaSweep } from "../lib/cron.js";
 import { now } from "../lib/time.js";
 
@@ -76,6 +83,9 @@ function listDateClause(listMetric, filters) {
   if (listMetric === "esc_awaiting" && escalatedEventSql) return escalatedEventSql;
   if (listMetric === "esc_pending" && escalatedEventSql) return escalatedEventSql;
   if (listMetric === "done" && doneEventSql) return doneEventSql;
+  if (listMetric === "done_self" && doneEventSql) return doneEventSql;
+  if (listMetric === "done_by_assignee" && doneEventSql) return doneEventSql;
+  if (listMetric === "assigned_out") return assignSql;
   return assignSql;
 }
 
@@ -114,10 +124,20 @@ export const getReports = async (
     if (personId) {
       if (listMetric === "done") {
         extra = ` AND ${qaDoneCreditForUserIdSql("t", ":personId")}`;
+      } else if (listMetric === "done_by_assignee") {
+        extra = ` AND ${qaDoneAssignedForUserIdSql("t", ":personId")}`;
+      } else if (listMetric === "assigned_out") {
+        extra = ` AND ${qaAssignedOutForUserIdSql("t", ":personId")}`;
+      } else if (listMetric === "done_self") {
+        extra = " AND t.assignee_id = :personId";
       } else {
         extra = " AND t.assignee_id = :personId";
       }
       ep.personId = Number(personId);
+    } else if (isQaRole(user.role)) {
+      if (listMetric === "done_by_assignee" || listMetric === "assigned_out") {
+        extra = " AND t.creator_id = :scopeUid AND t.assignee_id IS DISTINCT FROM :scopeUid";
+      }
     }
 
     let cond = "";
@@ -152,6 +172,15 @@ export const getReports = async (
       case "done":
         cond = "t.status = 'DONE'";
         break;
+      case "done_self":
+        cond = "t.status = 'DONE'";
+        break;
+      case "assigned_out":
+        cond = "t.status != 'CANCELLED'";
+        break;
+      case "done_by_assignee":
+        cond = "t.status = 'DONE'";
+        break;
       case "escalations":
         cond = "t.escalated_at IS NOT NULL";
         break;
@@ -160,7 +189,10 @@ export const getReports = async (
     }
 
     const dateClause = listDateClause(listMetric, filters);
-    const useDoneScope = listMetric === "done" && isMemberScopeRole(user.role);
+    const useDoneScope =
+      isMemberScopeRole(user.role) &&
+      listMetric !== "done_self" &&
+      (listMetric === "done" || listMetric === "done_by_assignee" || listMetric === "assigned_out");
     const taskScope = useDoneScope ? doneScope.scope : scope;
     const taskRepl = useDoneScope ? { ...doneRepl, ...ep, ...cp } : { ...baseRepl, ...ep, ...cp };
 
@@ -257,12 +289,15 @@ export const getReports = async (
   }
   const peopleTaskScope = scopeWithoutMemberFilter(scope);
   people = await sequelize.query(
-    `SELECT u.id, u.name, tm.name AS team_name,
+    `SELECT u.id, u.name, u.role, tm.name AS team_name,
       COALESCE(SUM(CASE WHEN t.assignee_id = u.id AND t.status NOT IN ('DONE','CANCELLED') AND (${assignSql}) THEN 1 ELSE 0 END), 0)::int AS open,
       COALESCE(SUM(CASE WHEN t.assignee_id = u.id AND t.status NOT IN ('DONE','CANCELLED') AND t.due_at < :t AND (${overdueDateSql}) THEN 1 ELSE 0 END), 0)::int AS overdue,
       COALESCE(SUM(CASE WHEN t.assignee_id = u.id AND t.status = 'ASSIGNED' AND t.sla_breached_at IS NOT NULL AND (${slaDateSql}) THEN 1 ELSE 0 END), 0)::int AS no_response,
       COALESCE(SUM(CASE WHEN t.assignee_id = u.id AND t.escalated_at IS NOT NULL AND (${escalatedDateSql}) THEN 1 ELSE 0 END), 0)::int AS escalations,
       COALESCE(SUM(CASE WHEN t.id IS NOT NULL AND t.status = 'DONE' AND (${doneDateSql}) AND ${qaDoneCreditSql("t", "u")} THEN 1 ELSE 0 END), 0)::int AS done,
+      COALESCE(SUM(CASE WHEN t.assignee_id = u.id AND t.status = 'DONE' AND (${doneDateSql}) THEN 1 ELSE 0 END), 0)::int AS done_self,
+      COALESCE(SUM(CASE WHEN u.role = 'QA' AND t.creator_id = u.id AND t.assignee_id IS DISTINCT FROM u.id AND t.status != 'CANCELLED' AND (${assignSql}) THEN 1 ELSE 0 END), 0)::int AS assigned_out,
+      COALESCE(SUM(CASE WHEN u.role = 'QA' AND t.creator_id = u.id AND t.assignee_id IS DISTINCT FROM u.id AND t.status = 'DONE' AND (${doneDateSql}) THEN 1 ELSE 0 END), 0)::int AS done_by_assignee,
       COALESCE(SUM(CASE WHEN t.id IS NOT NULL AND t.status = 'DONE' AND t.done_at <= t.due_at AND (${doneDateSql}) AND ${qaDoneCreditSql("t", "u")} THEN 1 ELSE 0 END), 0)::int AS done_ontime,
       ROUND(AVG(CASE WHEN t.assignee_id = u.id AND t.acknowledged_at IS NOT NULL AND (${assignSql}) THEN (t.acknowledged_at - t.created_at) / 60000.0 END))::int AS avg_response_min
      FROM users u

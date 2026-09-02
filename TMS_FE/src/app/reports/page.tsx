@@ -59,6 +59,70 @@ function Stat({ icon, chip, label, value, tone, onClick, bar }: {
   );
 }
 
+function QaDoneCell({ person, onDrill }: {
+  person: {
+    id: number;
+    name: string;
+    role?: string;
+    done: number;
+    done_self: number;
+    assigned_out: number;
+    done_by_assignee: number;
+  };
+  onDrill: (metric: string, title: string, extra: Record<string, any>) => void;
+}) {
+  const x = { personId: person.id };
+  const baseName = person.name.split(' (')[0];
+
+  if (person.role !== 'QA') {
+    return (
+      <Num
+        value={person.done}
+        tone={person.done > 0 ? 'text-emerald-600' : 'text-gray-400'}
+        onClick={() => onDrill('done', `${baseName} — done`, x)}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      <Num
+        value={person.done}
+        tone={person.done > 0 ? 'text-emerald-600' : 'text-gray-400'}
+        onClick={() => onDrill('done', `${baseName} — all done`, x)}
+      />
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] leading-tight">
+        <button
+          type="button"
+          title="Tasks QA completed as assignee"
+          onClick={() => onDrill('done_self', `${baseName} — done (self)`, x)}
+          className="font-medium text-gray-500 underline decoration-dotted decoration-gray-300 underline-offset-2 hover:text-brand-600"
+        >
+          Self <span className="font-semibold text-emerald-600">{person.done_self ?? 0}</span>
+        </button>
+        <span className="text-gray-300">·</span>
+        <button
+          type="button"
+          title="Issues QA logged and assigned to others (QA side complete)"
+          onClick={() => onDrill('assigned_out', `${baseName} — assigned out`, x)}
+          className="font-medium text-gray-500 underline decoration-dotted decoration-gray-300 underline-offset-2 hover:text-brand-600"
+        >
+          Assigned <span className="font-semibold text-violet-600">{person.assigned_out ?? 0}</span>
+        </button>
+        <span className="text-gray-300">·</span>
+        <button
+          type="button"
+          title="QA-assigned tasks completed by the assignee"
+          onClick={() => onDrill('done_by_assignee', `${baseName} — done by assignee`, x)}
+          className="font-medium text-gray-500 underline decoration-dotted decoration-gray-300 underline-offset-2 hover:text-brand-600"
+        >
+          User done <span className="font-semibold text-sky-600">{person.done_by_assignee ?? 0}</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Num({ value, tone, onClick }: { value: any; tone?: string; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick}
@@ -184,9 +248,22 @@ function ReportsInner() {
   const s = data.summary;
 
   const exportCsv = () => {
-    const header = 'Name,Team,Open,Overdue,No response,Escalations,Done,Done on time,Avg response (min)\n';
+    const header = 'Name,Team,Open,Overdue,No response,Escalations,Done,Done (self),Assigned out,Done by assignee,Done on time,Avg response (min)\n';
     const rows = data.people.map((p: any) =>
-      [p.name, p.team_name || '', p.open, p.overdue, p.no_response, p.escalations, p.done, p.done_ontime, p.avg_response_min ?? ''].join(',')
+      [
+        p.name,
+        p.team_name || '',
+        p.open,
+        p.overdue,
+        p.no_response,
+        p.escalations,
+        p.done,
+        p.done_self ?? p.done,
+        p.assigned_out ?? 0,
+        p.done_by_assignee ?? 0,
+        p.done_ontime,
+        p.avg_response_min ?? '',
+      ].join(',')
     ).join('\n');
     const blob = new Blob([header + rows], { type: 'text/csv' });
     const a = document.createElement('a');
@@ -347,7 +424,12 @@ function ReportsInner() {
                               </AvatarFallback>
                             </Avatar>
                             <div>
-                              <div className="font-semibold">{p.name.split(' (')[0]}</div>
+                              <div className="font-semibold flex items-center gap-1.5">
+                                {p.name.split(' (')[0]}
+                                {p.role === 'QA' && (
+                                  <Badge className="bg-sky-50 text-sky-700 border border-sky-200 text-[9px] px-1.5 py-0 h-auto font-semibold">QA</Badge>
+                                )}
+                              </div>
                               <div className="text-[11px] text-gray-400">{p.team_name || '—'}</div>
                             </div>
                           </div>
@@ -356,7 +438,7 @@ function ReportsInner() {
                         <TableCell className={TD}><Num value={p.overdue} tone={p.overdue > 0 ? 'text-red-600' : 'text-gray-400'} onClick={() => openDrill('overdue', `${p.name} — overdue`, x)} /></TableCell>
                         <TableCell className={TD}><Num value={p.no_response} tone={p.no_response > 0 ? 'text-red-600' : 'text-gray-400'} onClick={() => openDrill('no_response', `${p.name} — no response`, x)} /></TableCell>
                         <TableCell className={TD}><Num value={p.escalations} tone={p.escalations > 0 ? 'text-orange-600' : 'text-gray-400'} onClick={() => openDrill('escalations', `${p.name} — escalations`, x)} /></TableCell>
-                        <TableCell className={TD}><Num value={p.done} tone={p.done > 0 ? 'text-emerald-600' : 'text-gray-400'} onClick={() => openDrill('done', `${p.name} — done`, x)} /></TableCell>
+                        <TableCell className={TD}><QaDoneCell person={p} onDrill={openDrill} /></TableCell>
                         <TableCell className={TD}>
                           {p.done ? (
                             <Badge className={Math.round((100 * p.done_ontime) / p.done) >= 80 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}>
