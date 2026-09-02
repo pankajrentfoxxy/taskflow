@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { STATUS_LABEL } from "./statusLabels.js";
+import { personDisplayName } from "./qaReportSummary.js";
 
 const STATUS_EXCEL = {
   ASSIGNED: { bg: "FFFFF4E5", fg: "FF9A3412" },
@@ -176,22 +177,42 @@ export async function buildReportsWorkbook({ reportData, tasks }) {
   });
 
   if (reportData.people?.length) {
+    const peopleHeaders = [
+      "Person",
+      "Team",
+      "Role",
+      "Open",
+      "Overdue",
+      "No resp.",
+      "Escalations",
+      "Done",
+      "Done (self)",
+      "Assigned out",
+      "Done by assignee",
+      "Done on time",
+      "Avg resp. (min)",
+    ];
     addTableSection(
       summarySheet,
       reportData.scope === "MEMBER" || reportData.scope === "QA" ? "Your performance" : "By person",
-      ["Person", "Team", "Open", "Overdue", "No resp.", "Escalations", "Done", "Done on time", "Avg resp. (min)"],
+      peopleHeaders,
       reportData.people.map((p) => [
-        p.name,
+        personDisplayName(p.name),
         p.team_name ?? "",
+        p.role ?? "",
         p.open,
         p.overdue,
         p.no_response,
         p.escalations,
         p.done,
+        p.role === "QA" ? (p.done_self ?? 0) : p.done,
+        p.role === "QA" ? (p.assigned_out ?? 0) : "",
+        p.role === "QA" ? (p.done_by_assignee ?? 0) : "",
         p.done_ontime,
         p.avg_response_min ?? "",
       ]),
       [
+        undefined,
         undefined,
         undefined,
         undefined,
@@ -200,9 +221,37 @@ export async function buildReportsWorkbook({ reportData, tasks }) {
         (cell, v) => paintCountCell(cell, v, "warn"),
         (cell, v) => paintCountCell(cell, v, "success"),
         (cell, v) => paintCountCell(cell, v, "success"),
+        (cell, v) => paintCountCell(cell, v, "neutral"),
+        (cell, v) => paintCountCell(cell, v, "success"),
+        (cell, v) => paintCountCell(cell, v, "success"),
         undefined,
       ]
     );
+
+    const qaPeople = reportData.people.filter((p) => p.role === "QA");
+    if (qaPeople.length) {
+      addTableSection(
+        summarySheet,
+        "QA activity (issues found)",
+        ["QA", "Team", "Assigned out", "Done by assignee", "Self done", "Total done"],
+        qaPeople.map((p) => [
+          personDisplayName(p.name),
+          p.team_name ?? "",
+          p.assigned_out ?? 0,
+          p.done_by_assignee ?? 0,
+          p.done_self ?? 0,
+          p.done ?? 0,
+        ]),
+        [
+          undefined,
+          undefined,
+          (cell, v) => paintCountCell(cell, v, "neutral"),
+          (cell, v) => paintCountCell(cell, v, "success"),
+          (cell, v) => paintCountCell(cell, v, "success"),
+          (cell, v) => paintCountCell(cell, v, "success"),
+        ]
+      );
+    }
   }
 
   if (reportData.byType?.length) {

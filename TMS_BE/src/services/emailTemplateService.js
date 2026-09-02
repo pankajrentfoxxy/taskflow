@@ -65,7 +65,7 @@ export function passwordResetOtpTemplate({ userName, otp }) {
   return { subject, html, text };
 }
 
-export function ceoDailyReportEmail({ dateKey, taskCount, summary, downloadUrl }) {
+export function ceoDailyReportEmail({ dateKey, taskCount, summary, downloadUrl, qaPeople = [] }) {
   const appName = config.app.name;
   const attention =
     (summary?.overdue || 0) +
@@ -80,6 +80,30 @@ export function ceoDailyReportEmail({ dateKey, taskCount, summary, downloadUrl }
     <p style="margin:12px 0 0;text-align:center;font-size:12px;color:#71717a;">Or use the Excel file attached to this email.</p>`
     : "";
 
+  const qaTableBlock =
+    qaPeople.length > 0
+      ? `<p style="margin:20px 0 8px;font-size:13px;font-weight:700;color:#18181b;">QA activity (issues found)</p>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 16px;border-collapse:collapse;font-size:13px;">
+      <tr style="background:#f4f4f5;">
+        <th align="left" style="padding:8px;border-bottom:1px solid #e4e4e7;">QA</th>
+        <th align="right" style="padding:8px;border-bottom:1px solid #e4e4e7;">Assigned out</th>
+        <th align="right" style="padding:8px;border-bottom:1px solid #e4e4e7;">User done</th>
+        <th align="right" style="padding:8px;border-bottom:1px solid #e4e4e7;">Self done</th>
+      </tr>
+      ${qaPeople
+        .map(
+          (p) => `<tr>
+        <td style="padding:8px;border-bottom:1px solid #f4f4f5;">${String(p.name).split(" (")[0]}</td>
+        <td align="right" style="padding:8px;border-bottom:1px solid #f4f4f5;font-weight:600;">${p.assigned_out ?? 0}</td>
+        <td align="right" style="padding:8px;border-bottom:1px solid #f4f4f5;font-weight:600;color:#0284c7;">${p.done_by_assignee ?? 0}</td>
+        <td align="right" style="padding:8px;border-bottom:1px solid #f4f4f5;font-weight:600;color:#059669;">${p.done_self ?? 0}</td>
+      </tr>`
+        )
+        .join("")}
+    </table>
+    <p style="margin:0 0 16px;font-size:12px;color:#71717a;"><strong>Assigned out</strong> = issues QA logged today. <strong>User done</strong> = those tasks completed by assignees.</p>`
+      : "";
+
   const bodyHtml = `
     <p style="margin:0 0 16px;">Hi,</p>
     <p style="margin:0 0 16px;">Your daily ${appName} report for <strong>${dateKey}</strong> is ready.</p>
@@ -88,7 +112,8 @@ export function ceoDailyReportEmail({ dateKey, taskCount, summary, downloadUrl }
       <tr><td style="padding:8px 0;border-bottom:1px solid #e4e4e7;color:#dc2626;">Need attention</td><td align="right" style="padding:8px 0;border-bottom:1px solid #e4e4e7;font-weight:700;color:#dc2626;">${attention}</td></tr>
       <tr><td style="padding:8px 0;">Tasks in report</td><td align="right" style="padding:8px 0;font-weight:700;">${taskCount}</td></tr>
     </table>
-    <p style="margin:0;">Two sheets: <strong>Report</strong> (today&apos;s summary) and <strong>Tasks</strong> (assigned today).</p>
+    ${qaTableBlock}
+    <p style="margin:0;">Excel attachment: <strong>Report</strong> (summary + QA) and <strong>Tasks</strong> (assigned today).</p>
     ${downloadBlock}
   `;
 
@@ -99,7 +124,18 @@ export function ceoDailyReportEmail({ dateKey, taskCount, summary, downloadUrl }
     bodyHtml,
     footerText: "This automated report is sent once daily at 9:00 PM IST.",
   });
-  const text = `Your ${appName} daily report for ${dateKey} is ready.\nOpen tasks (today): ${summary?.open ?? "—"}\nNeed attention: ${attention}\nTasks assigned today: ${taskCount}${downloadUrl ? `\nDownload: ${downloadUrl}` : ""}`;
+
+  const qaText =
+    qaPeople.length > 0
+      ? `\n\nQA activity:\n${qaPeople
+          .map(
+            (p) =>
+              `- ${String(p.name).split(" (")[0]}: ${p.assigned_out ?? 0} assigned out, ${p.done_by_assignee ?? 0} user done, ${p.done_self ?? 0} self done`
+          )
+          .join("\n")}`
+      : "";
+
+  const text = `Your ${appName} daily report for ${dateKey} is ready.\nOpen tasks (today): ${summary?.open ?? "—"}\nNeed attention: ${attention}\nTasks assigned today: ${taskCount}${qaText}${downloadUrl ? `\nDownload: ${downloadUrl}` : ""}`;
 
   return { subject, html, text };
 }

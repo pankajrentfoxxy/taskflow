@@ -9,6 +9,10 @@ import config from "../config/config.js";
 import logger from "../config/logger.js";
 import ApiError from "../utils/ApiError.js";
 import { buildReportsWorkbook } from "../lib/reportsExcel.js";
+import {
+  getQaPeopleFromReport,
+  formatDailyReportWhatsAppDateLine,
+} from "../lib/qaReportSummary.js";
 import { getReports, fetchReportTasksForExcel } from "./reportsService.js";
 import { sendMail } from "./mailService.js";
 import { ceoDailyReportEmail } from "./emailTemplateService.js";
@@ -129,11 +133,13 @@ async function buildCeoReportPackage() {
   });
 
   const downloadUrl = publicReportPageUrl(token);
+  const qaPeople = getQaPeopleFromReport(built.reportData.people);
   const { subject, html, text } = ceoDailyReportEmail({
     dateKey: built.dateKey,
     taskCount: built.taskCount,
     summary: built.reportData.summary,
     downloadUrl,
+    qaPeople,
   });
 
   return {
@@ -150,9 +156,10 @@ async function buildCeoReportPackage() {
   };
 }
 
-async function sendDailyReportWhatsApp({ dateKey, token }) {
+async function sendDailyReportWhatsApp({ dateKey, token, qaPeople = [] }) {
   if (!config.interakt.apiKey) return [];
 
+  const dateLine = formatDailyReportWhatsAppDateLine(dateKey, qaPeople);
   const sent = [];
   for (const recipient of CEO_DAILY_REPORT_RECIPIENTS) {
     if (!recipient.phone) {
@@ -163,7 +170,7 @@ async function sendDailyReportWhatsApp({ dateKey, token }) {
       await sendInteraktTemplate({
         phone: recipient.phone,
         templateName: INTERAKT_TEMPLATES.DAILY_REPORT,
-        bodyValues: [recipient.name || "User", dateKey],
+        bodyValues: [recipient.name || "User", dateLine],
         buttonValues: { "0": [token] },
       });
       sent.push(recipient.phone);
@@ -220,6 +227,7 @@ export async function runDailyCeoReport({ trigger = "manual", force = false } = 
   const whatsappRecipients = await sendDailyReportWhatsApp({
     dateKey: pkg.dateKey,
     token: pkg.token,
+    qaPeople: getQaPeopleFromReport(pkg.reportData.people),
   });
 
   logger.info(
