@@ -15,7 +15,7 @@ export function aggregateQaTotals(qaPeople = []) {
   );
 }
 
-/** One-line summary for WhatsApp (fits daily_report 2nd body param). */
+/** One-line summary for WhatsApp (fits download_report 2nd body param). */
 export function formatQaWhatsAppLine(qaPeople = []) {
   if (!qaPeople.length) return "No QA activity";
   const t = aggregateQaTotals(qaPeople);

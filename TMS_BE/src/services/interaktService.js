@@ -8,7 +8,7 @@ export const INTERAKT_TEMPLATES = {
   MULTIPLE_TASKS: "multiple_tasks",
   ADDED_AS_COLLABORATOR: "added_as_collaborator",
   ADDED_AS_WATCHER: "added_as_watcher",
-  DAILY_REPORT: "daily_report",
+  DAILY_REPORT: "download_report",
 };
 
 /** Parse stored phone into 10-digit local number for Interakt. */
